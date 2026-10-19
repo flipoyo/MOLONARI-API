@@ -1,3 +1,8 @@
 """Molonaviz 2 : application de bureau pour l'inversion bayésienne des mesures MOLONARI."""
 
-__version__ = "0.1.0-alpha.1"
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("molonaviz2")  # source unique : pyproject.toml, telle qu'écrite (SemVer)
+except PackageNotFoundError:  # sources lues sans installation
+    __version__ = "0+unknown"

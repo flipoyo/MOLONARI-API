@@ -108,6 +108,10 @@ make selftest-package    # lance un petit modèle direct dans l'exécutable cons
 
 Il faut un build par système d'exploitation, réalisé sur ce système. Un exécutable CUDA se construit sous Linux, avec `jax[cuda12]` installé.
 
+## Versions
+
+Molonaviz 2 suit [SemVer 2.0.0](https://semver.org/lang/fr/). La version n'est écrite que dans `pyproject.toml`, et chaque version a sa section dans [CHANGELOG.md](CHANGELOG.md), qui donne aussi les règles. `python tools/check_version.py` vérifie que les deux sont cohérents. Les tags sont de la forme `molonaviz2-vX.Y.Z`.
+
 ## Organisation du code
 
 ```

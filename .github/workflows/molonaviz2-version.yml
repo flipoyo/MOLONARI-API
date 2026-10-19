@@ -1,0 +1,21 @@
+name: molonaviz2-version
+
+# Version SemVer de Molonaviz 2 : pyproject.toml, CHANGELOG.md et, sur un tag, correspondance du tag.
+on:
+  push:
+    tags: ["molonaviz2-v*"]
+  pull_request:
+    paths: ["molonaviz2/**"]
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Vérifier la version
+        env:
+          TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: python molonaviz2/tools/check_version.py "$TAG"
