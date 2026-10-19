@@ -29,3 +29,10 @@ def test_invalid_versions_are_reported(tmp_path, version):
     (tmp_path / "pyproject.toml").write_text(f'[project]\nversion = "{version}"\n')
     (tmp_path / "CHANGELOG.md").write_text(f"## [{version}]\n")
     assert check_version.problems(root=tmp_path) != []
+
+
+def test_engine_version_carries_the_package_version():
+    """La version du code entre dans engine_version(), donc dans chaque twin_id."""
+    from molonaviz2.engine.api import engine_version
+
+    assert engine_version().startswith(f"molonaviz2 {check_version.declared_version()} · jax ")
