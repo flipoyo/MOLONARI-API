@@ -12,6 +12,15 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions : [S
 - Tags : `molonaviz2-vX.Y.Z`, posés sur `CGS-MOLO` après la fusion. La CI (`molonaviz2-version`) vérifie que le tag correspond à `pyproject.toml`.
 - La version entre dans `engine_version()`, donc dans chaque `twin_id`. Une nouvelle version donne de nouveaux identifiants, et un twin déjà calculé passe à l'état « modifié » : il faut créer un nouveau twin pour utiliser le nouveau code.
 
+## [0.1.0-beta.1] - 2026-10-19
+
+### Ajouté
+- Interface PySide6 : fenêtre principale, explorateur des études et des points, import d'un laboratoire et d'un point avec un aperçu avant toute écriture (#6).
+- Onglets d'un point : Infos, Mesures, Nettoyage, Modèle direct, Inversion et Résultats (cartes θ(z, t) et des flux, profils, lois a posteriori, diagnostics ArviZ, exports CSV, NetCDF, PNG, SVG et PDF) (#6).
+- Fenêtre d'un twin et section Twins de l'écran d'accueil ; **Créer un twin…** à partir d'un calcul de l'application (#6).
+- Calculs en tâche de fond, avec suivi en direct et annulation par Échap (#6).
+- Français et anglais ; températures en °C, K ou °F ; `make strings` liste les chaînes non traduites (#6).
+
 ## [0.1.0-alpha.5] - 2026-10-19
 
 ### Ajouté

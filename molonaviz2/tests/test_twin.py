@@ -5,6 +5,8 @@ import shutil
 import subprocess
 import sys
 
+import numpy as np
+import pandas as pd
 import pytest
 from conftest import FIXTURES
 
@@ -246,3 +248,82 @@ def test_command_line(twins, point034):
     assert cli("run", str(folder)).returncode == 1  # config figée
     assert cli("validate", str(twins / "absent")).returncode == 1
     assert "twin_01" in cli("list", str(twins)).stdout
+
+
+# Interface ---------------------------------------------------------------------------------
+
+
+def test_welcome_page_lists_twins_and_window_runs_them(qtbot, tmp_path, twins, point034, monkeypatch):
+    from PySide6 import QtCore
+
+    from molonaviz2.settings import Settings
+    from molonaviz2.ui import errors as ui_errors
+    from molonaviz2.ui.main_window import MainWindow
+
+    shown = []
+    previous = ui_errors.set_presenter(lambda *args: shown.append(args))
+    folder = make_twin(twins, point034)
+    settings = Settings(QtCore.QSettings(str(tmp_path / "s.ini"), QtCore.QSettings.Format.IniFormat))
+    settings.twin_folder = twins
+    window = MainWindow(settings)
+    qtbot.addWidget(window)
+    assert window.welcome.twins.count() == 1
+    assert "not run yet" in window.welcome.twins.item(0).text()
+
+    twin_window = window.open_twin(folder)
+    assert twin_window.run_button.isEnabled() and not twin_window.tabs.isVisible()
+    twin_window.run()
+    qtbot.waitUntil(lambda: not window.tasks.busy, timeout=120_000)
+    qtbot.waitUntil(lambda: twin_window.results is not None, timeout=10_000)
+    assert twin_window.status.state == "computed"
+    assert not twin_window.run_button.isEnabled() and "Already computed" in twin_window.run_button.toolTip()
+    assert "Infiltration" in twin_window.flux_summary.text()
+    window.welcome.refresh_twins(twins)
+    assert "computed" in window.welcome.twins.item(0).text()
+
+    copy = twins / "twin_02"
+    shutil.copytree(folder, copy)
+    edit(copy, "name: twin_01", "name: twin_02")
+    duplicate_window = window.open_twin(copy)
+    assert "Duplicate of twin_01" in duplicate_window.state.text() and duplicate_window.results is not None
+    ui_errors.set_presenter(previous)
+    assert shown == []
+
+
+def test_create_twin_from_a_computation_in_the_app(qtbot, tmp_path, twins, point034, monkeypatch):
+    from PySide6 import QtCore
+
+    from molonaviz2.domain.models import SamplingPoint, Study
+    from molonaviz2.settings import Settings
+    from molonaviz2.storage.project import Project
+    from molonaviz2.ui.main_window import MainWindow
+
+    project = Project.create(tmp_path / "p.molo")
+    project.add_lab(import_lab_directory(FIXTURES / "lab", name="Lab").lab)
+    project.add_study(Study("E", "Lab"))
+    raw_t = read_temperature_file(FIXTURES / "point034" / "point034_T_measures.csv").frame.iloc[:200]
+    raw_p = read_pressure_file(FIXTURES / "point034" / "point034_P_measures.csv").frame.iloc[:200]
+    project.add_point(SamplingPoint("Point034", "E", "P508", "S007", river_bed=0.505), raw_t, raw_p)
+    settings = Settings(QtCore.QSettings(str(tmp_path / "s.ini"), QtCore.QSettings.Format.IniFormat))
+    settings.twin_folder = twins
+    window = MainWindow(settings, project)
+    qtbot.addWidget(window)
+    window.open_point("E", "Point034")
+    view = window.point_tabs.currentWidget()
+    view.cleanup_tab.apply()
+    view.forward_tab.nb_cells.set_value(30)
+    view.forward_tab.run()
+    qtbot.waitUntil(lambda: not window.tasks.busy, timeout=120_000)
+    view.results_tab.refresh()
+    monkeypatch.setattr("molonaviz2.ui.main_window.ask", lambda *a, **k: False)
+    created = window.create_twin_from_computation(view.context, view.results_tab.info)
+    assert created == twins / "twin_01"
+    config = load_twin(created)
+    assert config.point == "Point034" and config.nb_cells == 30 and config.depths == (0.1, 0.2, 0.3, 0.4)
+    data = pd.read_csv(created / "measurements.csv")
+    assert len(data) == len(project.cleaned("E", "Point034"))
+    # Même calcul dans l'application et dans le twin.
+    run = run_twin(created)
+    app_result = view.results_tab.forward
+    twin_temperature = load_results(run.status.results_dir).temperature
+    assert np.max(np.abs(twin_temperature - app_result.temperature)) < 1e-4  # mesures relues depuis le CSV (6 chiffres)
