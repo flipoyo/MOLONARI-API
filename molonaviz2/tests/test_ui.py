@@ -1,5 +1,7 @@
 """Interface (pytest-qt, hors écran) : flux de travail complet, garde-fous, erreurs, langue, unités."""
 
+import html
+
 import numpy as np
 import pytest
 from conftest import FIXTURES
@@ -213,6 +215,7 @@ def test_direct_model_then_inversion_then_results(qtbot, window, shown_errors, t
     assert results.tabs.isTabEnabled(results.parameters_index)
     assert results.summary_model.rowCount() == 4
     assert "seed" in results.provenance.text()
+    assert "20 iterations kept per chain" in results.provenance.text() and "fields per chain" in results.provenance.text()
 
     folder = tmp_path / "exports"
     results.export_csv(str(folder))
@@ -285,6 +288,24 @@ def test_measurement_interval_around_measured_temperatures(qtbot, window):
     results.measurement_level.setCurrentIndex(2)  # 95 % : le niveau est partagé et le graphe suit
     assert measurement_level.level == 0.95
     assert "Measured ± 1.96 σT (95 %)" in band_labels()
+
+
+def test_per_chain_box_follows_the_settings(qtbot, window):
+    view = open_point(qtbot, window)
+    tab = view.inversion_tab
+    assert "Field grid" not in tab.per_chain.text()  # dates inconnues avant le nettoyage
+    view.cleanup_tab.apply()
+    tab.advanced.setChecked(True)
+    for field, value in ((tab.nb_cells, 20), (tab.nb_chains, 7), (tab.nb_iter, 30), (tab.burn_in_max, 40), (tab.n_field_samples, 14)):
+        field.set_value(value)
+    text = html.unescape(tab.per_chain.text())
+    assert "up to 40 iterations per chain (stops early once R-hat < 1.2)" in text and "30 iterations per chain, 210 parameter sets" in text
+    assert "2 per chain, one every 15 iterations, 14 in all" in text and "requested" not in text
+    assert "Field grid: 20 cells ×" in text and "at most 490" in text  # 7 × (40 + 30)
+    tab.n_field_samples.set_value(15)
+    assert "3 per chain, one every 10 iterations, 21 in all" in tab.per_chain.text() and "(15 requested" in tab.per_chain.text()
+    tab.nb_chains.set_value(0)  # invalide
+    assert "Fix the highlighted settings" in tab.per_chain.text()
 
 
 def test_inversion_can_be_cancelled_and_saves_nothing(qtbot, window):

@@ -33,4 +33,4 @@ def traces(figure, result: InversionResult, layer: int) -> None:
         for chain in range(result.samples.shape[1]):
             ax.plot(iterations, result.samples[:, chain, layer, p], lw=0.6, color=CHAIN_COLORMAP(chain % 10))
         ax.set_ylabel(PARAMETER_LABELS[name], fontsize=9)
-    axes[-1].set_xlabel(t("Iteration after burn-in"))
+    axes[-1].set_xlabel(t("Iteration after burn-in (per chain)"))

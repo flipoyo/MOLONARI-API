@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import random
 import re
 
@@ -10,10 +11,11 @@ from PySide6 import QtCore, QtWidgets
 from ...domain.compute import InversionConfig, LayerSpec, default_priors
 from ...engine import api
 from ...engine.results import InversionResult
+from ...errors import UserError
 from ...i18n import N_, t
 from ...workers.tasks import Task, TaskManager
 from ..plots.live import LiveMonitor
-from ..widgets import NumberField, heading, hint
+from ..widgets import NumberField, format_number, heading, hint
 from .context import PointContext
 from .layers import LayersTable
 
@@ -136,6 +138,13 @@ class InversionTab(QtWidgets.QWidget):
         side.addWidget(heading(t("Sampling")))
         side.addLayout(basic)
         side.addWidget(self.advanced)
+        self.per_chain = QtWidgets.QLabel()
+        self.per_chain.setWordWrap(True)
+        self.per_chain.setTextFormat(QtCore.Qt.TextFormat.RichText)
+        per_chain_box = QtWidgets.QGroupBox(t("Per chain"))
+        per_chain_layout = QtWidgets.QVBoxLayout(per_chain_box)
+        per_chain_layout.addWidget(self.per_chain)
+        side.addWidget(per_chain_box)
         side.addWidget(self.issues)
         side.addLayout(run_row)
         side.addStretch()
@@ -177,6 +186,9 @@ class InversionTab(QtWidgets.QWidget):
         self.layers.edited.connect(self._validate)
         tasks.task_started.connect(lambda _: self._validate())
         tasks.task_finished.connect(lambda _: self._validate())
+        self._nb_times: int | None = None
+        context.changed.connect(self._count_dates)
+        self._count_dates()
         self._load_defaults()
 
     def _fields(self) -> list[NumberField]:
@@ -248,7 +260,42 @@ class InversionTab(QtWidgets.QWidget):
             seed=int(self.seed.value()),
         )
 
+    def _count_dates(self) -> None:
+        """Nombre de dates des mesures nettoyées (pour la grille des champs), None avant le nettoyage."""
+        try:
+            self._nb_times = len(self.context.column_inputs().times)
+        except UserError:
+            self._nb_times = None
+        self._show_layout()
+
+    def _show_layout(self) -> None:
+        """Encadré « Par chaîne » : ce que donnent les réglages, calculé comme le moteur."""
+        try:
+            if any(not f.is_valid() for f in self._fields()):
+                raise ValueError("invalid settings")
+            config = self.config()
+        except ValueError:
+            self.per_chain.setText(t("Fix the highlighted settings to see what they give per chain."))
+            return
+        layout = api.sampling_layout(config, self._nb_times)
+        lines = [
+            t("Burn-in: up to {n} iterations per chain (stops early once R-hat < {threshold}).").format(
+                n=layout.burn_in_max, threshold=format_number(self.gr_threshold.value())),
+            t("Kept: {n} iterations per chain, {total} parameter sets in all.").format(n=layout.nb_iter, total=layout.parameter_sets),
+            t("Fields (T, q): {k} per chain, one every {m} iterations, {total} in all.").format(
+                k=layout.fields_per_chain, m=layout.interval, total=layout.fields_total),
+        ]
+        if layout.fields_total != layout.fields_requested:
+            lines[-1] += " " + t("({requested} requested, rounded to a whole number per chain.)").format(requested=layout.fields_requested)
+        if layout.field_times is not None:
+            lines.append(t("Field grid: {cells} cells × {times} dates, {kept_cells} × {kept_times} after sub-sampling, about {size} MB.").format(
+                cells=layout.nb_cells, times=layout.nb_times, kept_cells=layout.field_cells, kept_times=layout.field_times,
+                size=format_number(round(layout.field_bytes / 1e6, 1))))
+        lines.append(t("Direct-model evaluations: at most {n}.").format(n=layout.max_evaluations))
+        self.per_chain.setText("<br>".join(html.escape(line) for line in lines))  # « R-hat < seuil » n'est pas une balise
+
     def _validate(self) -> None:
+        self._show_layout()
         problems = self.layers.validate()
         if any(not f.is_valid() for f in self._fields()):
             problems.append(t("Some settings are invalid (see the highlighted fields)."))
@@ -301,7 +348,8 @@ class InversionTab(QtWidgets.QWidget):
             return
         self.progress.setRange(0, progress.total)
         self.progress.setValue(progress.iteration)
-        text = f"{label} · {progress.iteration} / {progress.total} · " + t("elapsed {time}").format(time=_duration(progress.elapsed))
+        text = f"{label} · " + t("iteration {i} / {n} (per chain)").format(i=progress.iteration, n=progress.total) + " · " \
+            + t("elapsed {time}").format(time=_duration(progress.elapsed))
         if progress.phase == "burn_in":
             text += " · " + t("stops early once R-hat < threshold")
             if progress.rhat_max == progress.rhat_max:  # pas nan

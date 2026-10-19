@@ -9,6 +9,7 @@ import pandas as pd
 from PySide6 import QtCore, QtWidgets
 
 from ...domain.compute import ForwardConfig, InversionConfig
+from ...engine import api
 from ...engine.results import ForwardResult, InversionResult
 from ...i18n import t
 from ...storage.project import ComputationInfo
@@ -218,13 +219,16 @@ class ResultsTab(QtWidgets.QWidget):
             t("{n} layer(s), {cells} cells").format(n=len(config["layers"]), cells=config["nb_cells"]),
         ]
         if self.inversion is not None:
+            layout = api.sampling_layout(InversionConfig.from_dict(config), len(self.forward.times))
             details += [
                 t("seed {seed}").format(seed=config["seed"]),
-                t("{chains} chains × {iters} iterations").format(chains=config["nb_chains"], iters=config["nb_iter"]),
-                t("burn-in {n} iterations ({state})").format(
+                t("{chains} chains").format(chains=config["nb_chains"]),
+                t("burn-in {n} iterations per chain ({state})").format(
                     n=self.inversion.burn_in_iterations,
                     state=t("converged") if self.inversion.burn_in_converged else t("not converged"),
                 ),
+                t("{n} iterations kept per chain").format(n=self.inversion.samples.shape[0]),
+                t("{k} fields per chain, one every {m} iterations").format(k=layout.fields_per_chain, m=layout.interval),
             ]
         self.provenance.setText(" · ".join(details))
         self.tabs.setTabEnabled(self.parameters_index, self.inversion is not None)
