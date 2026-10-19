@@ -42,6 +42,7 @@
  "At least one layer is required.": "Il faut au moins une couche.",
  "At least one pair of chains is required.": "Il faut au moins une paire de chaînes.",
  "Available after an inversion.": "Disponible après une inversion.",
+ "Band around the measured temperatures: measurement ± z·σT, where σT is the measurement uncertainty and z comes from the chosen level.": "Bande autour des températures mesurées : mesure ± z·σT, où σT est l'incertitude de mesure et z dépend du niveau choisi.",
  "Bayesian inversion of temperature and pressure measurements in the hyporheic zone (MOLONARI project).": "Inversion bayésienne des mesures de température et de pression dans la zone hyporhéique (projet MOLONARI).",
  "Bayesian inversion of temperature and pressure measurements in the hyporheic zone.": "Inversion bayésienne des mesures de température et de pression dans la zone hyporhéique.",
  "Best": "Meilleur",
@@ -233,7 +234,9 @@
  "Maximum: {v}": "Maximum : {v}",
  "Mean": "Moyenne",
  "Measured": "Mesurée",
+ "Measured ± {z} σT ({level})": "Mesure ± {z} σT ({level})",
  "Measurement date": "Date de mesure",
+ "Measurement interval": "Intervalle de mesure",
  "Measurement preview": "Aperçu des mesures",
  "Measurement times must be strictly increasing (duplicate dates found).": "Les dates de mesure doivent être strictement croissantes (dates en double).",
  "Measurement uncertainty σT": "Incertitude de mesure σT",
@@ -460,6 +463,7 @@
  "computed": "calculé",
  "configuration modified after it was run (frozen)": "config modifiée après exécution (figée)",
  "converged": "convergé",
+ "default value: no uncertainty is given for the thermometer": "valeur par défaut : aucune incertitude n'est renseignée pour le thermomètre",
  "depths {d} m": "profondeurs {d} m",
  "direct mode": "mode direct",
  "direct mode needs {keys}.": "le mode direct demande {keys}.",
@@ -512,6 +516,7 @@
  "thermometer {name}": "thermomètre {name}",
  "this twin was defined for \"{declared}\" but the code is \"{current}\". Create a new twin to use this code.": "ce twin a été défini pour « {declared} » mais le code est « {current} ». Créez un nouveau twin pour utiliser ce code.",
  "t{n}: simulated − measured — RMSE {rmse:.3f}": "t{n} : simulé − mesuré — RMSE {rmse:.3f}",
+ "uncertainty of thermometer {name}": "incertitude du thermomètre {name}",
  "unknown key (allowed: {keys}).": "clé inconnue (clés possibles : {keys}).",
  "unreadable date \"{value}\".": "date illisible « {value} ».",
  "unsupported schema \"{value}\" (expected {expected}).": "schéma « {value} » non pris en charge ({expected} attendu).",
@@ -529,5 +534,8 @@
  "{n} dates · {start} → {end}": "{n} dates · {start} → {end}",
  "{n} layer(s), {cells} cells": "{n} couche(s), {cells} cellules",
  "{point}: notice not found ({path}).": "{point} : notice introuvable ({path}).",
- "{point}: scheme not found ({path}).": "{point} : schéma introuvable ({path})."
+ "{point}: scheme not found ({path}).": "{point} : schéma introuvable ({path}).",
+ "± {z} σT ({level})": "± {z} σT ({level})",
+ "σT = {sigma} {unit} ({source})": "σT = {sigma} {unit} ({source})",
+ "σT of the inversion": "σT de l'inversion"
 }

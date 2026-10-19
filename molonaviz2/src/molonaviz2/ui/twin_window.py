@@ -16,8 +16,8 @@ from ..twin.run import TwinStatus, run_twin, twin_status
 from ..workers.tasks import Task, TaskManager
 from .plots.maps import FigurePanel, _date_axis, depth_time_map, robust_ylim
 from .plots.style import RIVER_COLOR, THERMOMETER_COLORS
-from .units import temperature_unit
-from .widgets import heading, hint
+from .units import level_label, measurement_level, temperature_unit
+from .widgets import format_number, heading, hint
 
 INFILTRATION_COLOR = "#0072b2"
 EXFILTRATION_COLOR = "#d55e00"
@@ -92,6 +92,14 @@ class TwinWindow(QtWidgets.QMainWindow):
         self.temperature = FigurePanel(height=4)
         self.flux = FigurePanel(height=4)
         self.residuals = FigurePanel(height=4.5)
+        residuals_page = QtWidgets.QWidget()
+        residuals_layout = QtWidgets.QVBoxLayout(residuals_page)
+        row = QtWidgets.QHBoxLayout()
+        row.addWidget(QtWidgets.QLabel(t("Measurement interval")))
+        row.addWidget(measurement_level.combo())
+        row.addStretch()
+        residuals_layout.addLayout(row)
+        residuals_layout.addWidget(self.residuals, 1)
         self.metadata = QtWidgets.QPlainTextEdit()
         self.metadata.setReadOnly(True)
         self.metadata.setFont(QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.SystemFont.FixedFont))
@@ -102,7 +110,7 @@ class TwinWindow(QtWidgets.QMainWindow):
         flux_layout.addWidget(self.flux, 1)
         self.tabs.addTab(self.temperature, t("Temperature θ(z, t)"))
         self.tabs.addTab(flux_page, t("Water flux q(t)"))
-        self.tabs.addTab(self.residuals, t("Residuals t₁–t₃"))
+        self.tabs.addTab(residuals_page, t("Residuals t₁–t₃"))
         self.tabs.addTab(self.metadata, t("Metadata"))
         self.no_results = hint(t("No results yet: run the twin."))
         self.no_results.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
@@ -130,6 +138,7 @@ class TwinWindow(QtWidgets.QMainWindow):
         tasks.task_started.connect(lambda _: self._update_buttons())
         tasks.task_finished.connect(lambda _: self._update_buttons())
         temperature_unit.changed.connect(self._draw)
+        measurement_level.changed.connect(self._draw)
         self.refresh()
 
     # État -----------------------------------------------------------------------------
@@ -268,13 +277,19 @@ class TwinWindow(QtWidgets.QMainWindow):
         res_dates = pd.to_datetime(results.residuals["date"]).to_numpy()
         rmse = meta.get("rmse_celsius", {})
         sigma = meta.get("config", {}).get("sensors", {}).get("sigma_temperature")
+        if sigma is None and self.status is not None:
+            sigma = self.status.config.sigma_temperature  # mode direct : σT n'est pas dans la config canonique
         for i, ax in enumerate(axes):
             values = temperature_unit.convert_difference(results.residuals[f"t{i + 1}_residual"].to_numpy(float))
             ax.plot(res_dates, values, color=THERMOMETER_COLORS[i], lw=0.9)
             ax.axhline(0, color="#888888", lw=0.6)
             if sigma:
+                half = measurement_level.z * float(temperature_unit.convert_difference(sigma))
+                label = t("± {z} σT ({level})").format(z=format_number(round(measurement_level.z, 3)), level=level_label(measurement_level.level))
                 for sign in (-1, 1):
-                    ax.axhline(sign * float(temperature_unit.convert_difference(sigma)), color=RIVER_COLOR, lw=0.6, ls="--")
+                    ax.axhline(sign * half, color=RIVER_COLOR, lw=0.6, ls="--", label=label if sign > 0 else None)
+                if i == 0:
+                    ax.legend(fontsize=8, loc="upper right")
             value = temperature_unit.convert_difference(rmse.get(f"t{i + 1}", float("nan")))
             ax.set_title(t("t{n}: simulated − measured — RMSE {rmse:.3f}").format(n=i + 1, rmse=float(value)), fontsize=9, loc="left")
             ax.set_ylabel(unit if unit != "°C" else "°C")

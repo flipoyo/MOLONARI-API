@@ -14,7 +14,7 @@ from ...i18n import t
 from ...storage.project import ComputationInfo
 from ..plots import posterior
 from ..plots.maps import FigurePanel, depth_time_map, profiles, sensor_comparison, time_series_with_band
-from ..units import temperature_unit
+from ..units import level_label, measurement_interval, measurement_level, temperature_unit
 from ..widgets import DataFrameModel, ask, format_number, hint, table_view
 from .context import PointContext
 
@@ -69,9 +69,21 @@ class ResultsTab(QtWidgets.QWidget):
         # Températures
         self.temperature_map = FigurePanel(height=3.2)
         self.sensors = FigurePanel(height=4.5)
+        self.measurement_level = measurement_level.combo()
+        self.measurement_level.setToolTip(t("Band around the measured temperatures: measurement ± z·σT, where σT is the measurement uncertainty and z comes from the chosen level."))
+        self.sigma_source = hint("")
+        sensors_page = QtWidgets.QWidget()
+        sensors_layout = QtWidgets.QVBoxLayout(sensors_page)
+        sensors_layout.setContentsMargins(0, 0, 0, 0)
+        row = QtWidgets.QHBoxLayout()
+        row.addWidget(QtWidgets.QLabel(t("Measurement interval")))
+        row.addWidget(self.measurement_level)
+        row.addWidget(self.sigma_source, 1)
+        sensors_layout.addLayout(row)
+        sensors_layout.addWidget(self.sensors, 1)
         temps = QtWidgets.QSplitter(QtCore.Qt.Orientation.Vertical)
         temps.addWidget(self.temperature_map)
-        temps.addWidget(self.sensors)
+        temps.addWidget(sensors_page)
         self.tabs.addTab(temps, t("Temperatures"))
 
         # Profils
@@ -155,6 +167,7 @@ class ResultsTab(QtWidgets.QWidget):
         layout.addWidget(self.empty, 1)
 
         temperature_unit.changed.connect(self._draw_all)
+        measurement_level.changed.connect(self._draw_temperatures)
         context.changed.connect(self.refresh)
         self.refresh()
 
@@ -259,7 +272,18 @@ class ResultsTab(QtWidgets.QWidget):
         high = quantiles[-1].temperature[rows].T
         return self.inversion.field_times, (temperature_unit.convert(low), temperature_unit.convert(high))
 
+    def sigma_t(self) -> tuple[float, str]:
+        """Incertitude des mesures de température (°C) et son origine, pour l'intervalle de mesure."""
+        if self.inversion is not None and self.info is not None and "sigma_t" in self.info.config:
+            return float(self.info.config["sigma_t"]), t("σT of the inversion")
+        thermometer = self.context.sensors().thermometer
+        if thermometer is not None and thermometer.sigma > 0:
+            return float(thermometer.sigma), t("uncertainty of thermometer {name}").format(name=thermometer.name)
+        return 0.1, t("default value: no uncertainty is given for the thermometer")
+
     def _draw_temperatures(self) -> None:
+        if self.forward is None:
+            return
         result = self.forward
         unit = temperature_unit.unit
         figure = self.temperature_map.figure
@@ -274,12 +298,21 @@ class ResultsTab(QtWidgets.QWidget):
         figure.clear()
         axes = figure.subplots(3, 1, sharex=True)
         band_times, band = self._band_at_sensors()
+        sigma, source = self.sigma_t()
+        level = measurement_level.level
+        low, high = measurement_interval(result.observed, sigma, level)
+        label = t("Measured ± {z} σT ({level})").format(z=format_number(round(measurement_level.z, 3)), level=level_label(level))
+        self.sigma_source.setText(t("σT = {sigma} {unit} ({source})").format(
+            sigma=format_number(float(temperature_unit.convert_difference(sigma))), unit=unit, source=source))
         sensor_comparison(list(axes), result.times, temperature_unit.convert(result.observed),
                           temperature_unit.convert(result.simulated_at_sensors()), unit=unit,
-                          rmse=temperature_unit.convert_difference(result.rmse))
+                          rmse=temperature_unit.convert_difference(result.rmse),
+                          measured_band=(temperature_unit.convert(low), temperature_unit.convert(high)), measured_label=label)
         if band is not None:
             for i, ax in enumerate(axes):
-                ax.fill_between(pd.to_datetime(band_times).to_numpy(), band[0][:, i], band[1][:, i], color="#444444", alpha=0.18, lw=0)
+                ax.fill_between(pd.to_datetime(band_times).to_numpy(), band[0][:, i], band[1][:, i], color="#444444", alpha=0.18, lw=0,
+                                label=t("Credible interval") if i == 0 else None)
+            axes[0].legend(loc="upper right", fontsize=8)
         self.sensors.draw()
 
     def _draw_profile(self) -> None:

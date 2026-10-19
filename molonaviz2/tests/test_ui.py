@@ -15,7 +15,7 @@ from molonaviz2.ui.dialogs.lab_import import LabImportDialog
 from molonaviz2.ui.dialogs.point_import import PointImportDialog
 from molonaviz2.ui.main_window import MainWindow
 from molonaviz2.ui.point_view.view import PointView
-from molonaviz2.ui.units import temperature_unit
+from molonaviz2.ui.units import measurement_interval, measurement_level, temperature_unit, z_score
 from molonaviz2.ui.widgets import TypedConfirmation
 
 TASK_TIMEOUT = 120_000
@@ -29,8 +29,10 @@ def isolated_settings(qapp, tmp_path):
     QtCore.QSettings.setDefaultFormat(QtCore.QSettings.Format.IniFormat)
     QtCore.QSettings.setPath(QtCore.QSettings.Format.IniFormat, QtCore.QSettings.Scope.UserScope, str(tmp_path / "settings"))
     temperature_unit.set("°C")
+    measurement_level.set(0.90)
     yield
     temperature_unit.set("°C")
+    measurement_level.set(0.90)
 
 
 @pytest.fixture
@@ -220,6 +222,9 @@ def test_direct_model_then_inversion_then_results(qtbot, window, shown_errors, t
     import arviz as az
 
     assert "neg_log10_k" in az.from_netcdf(str(netcdf)).posterior
+    assert results.sigma_t() == (tab.sigma_t.value(), "σT of the inversion")
+    legend = [text.get_text() for text in results.sensors.figure.axes[0].get_legend().get_texts()]
+    assert "Credible interval" in legend and any("σT (90 %)" in label for label in legend)
     results.tabs.setCurrentIndex(results.parameters_index)
     figure = tmp_path / "histograms.svg"
     results.histograms.export(figure)
@@ -240,6 +245,46 @@ def test_reusing_a_configuration_reloads_it(qtbot, window):
     assert view.tabs.currentIndex() == view.FORWARD
     assert view.forward_tab.nb_cells.value() == 24
     assert view.forward_tab.layers.rowCount() == 2
+
+
+def test_measurement_interval_bounds():
+    assert z_score(0.6827) == pytest.approx(1.0, abs=1e-3)
+    assert z_score(0.90) == pytest.approx(1.6449, abs=1e-4)
+    assert z_score(0.95) == pytest.approx(1.9600, abs=1e-4)
+    observed = np.array([[10.0, 12.0, 14.0]])
+    low, high = measurement_interval(observed, 0.2, 0.90)
+    np.testing.assert_allclose((low + high) / 2, observed)
+    np.testing.assert_allclose(high - low, 2 * z_score(0.90) * 0.2)
+    from molonaviz2.ui.units import TemperatureUnit
+
+    fahrenheit = TemperatureUnit("°F")  # instance locale : ne redessine pas les fenêtres des autres tests
+    np.testing.assert_allclose(fahrenheit.convert(high) - fahrenheit.convert(low), 9 / 5 * (high - low))
+
+
+def test_measurement_interval_around_measured_temperatures(qtbot, window):
+    view = open_point(qtbot, window)
+    view.cleanup_tab.apply()
+    view.forward_tab.nb_cells.set_value(20)
+    view.forward_tab.run()
+    wait_task(qtbot, window)
+    results = view.results_tab
+    results.refresh()
+    sigma, source = results.sigma_t()
+    thermometer = view.context.sensors().thermometer
+    assert sigma == pytest.approx(thermometer.sigma) and thermometer.name in source
+    assert results.sigma_source.text().startswith("σT = ")
+
+    def band_labels():
+        return [text.get_text() for text in results.sensors.figure.axes[0].get_legend().get_texts()]
+
+    assert "Measured ± 1.645 σT (90 %)" in band_labels()
+    band = results.sensors.figure.axes[1].collections[0].get_paths()[0].vertices[:, 1]
+    measured = results.forward.observed[:, 1]
+    assert band.max() == pytest.approx(measured.max() + z_score(0.90) * sigma, abs=1e-9)
+    assert band.min() == pytest.approx(measured.min() - z_score(0.90) * sigma, abs=1e-9)
+    results.measurement_level.setCurrentIndex(2)  # 95 % : le niveau est partagé et le graphe suit
+    assert measurement_level.level == 0.95
+    assert "Measured ± 1.96 σT (95 %)" in band_labels()
 
 
 def test_inversion_can_be_cancelled_and_saves_nothing(qtbot, window):

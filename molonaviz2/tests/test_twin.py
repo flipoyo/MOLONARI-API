@@ -278,6 +278,11 @@ def test_welcome_page_lists_twins_and_window_runs_them(qtbot, tmp_path, twins, p
     assert twin_window.status.state == "computed"
     assert not twin_window.run_button.isEnabled() and "Already computed" in twin_window.run_button.toolTip()
     assert "Infiltration" in twin_window.flux_summary.text()
+    from molonaviz2.ui.units import measurement_level
+
+    sigma = twin_window.status.config.sigma_temperature
+    dashed = {round(abs(float(line.get_ydata()[0])), 9) for line in twin_window.residuals.figure.axes[0].lines if line.get_linestyle() == "--"}
+    assert dashed == {round(measurement_level.z * sigma, 9)}  # résidus : lignes à ± z·σT (90 % par défaut)
     window.welcome.refresh_twins(twins)
     assert "computed" in window.welcome.twins.item(0).text()
 
