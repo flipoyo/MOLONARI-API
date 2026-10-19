@@ -74,6 +74,32 @@ PHYSICAL_BOUNDS = {
 }
 
 
+# Bornes admises pour les réglages saisis dans l'interface : (minimum, maximum), None = sans borne.
+# Les onglets de calcul et la notice des paramètres les lisent ici.
+SETTING_LIMITS: dict[str, tuple[float | None, float | None]] = {
+    "nb_cells": (10, 2000),
+    "sigma_t": (1e-6, None),
+    "nb_chains": (3, 200),
+    "nb_iter": (1, 1_000_000),
+    "burn_in_max": (2, 1_000_000),
+    "seed": (0, None),
+    "delta": (1, 20),
+    "n_cr": (1, 20),
+    "c": (1e-9, 0.999),
+    "c_star": (1e-15, None),
+    "gr_threshold": (1.0001, None),
+    "n_field_samples": (2, 5000),
+    "space_step": (1, None),
+    "time_step": (1, None),
+}
+
+
+def setting_limits(name: str) -> dict[str, float | None]:
+    """Bornes d'un réglage, sous la forme attendue par NumberField (minimum=…, maximum=…)."""
+    low, high = SETTING_LIMITS[name]
+    return {"minimum": low, "maximum": high}
+
+
 def default_priors() -> dict[str, PriorRange]:
     return {name: PriorRange(p.low, p.high) for name, p in DEFAULT_PRIORS.items()}
 

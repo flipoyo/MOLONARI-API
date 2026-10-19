@@ -13,6 +13,7 @@ from ...engine import api
 from ...engine.results import ForwardResult, InversionResult
 from ...i18n import t
 from ...storage.project import ComputationInfo
+from ..dialogs.notice import attach
 from ..plots import posterior
 from ..plots.maps import FigurePanel, depth_time_map, profiles, sensor_comparison, time_series_with_band
 from ..units import level_label, measurement_interval, measurement_level, temperature_unit
@@ -71,7 +72,7 @@ class ResultsTab(QtWidgets.QWidget):
         self.temperature_map = FigurePanel(height=3.2)
         self.sensors = FigurePanel(height=4.5)
         self.measurement_level = measurement_level.combo()
-        self.measurement_level.setToolTip(t("Band around the measured temperatures: measurement ± z·σT, where σT is the measurement uncertainty and z comes from the chosen level."))
+        attach(self.measurement_level, "results.measurement_level")
         self.sigma_source = hint("")
         sensors_page = QtWidgets.QWidget()
         sensors_layout = QtWidgets.QVBoxLayout(sensors_page)

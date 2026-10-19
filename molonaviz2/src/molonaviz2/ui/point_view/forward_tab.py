@@ -5,11 +5,12 @@ from __future__ import annotations
 import numpy as np
 from PySide6 import QtCore, QtWidgets
 
-from ...domain.compute import ForwardConfig, LayerSpec
+from ...domain.compute import ForwardConfig, LayerSpec, setting_limits
 from ...engine import api
 from ...engine.results import ForwardResult
 from ...i18n import t
 from ...workers.tasks import Task, TaskManager
+from ..dialogs.notice import attach
 from ..plots.maps import FigurePanel, sensor_comparison
 from ..units import temperature_unit
 from ..widgets import NumberField, heading, hint
@@ -35,7 +36,8 @@ class ForwardTab(QtWidgets.QWidget):
         buttons.addWidget(add)
         buttons.addWidget(remove)
         buttons.addStretch()
-        self.nb_cells = NumberField(100, t("cells"), integer=True, minimum=10, maximum=2000)
+        self.nb_cells = NumberField(ForwardConfig(layers=[]).nb_cells, t("cells"), integer=True, **setting_limits("nb_cells"))
+        attach(self.nb_cells, "numerics.nb_cells")
         cells = QtWidgets.QFormLayout()
         cells.addRow(t("Discretisation"), self.nb_cells)
         self.issues = QtWidgets.QLabel()

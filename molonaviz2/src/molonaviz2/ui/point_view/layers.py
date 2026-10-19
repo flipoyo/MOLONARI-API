@@ -19,6 +19,7 @@ from ...domain.compute import (
     PriorRange,
 )
 from ...i18n import t
+from ...notice import BY_KEY
 from ..widgets import format_number
 
 INVALID_BACKGROUND = QtGui.QColor(192, 57, 43, 60)
@@ -46,11 +47,26 @@ class LayersTable(QtWidgets.QTableWidget):
             headers += [label] if mode == "values" else [f"{PARAMETER_LABELS[name]} min\n{t(PARAMETER_UNITS[name])}", "max"]
         self.setColumnCount(len(headers))
         self.setHorizontalHeaderLabels(headers)
+        for column in range(len(headers)):
+            self.horizontalHeaderItem(column).setToolTip(BY_KEY[self._column_key(column)].text("summary") + "\n" + t("Shift+F1: parameter guide"))
         self.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
         self.verticalHeader().setVisible(False)
         self.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
         self.itemChanged.connect(self._on_change)
         self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+
+    def _column_key(self, column: int) -> str:
+        """Fiche de la notice pour une colonne du tableau."""
+        if column == 0:
+            return "layers.name"
+        if column == 1:
+            return "layers.z_low"
+        index = column - 2 if self.mode == "values" else (column - 2) // 2
+        return f"layers.{INVERTED_PARAMETERS[index]}"
+
+    def notice_key(self) -> str:
+        """Fiche de la colonne courante (Maj+F1)."""
+        return self._column_key(max(self.currentColumn(), 0))
 
     def _fit_height(self) -> None:
         """Hauteur ajustée au nombre de couches (jusqu'à 6 lignes visibles), sans espace vide."""
