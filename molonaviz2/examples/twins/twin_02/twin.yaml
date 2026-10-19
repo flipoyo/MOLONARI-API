@@ -1,0 +1,15 @@
+# Config figée d'un twin Molonaviz. Pour changer un paramètre, créez un nouveau twin.
+schema: molonaviz-twin/1
+name: twin_02
+point: Point034
+description: copie de twin_01 sous un autre nom (démo de détection de doublon)
+mode: direct
+data: {measurements: measurements.csv, start: '2016-06-27 13:00', end: '2016-07-12 10:15'}  # installation et retrait du dispositif exclus
+sensors:
+  depths: [0.1, 0.2, 0.3, 0.4]
+  offset: 0
+  sigma_temperature: 0.1
+  sigma_pressure: 0.01
+layers:
+- {name: sédiments, z_low: 0.4, neg_log10_k: 12, porosity: 0.15, lambda_s: 3.4, rhos_cs: 5000000}
+numerics: {nb_cells: 100, initial_condition: linear}

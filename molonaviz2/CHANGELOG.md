@@ -12,6 +12,15 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions : [S
 - Tags : `molonaviz2-vX.Y.Z`, posés sur `CGS-MOLO` après la fusion. La CI (`molonaviz2-version`) vérifie que le tag correspond à `pyproject.toml`.
 - La version entre dans `engine_version()`, donc dans chaque `twin_id`. Une nouvelle version donne de nouveaux identifiants, et un twin déjà calculé passe à l'état « modifié » : il faut créer un nouveau twin pour utiliser le nouveau code.
 
+## [0.1.0-alpha.5] - 2026-10-19
+
+### Ajouté
+- Twins versionnés. `twin.yaml` (schéma `molonaviz-twin/1`) est une config figée, en mode `direct` ou `mcmc` (ce dernier expérimental) (#5).
+- `twin_id` : SHA-256, tronqué à 16 caractères, de la config canonique. Il comprend l'empreinte des mesures et `engine_version()`, mais pas les libellés (#5).
+- Registre `registry.csv` avec les états nouveau, calculé, doublon et modifié. Les résultats sont écrits de façon atomique et sont reproductibles octet pour octet (#5).
+- Ligne de commande `molonaviz2 twin validate|id|run|list` (points d'entrée `app.py` et `__main__.py`) (#5).
+- Exemples `examples/twins/twin_01` à `twin_04`, tous sur Point034 (#5).
+
 ## [0.1.0-alpha.4] - 2026-10-19
 
 ### Ajouté
