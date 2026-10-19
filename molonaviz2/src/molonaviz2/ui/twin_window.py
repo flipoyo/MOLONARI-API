@@ -14,6 +14,7 @@ from ..twin.config import TwinConfigError, config_path
 from ..twin.results import load_results
 from ..twin.run import TwinStatus, run_twin, twin_status
 from ..workers.tasks import Task, TaskManager
+from .dialogs.notice import attach
 from .plots.maps import FigurePanel, _date_axis, depth_time_map, robust_ylim
 from .plots.style import RIVER_COLOR, THERMOMETER_COLORS
 from .units import level_label, measurement_level, temperature_unit
@@ -96,7 +97,9 @@ class TwinWindow(QtWidgets.QMainWindow):
         residuals_layout = QtWidgets.QVBoxLayout(residuals_page)
         row = QtWidgets.QHBoxLayout()
         row.addWidget(QtWidgets.QLabel(t("Measurement interval")))
-        row.addWidget(measurement_level.combo())
+        level = measurement_level.combo()
+        attach(level, "results.measurement_level")
+        row.addWidget(level)
         row.addStretch()
         residuals_layout.addLayout(row)
         residuals_layout.addWidget(self.residuals, 1)

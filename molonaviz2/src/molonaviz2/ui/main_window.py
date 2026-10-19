@@ -18,6 +18,7 @@ from ..twin.run import list_twins, twin_status
 from ..workers.tasks import Task, TaskManager
 from .dialogs.lab_import import LabImportDialog
 from .dialogs.point_import import PointImportDialog
+from .dialogs.notice import NoticeDialog, key_for
 from .dialogs.simple import AboutDialog, AddSensorDialog, NewStudyDialog, QuickGuideDialog
 from .errors import report_exception
 from .explorer import ProjectExplorer
@@ -149,6 +150,7 @@ class MainWindow(QtWidgets.QMainWindow):
         super().__init__()
         self.settings = settings
         self.project: Project | None = None
+        self._notice: NoticeDialog | None = None
         self.tasks = TaskManager(self)
         self.twin_windows: dict[str, TwinWindow] = {}
         self.setWindowTitle("Molonaviz")
@@ -288,8 +290,21 @@ class MainWindow(QtWidgets.QMainWindow):
 
         help_menu = bar.addMenu(t("&Help"))
         self._action(help_menu, t("Getting started"), lambda: QuickGuideDialog(self).exec(), "F1")
+        self._action(help_menu, t("Parameter guide"), self.open_notice, "Shift+F1")
         self._action(help_menu, t("Show log folder"), self._show_logs)
         self._action(help_menu, t("About Molonaviz"), lambda: AboutDialog(api.engine_version(), api.device(), self).exec())
+
+    def open_notice(self, key: str | None = None) -> NoticeDialog:
+        """Notice des paramètres, ouverte sur la fiche du champ qui a le focus s'il en a une."""
+        key = key or key_for(QtWidgets.QApplication.focusWidget())
+        if self._notice is None:
+            self._notice = NoticeDialog(self)
+        if key:
+            self._notice.show_entry(key)
+        self._notice.show()
+        self._notice.raise_()
+        self._notice.activateWindow()
+        return self._notice
 
     # Projet ---------------------------------------------------------------------------
     def _set_project(self, project: Project | None) -> None:

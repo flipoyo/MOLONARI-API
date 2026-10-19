@@ -308,6 +308,45 @@ def test_per_chain_box_follows_the_settings(qtbot, window):
     assert "Fix the highlighted settings" in tab.per_chain.text()
 
 
+def test_every_setting_is_linked_to_the_parameter_guide(qtbot, window, monkeypatch):
+    from molonaviz2.domain.compute import SETTING_LIMITS
+    from molonaviz2.notice import BY_KEY
+    from molonaviz2.ui.dialogs.notice import key_for
+
+    view = open_point(qtbot, window)
+    tab = view.inversion_tab
+    for field in tab._fields():
+        key = field.property("notice_key")
+        assert key in BY_KEY and field.toolTip().startswith(BY_KEY[key].text("summary"))
+        name = "nb_cells" if key == "numerics.nb_cells" else key.removeprefix("inversion.")
+        assert (field._minimum, field._maximum) == SETTING_LIMITS[name]  # mêmes bornes que la notice
+        assert key_for(field.edit) == key  # Maj+F1 depuis la zone de saisie
+    assert view.forward_tab.nb_cells.property("notice_key") == "numerics.nb_cells"
+    assert key_for(tab.quantiles) == "inversion.quantiles"
+    cleanup = view.cleanup_tab
+    assert key_for(cleanup.start) == "cleaning.period" and key_for(cleanup.exclude_button) == "cleaning.exclusions"
+    assert all(combo.property("notice_key") == "cleaning.outliers" for combo in cleanup.methods.values())
+    assert view.results_tab.measurement_level.property("notice_key") == "results.measurement_level"
+
+    table = tab.layers  # bornes a priori : deux colonnes (min, max) par paramètre
+    assert [table._column_key(c) for c in (0, 1, 2, 3, 4)] == ["layers.name", "layers.z_low", "layers.neg_log10_k", "layers.neg_log10_k", "layers.porosity"]
+    table.setCurrentCell(0, 6)
+    assert key_for(table) == "layers.lambda_s"
+    assert view.forward_tab.layers._column_key(3) == "layers.porosity"  # valeurs : une colonne par paramètre
+
+    action = next(a for a in window.menuBar().actions()[-1].menu().actions() if a.text() == "Parameter guide")
+    assert action.shortcut().toString() == "Shift+F1"
+    monkeypatch.setattr(QtWidgets.QApplication, "focusWidget", staticmethod(lambda: tab.nb_chains.edit))
+    notice = window.open_notice()
+    assert notice.isVisible() and notice.current_key() == "inversion.nb_chains"
+    page = notice.page.toPlainText()
+    assert "Number of chains" in page and "Default\n10" in page and "3 – 200" in page and "mcmc.nb_chains" in page
+    notice.search.setText("gelman")
+    assert "inversion.gr_threshold" in notice.visible_keys() and "layers.porosity" not in notice.visible_keys()
+    assert window.open_notice("layers.porosity") is notice  # une seule fenêtre, rouverte sur la fiche demandée
+    assert notice.current_key() == "layers.porosity" and notice.search.text() == ""
+
+
 def test_inversion_can_be_cancelled_and_saves_nothing(qtbot, window):
     view = open_point(qtbot, window)
     view.cleanup_tab.apply()

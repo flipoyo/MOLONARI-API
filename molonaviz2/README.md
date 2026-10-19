@@ -4,15 +4,21 @@ Application de bureau pour l'inversion bayésienne des mesures de température e
 
 ## Installation
 
-Prérequis : [uv](https://docs.astral.sh/uv/) et Python 3.12 ou 3.13.
+Prérequis : [uv](https://docs.astral.sh/uv/), Python 3.12 ou 3.13, et [ComplexGitSync](https://github.com/flipoyo/ComplexGitSync) (`cgitsync`).
+
+Molonaviz 2 s'installe avec l'ensemble des dépôts MOLONARI, que cgs monte côte à côte à partir du manifeste `molonari.cgs` du dépôt MOLONARI1D (branche `CGS-MOLO`) :
 
 ```bash
-cd molonaviz2
+cgitsync bootstrap molonari.cgs            # MOLONARI1D, MOLONARI-API, MOLONARI-data, MOLONARI-computo…
+export CGSHOME=<dossier indiqué à la fin du bootstrap>
+cd "$CGSHOME/Molonaviz/molonaviz2"
 uv sync          # installe l'application et les outils de développement
 uv run molonaviz2
 ```
 
-Le projet utilise `../../pyheatmy` (dépôt MOLONARI-computo, monté par cgs à la racine de l'espace MOLONARI1D) comme moteur de référence pour les tests uniquement. Il n'est pas nécessaire pour utiliser l'application, et l'exécutable distribué ne l'embarque pas.
+Le manifeste doit installer les dépôts sur la branche `CGS-MOLO` (`project = { name = "MOLONARI1D", default_branch = "CGS-MOLO" }`) : sur `main`, MOLONARI-API ne contient pas encore Molonaviz 2.
+
+Le projet utilise `../../pyheatmy` (dépôt MOLONARI-computo, monté par cgs à la racine de l'espace) comme moteur de référence pour les tests uniquement. Il n'est pas nécessaire pour utiliser l'application, et l'exécutable distribué ne l'embarque pas. Sans lui, par exemple dans un clone seul de MOLONARI-API, l'application s'installe et se lance avec `uv sync --frozen --no-default-groups` puis `uv run --frozen --no-default-groups molonaviz2`.
 
 ## Utilisation
 
@@ -28,6 +34,8 @@ Le projet utilise `../../pyheatmy` (dépôt MOLONARI-computo, monté par cgs à 
 Une ancienne base Molonaviz (`Molonari.sqlite`) se convertit avec **Fichier › Importer une base Molonaviz** : laboratoires, études, points, mesures brutes et nettoyées. Les anciens résultats de calcul ne sont pas repris ; il faut relancer les modèles.
 
 L'interface est en français par défaut, avec l'anglais disponible (**Affichage › Langue**). Les températures s'affichent en °C, K ou °F (**Affichage › Unité de température**).
+
+**Aide › Notice des paramètres** (Maj+F1) explique chaque réglage des calculs : définition, unité, valeur par défaut, valeurs admises, clé de `twin.yaml` et conseils. Maj+F1 sur un champ ouvre directement sa fiche, et l'infobulle de chaque champ en reprend le résumé.
 
 ### Formats de fichiers acceptés
 
@@ -75,14 +83,14 @@ uv run molonaviz2 twin run      examples/twins/twin_02   # étape 6 : même conf
 uv run molonaviz2 twin list     examples/twins
 ```
 
-Les exemples fournis portent tous sur Point034. Leurs identifiants valent pour la version 0.1.0 : ils changent avec la version du code, qui entre dans le `twin_id`.
+Les exemples fournis portent tous sur Point034. Leurs identifiants valent pour la version 0.2.0 : ils changent avec la version du code, qui entre dans le `twin_id`.
 
-| Twin | Mode | `twin_id` (0.1.0) | Contenu |
+| Twin | Mode | `twin_id` (0.2.0) | Contenu |
 |---|---|---|---|
-| `twin_01` | direct | `7b98a3053d8ddc44` | monocouche, −log₁₀ k = 12 |
-| `twin_02` | direct | `7b98a3053d8ddc44` | copie renommée de `twin_01`, pour montrer la détection de doublon |
-| `twin_03` | mcmc | `c193219ee1831cc1` | inversion courte (8 chaînes, 300 itérations, graine 1) |
-| `twin_04` | direct | `603275e2d2c924af` | créé depuis l'application |
+| `twin_01` | direct | `45ec70ecf74b2f33` | monocouche, −log₁₀ k = 12 |
+| `twin_02` | direct | `45ec70ecf74b2f33` | copie renommée de `twin_01`, pour montrer la détection de doublon |
+| `twin_03` | mcmc | `2d80e9fb04492ce3` | inversion courte (8 chaînes, 300 itérations, graine 1) |
+| `twin_04` | mcmc | `5109a4ba2ac2ed32` | créé depuis l'application, à partir d'une inversion |
 
 Pour réinitialiser la démo : fermer l'application, puis `rm examples/twins/registry.csv; rm -rf examples/results`.
 

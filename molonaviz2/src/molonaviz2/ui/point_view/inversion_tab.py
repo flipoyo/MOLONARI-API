@@ -8,12 +8,13 @@ import re
 
 from PySide6 import QtCore, QtWidgets
 
-from ...domain.compute import InversionConfig, LayerSpec, default_priors
+from ...domain.compute import InversionConfig, LayerSpec, default_priors, setting_limits
 from ...engine import api
 from ...engine.results import InversionResult
 from ...errors import UserError
 from ...i18n import N_, t
 from ...workers.tasks import Task, TaskManager
+from ..dialogs.notice import attach
 from ..plots.live import LiveMonitor
 from ..widgets import NumberField, format_number, heading, hint
 from .context import PointContext
@@ -60,13 +61,12 @@ class InversionTab(QtWidgets.QWidget):
         layer_buttons.addStretch()
 
         # Réglages essentiels
-        self.sigma_t = NumberField(context.default_sigma_t(), "°C", minimum=1e-6)
-        self.sigma_t.setToolTip(t("Standard deviation of the temperature measurement error. It sets how closely the model must fit the data."))
-        self.nb_chains = NumberField(defaults.nb_chains, t("chains"), integer=True, minimum=3, maximum=200)
-        self.nb_iter = NumberField(defaults.nb_iter, t("iterations"), integer=True, minimum=1, maximum=1_000_000)
-        self.burn_in_max = NumberField(defaults.burn_in_max, t("iterations"), integer=True, minimum=2, maximum=1_000_000)
+        self.sigma_t = NumberField(context.default_sigma_t(), "°C", **setting_limits("sigma_t"))
+        self.nb_chains = NumberField(defaults.nb_chains, t("chains"), integer=True, **setting_limits("nb_chains"))
+        self.nb_iter = NumberField(defaults.nb_iter, t("iterations"), integer=True, **setting_limits("nb_iter"))
+        self.burn_in_max = NumberField(defaults.burn_in_max, t("iterations"), integer=True, **setting_limits("burn_in_max"))
         self.quantiles = QtWidgets.QLineEdit(", ".join(f"{q:g}" for q in defaults.quantiles))
-        self.seed = NumberField(defaults.seed, "", integer=True, minimum=0)
+        self.seed = NumberField(defaults.seed, "", integer=True, **setting_limits("seed"))
         new_seed = QtWidgets.QToolButton()
         new_seed.setText(t("New"))
         new_seed.setToolTip(t("Draw a new random seed"))
@@ -86,15 +86,15 @@ class InversionTab(QtWidgets.QWidget):
         self.advanced = QtWidgets.QGroupBox(t("Advanced settings"))
         self.advanced.setCheckable(True)
         self.advanced.setChecked(False)
-        self.nb_cells = NumberField(defaults.nb_cells, t("cells"), integer=True, minimum=10, maximum=2000)
-        self.delta = NumberField(defaults.delta, t("pairs"), integer=True, minimum=1, maximum=20)
-        self.n_cr = NumberField(defaults.n_cr, "", integer=True, minimum=1, maximum=20)
-        self.c = NumberField(defaults.c, "", minimum=1e-9, maximum=0.999)
-        self.c_star = NumberField(defaults.c_star, "", minimum=1e-15)
-        self.gr_threshold = NumberField(defaults.gr_threshold, "", minimum=1.0001)
-        self.n_field_samples = NumberField(defaults.n_field_samples, t("fields"), integer=True, minimum=2, maximum=5000)
-        self.space_step = NumberField(defaults.space_step, "", integer=True, minimum=1)
-        self.time_step = NumberField(defaults.time_step, "", integer=True, minimum=1)
+        self.nb_cells = NumberField(defaults.nb_cells, t("cells"), integer=True, **setting_limits("nb_cells"))
+        self.delta = NumberField(defaults.delta, t("pairs"), integer=True, **setting_limits("delta"))
+        self.n_cr = NumberField(defaults.n_cr, "", integer=True, **setting_limits("n_cr"))
+        self.c = NumberField(defaults.c, "", **setting_limits("c"))
+        self.c_star = NumberField(defaults.c_star, "", **setting_limits("c_star"))
+        self.gr_threshold = NumberField(defaults.gr_threshold, "", **setting_limits("gr_threshold"))
+        self.n_field_samples = NumberField(defaults.n_field_samples, t("fields"), integer=True, **setting_limits("n_field_samples"))
+        self.space_step = NumberField(defaults.space_step, "", integer=True, **setting_limits("space_step"))
+        self.time_step = NumberField(defaults.time_step, "", integer=True, **setting_limits("time_step"))
         advanced_form = QtWidgets.QFormLayout()
         advanced_form.addRow(t("Discretisation"), self.nb_cells)
         advanced_form.addRow(t("Pairs of chains per jump (δ)"), self.delta)
@@ -145,6 +145,13 @@ class InversionTab(QtWidgets.QWidget):
         per_chain_layout = QtWidgets.QVBoxLayout(per_chain_box)
         per_chain_layout.addWidget(self.per_chain)
         side.addWidget(per_chain_box)
+        for widget, key in ((self.sigma_t, "inversion.sigma_t"), (self.nb_chains, "inversion.nb_chains"), (self.nb_iter, "inversion.nb_iter"),
+                            (self.burn_in_max, "inversion.burn_in_max"), (self.quantiles, "inversion.quantiles"), (self.seed, "inversion.seed"),
+                            (self.nb_cells, "numerics.nb_cells"), (self.delta, "inversion.delta"), (self.n_cr, "inversion.n_cr"),
+                            (self.c, "inversion.c"), (self.c_star, "inversion.c_star"), (self.gr_threshold, "inversion.gr_threshold"),
+                            (self.n_field_samples, "inversion.n_field_samples"), (self.space_step, "inversion.space_step"),
+                            (self.time_step, "inversion.time_step"), (per_chain_box, "inversion.per_chain")):
+            attach(widget, key)
         side.addWidget(self.issues)
         side.addLayout(run_row)
         side.addStretch()

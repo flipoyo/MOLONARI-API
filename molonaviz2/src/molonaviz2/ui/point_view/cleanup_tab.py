@@ -9,6 +9,7 @@ from ...domain.models import PointStage
 from ...errors import UserError
 from ...i18n import N_, t
 from ...processing.cleanup import VARIABLES, CleanupResult, CleanupSettings, clean, read_cleaned_csv, write_cleaned_csv
+from ..dialogs.notice import attach
 from ..errors import report_exception
 from ..plots.series import RegionSelector, TimeSeriesPlot
 from ..plots.style import PRESSURE_COLOR, REJECTED_COLOR, RIVER_COLOR, THERMOMETER_COLORS
@@ -57,6 +58,8 @@ class CleanupTab(QtWidgets.QWidget):
             edit.dateTimeChanged.connect(self._schedule)
         whole = QtWidgets.QPushButton(t("Whole period"))
         whole.clicked.connect(self._whole_period)
+        for widget in (self.start, self.end, whole):
+            attach(widget, "cleaning.period")
         period = QtWidgets.QFormLayout()
         period.addRow(t("Start"), self.start)
         period.addRow(t("End"), self.end)
@@ -69,6 +72,7 @@ class CleanupTab(QtWidgets.QWidget):
             for key, label in METHOD_LABELS.items():
                 combo.addItem(t(label), key)
             combo.currentIndexChanged.connect(self._schedule)
+            attach(combo, "cleaning.outliers")
             self.methods[variable] = combo
             outliers.addRow(variable_label(variable), combo)
 
@@ -78,6 +82,8 @@ class CleanupTab(QtWidgets.QWidget):
         self.exclude_button = QtWidgets.QPushButton(t("Exclude the selected period"))
         self.exclude_button.setEnabled(False)
         self.exclude_button.clicked.connect(self._exclude_selection)
+        for widget in (self.select_button, self.exclude_button):
+            attach(widget, "cleaning.exclusions")
         self.clear_exclusions = QtWidgets.QPushButton()
         self.clear_exclusions.clicked.connect(self._clear_exclusions)
         manual = QtWidgets.QVBoxLayout()
