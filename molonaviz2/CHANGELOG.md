@@ -12,6 +12,13 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions : [S
 - Tags : `molonaviz2-vX.Y.Z`, posés sur `CGS-MOLO` après la fusion. La CI (`molonaviz2-version`) vérifie que le tag correspond à `pyproject.toml`.
 - La version entre dans `engine_version()`, donc dans chaque `twin_id`. Une nouvelle version donne de nouveaux identifiants, et un twin déjà calculé passe à l'état « modifié » : il faut créer un nouveau twin pour utiliser le nouveau code.
 
+## [0.2.0-alpha.2] - 2026-10-19
+
+### Ajouté
+- Onglet Inversion, encadré « Par chaîne », mis à jour à chaque réglage : burn-in maximal et itérations conservées par chaîne, champs (T, q) par chaîne et intervalle entre deux champs (avec le nombre demandé quand l'arrondi le change), grille des champs après sous-échantillonnage et mémoire estimée, nombre maximal d'évaluations du modèle direct (#18).
+- `sampling_layout()` (moteur) : seule source de ces nombres. `DreamSampler` parcourt ses blocs, sans changer les résultats (#18).
+- Suivi en direct : « itération i / N (par chaîne) » ; onglet Résultats : burn-in, itérations conservées et champs par chaîne dans la ligne de provenance ; axe des traces « par chaîne » (#18).
+
 ## [0.2.0-alpha.1] - 2026-10-19
 
 ### Ajouté

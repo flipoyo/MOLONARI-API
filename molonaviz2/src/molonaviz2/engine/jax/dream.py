@@ -68,6 +68,64 @@ def to_physical(x):
     return jnp.stack([10.0 ** (-x[..., 0]), x[..., 1], x[..., 2], x[..., 3]], axis=-1)
 
 
+@dataclass(frozen=True)
+class SamplingLayout:
+    """Ce que donnent les réglages d'échantillonnage, chaîne par chaîne.
+
+    C'est la seule source de ces nombres : DreamSampler parcourt `blocks()`, et
+    l'interface affiche les mêmes valeurs."""
+
+    nb_chains: int
+    burn_in_max: int  # itérations de burn-in au plus, par chaîne
+    nb_iter: int  # itérations conservées après le burn-in, par chaîne
+    fields_requested: int  # nombre total de champs (T, q) demandé
+    interval: int  # un champ par chaîne toutes les `interval` itérations conservées
+    fields_per_chain: int
+    nb_cells: int
+    field_cells: int  # cellules gardées après le pas spatial
+    nb_times: int | None  # dates des mesures (None : inconnu)
+    field_times: int | None  # dates gardées après le pas temporel
+
+    @property
+    def parameter_sets(self) -> int:
+        return self.nb_chains * self.nb_iter
+
+    @property
+    def fields_total(self) -> int:
+        return self.nb_chains * self.fields_per_chain
+
+    @property
+    def max_evaluations(self) -> int:
+        return self.nb_chains * (self.burn_in_max + self.nb_iter)
+
+    @property
+    def field_bytes(self) -> int | None:
+        """Mémoire des champs conservés : T et q en float32."""
+        return None if self.field_times is None else 2 * 4 * self.fields_total * self.field_cells * self.field_times
+
+    def blocks(self) -> list[tuple[int, bool]]:
+        """Blocs d'itérations de l'échantillonnage : (longueur, champ conservé à la fin du bloc)."""
+        full, rest = divmod(self.nb_iter, self.interval)
+        return [(self.interval, True)] * full + ([(rest, False)] if rest else [])
+
+
+def sampling_layout(config: InversionConfig, nb_times: int | None = None) -> SamplingLayout:
+    per_chain = max(1, math.ceil(config.n_field_samples / config.nb_chains))
+    interval = max(1, config.nb_iter // per_chain)
+    return SamplingLayout(
+        nb_chains=config.nb_chains,
+        burn_in_max=config.burn_in_max,
+        nb_iter=config.nb_iter,
+        fields_requested=config.n_field_samples,
+        interval=interval,
+        fields_per_chain=config.nb_iter // interval,
+        nb_cells=config.nb_cells,
+        field_cells=math.ceil(config.nb_cells / config.space_step),
+        nb_times=nb_times,
+        field_times=None if nb_times is None else math.ceil(nb_times / config.time_step),
+    )
+
+
 def split_rhat(chains: np.ndarray) -> np.ndarray:
     """R-hat « split » classique (Gelman et al., BDA3). chains : (N, n, ...) → (...)."""
     chains = np.asarray(chains, np.float64)
@@ -258,23 +316,20 @@ class DreamSampler:
                 break
         del history
 
-        # Échantillonnage : paramètres à chaque itération, champs (T, q) régulièrement.
-        per_chain = max(1, math.ceil(cfg.n_field_samples / n_chain))
-        interval = max(1, cfg.nb_iter // per_chain)
+        # Échantillonnage : paramètres à chaque itération, un champ (T, q) par chaîne à la fin de chaque bloc complet.
         sl_space = slice(None, None, cfg.space_step)
         sl_time = slice(None, None, cfg.time_step)
         samples, energies, accepted = [], [], []
         field_temp, field_flux = [], []
         done = 0
-        while done < cfg.nb_iter:
-            length = min(interval, cfg.nb_iter - done)
+        for length, keep_field in sampling_layout(cfg).blocks():
             carry, (xs, es, acc) = self._block(length, False)(carry)
             done += length
             samples.append(np.asarray(xs))
             energies.append(np.asarray(es))
             accepted.append(np.asarray(acc))
             track_best(xs, es)
-            if length == interval:
+            if keep_field:
                 field_temp.append(np.asarray(carry[3][:, sl_space, sl_time], np.float32))
                 field_flux.append(np.asarray(carry[4][:, sl_space, sl_time], np.float32))
             report("sampling", done, cfg.nb_iter, float(np.mean(acc)), carry[2], rhat_max)
@@ -351,4 +406,4 @@ def single_energy(inputs: ColumnInputs, config: InversionConfig, x: np.ndarray) 
     return float(energy(fields["temperature"], geom, config.sigma_t**2))
 
 
-__all__ = ["Cancelled", "DreamSampler", "Progress", "rmse", "single_energy", "split_rhat", "to_physical"]
+__all__ = ["Cancelled", "DreamSampler", "Progress", "SamplingLayout", "rmse", "sampling_layout", "single_energy", "split_rhat", "to_physical"]

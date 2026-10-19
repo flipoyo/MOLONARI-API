@@ -32,6 +32,13 @@ def run_forward(inputs: ColumnInputs, config: ForwardConfig) -> ForwardResult:
     return _run(inputs, [layer.physical() for layer in config.layers], [layer.z_low for layer in config.layers], config.nb_cells)
 
 
+def sampling_layout(config: InversionConfig, nb_times: int | None = None):
+    """Itérations et champs (T, q) par chaîne pour ces réglages : voir jax.dream.SamplingLayout."""
+    from .jax.dream import sampling_layout as _layout
+
+    return _layout(config, nb_times)
+
+
 def run_inversion(
     inputs: ColumnInputs,
     config: InversionConfig,

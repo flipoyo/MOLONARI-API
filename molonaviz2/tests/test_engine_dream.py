@@ -8,7 +8,12 @@ from conftest import synthetic_inputs
 
 from molonaviz2.domain.compute import InversionConfig, LayerSpec
 from molonaviz2.engine.api import run_forward, run_inversion
-from molonaviz2.engine.jax.dream import Cancelled, DreamSampler, split_rhat
+from molonaviz2.engine.jax.dream import (
+    Cancelled,
+    DreamSampler,
+    sampling_layout,
+    split_rhat,
+)
 from molonaviz2.errors import UserError
 
 
@@ -97,6 +102,44 @@ def test_progress_phases_and_cancellation():
 
     with pytest.raises(Cancelled):
         run_inversion(inputs, small_config(burn_in_max=200), should_cancel=cancel_after_burn_in_starts)
+
+
+@pytest.mark.parametrize("nb_chains, nb_iter, fields, per_chain, interval", [
+    (7, 30, 14, 2, 15),  # cas courant : 2 champs par chaîne
+    (7, 30, 15, 3, 10),  # 15 demandés → 3 par chaîne, soit 21
+    (7, 30, 3, 1, 30),  # moins de champs que de chaînes : 1 par chaîne au moins
+    (7, 5, 100, 5, 1),  # plus de champs par chaîne que d'itérations : 1 par itération
+])
+def test_sampling_layout_per_chain(nb_chains, nb_iter, fields, per_chain, interval):
+    layout = sampling_layout(small_config(nb_chains=nb_chains, nb_iter=nb_iter, n_field_samples=fields, space_step=3, time_step=4), nb_times=301)
+    assert (layout.fields_per_chain, layout.interval) == (per_chain, interval)
+    assert layout.fields_total == nb_chains * per_chain and layout.parameter_sets == nb_chains * nb_iter
+    blocks = layout.blocks()
+    assert sum(length for length, _ in blocks) == nb_iter
+    assert sum(keep for _, keep in blocks) == per_chain
+    assert (layout.field_cells, layout.field_times) == (7, 76)  # ⌈20 / 3⌉, ⌈301 / 4⌉
+    assert layout.field_bytes == 2 * 4 * layout.fields_total * 7 * 76
+
+
+def test_sampling_layout_is_what_the_sampler_stores(monkeypatch):
+    """Le nombre de champs (T, q) réellement conservés est celui qu'affiche l'interface."""
+    from molonaviz2.engine.jax import dream
+
+    inputs = synthetic_inputs(nb_times=60)
+    config = small_config(n_field_samples=15, time_step=2)
+    stored = []
+    original = np.quantile
+
+    def spy(values, *args, **kwargs):
+        if np.ndim(values) == 3:
+            stored.append(np.shape(values))
+        return original(values, *args, **kwargs)
+
+    monkeypatch.setattr(dream.np, "quantile", spy)
+    result = run_inversion(inputs, config)
+    layout = sampling_layout(config, nb_times=60)
+    assert stored[0] == (layout.fields_total, layout.field_cells, layout.field_times)  # champs de température
+    assert result.samples.shape[:2] == (layout.nb_iter, layout.nb_chains)
 
 
 def test_invalid_configuration_is_rejected():
