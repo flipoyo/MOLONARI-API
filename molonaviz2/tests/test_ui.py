@@ -1,0 +1,388 @@
+"""Interface (pytest-qt, hors écran) : flux de travail complet, garde-fous, erreurs, langue, unités."""
+
+import numpy as np
+import pytest
+from conftest import FIXTURES
+from PySide6 import QtCore, QtWidgets
+
+from molonaviz2.domain.models import PointStage, SamplingPoint, Study
+from molonaviz2.io.lab_import import import_lab_directory
+from molonaviz2.io.point_import import read_point_info, read_pressure_file, read_temperature_file
+from molonaviz2.settings import Settings
+from molonaviz2.storage.project import Project
+from molonaviz2.ui import errors as ui_errors
+from molonaviz2.ui.dialogs.lab_import import LabImportDialog
+from molonaviz2.ui.dialogs.point_import import PointImportDialog
+from molonaviz2.ui.main_window import MainWindow
+from molonaviz2.ui.point_view.view import PointView
+from molonaviz2.ui.units import temperature_unit
+from molonaviz2.ui.widgets import TypedConfirmation
+
+TASK_TIMEOUT = 120_000
+
+
+@pytest.fixture(autouse=True)
+def isolated_settings(qapp, tmp_path):
+    from molonaviz2.i18n import install_language
+
+    install_language(qapp, "en")  # langue source : les tests vérifient les textes anglais
+    QtCore.QSettings.setDefaultFormat(QtCore.QSettings.Format.IniFormat)
+    QtCore.QSettings.setPath(QtCore.QSettings.Format.IniFormat, QtCore.QSettings.Scope.UserScope, str(tmp_path / "settings"))
+    temperature_unit.set("°C")
+    yield
+    temperature_unit.set("°C")
+
+
+@pytest.fixture
+def shown_errors():
+    """Erreurs présentées à l'utilisateur (au lieu d'ouvrir des boîtes modales)."""
+    errors = []
+    previous = ui_errors.set_presenter(lambda title, message, details: errors.append((title, message, details)))
+    ui_errors.install_excepthook()
+    yield errors
+    ui_errors.set_presenter(previous)
+
+
+@pytest.fixture
+def settings(tmp_path):
+    return Settings(QtCore.QSettings(str(tmp_path / "ui.ini"), QtCore.QSettings.Format.IniFormat))
+
+
+def fill_project(project: Project) -> None:
+    project.add_lab(import_lab_directory(FIXTURES / "lab", name="Lab").lab)
+    project.add_study(Study("Etude", "Lab"))
+    info = read_point_info(FIXTURES / "point034" / "Point034_info.csv")
+    point = SamplingPoint("Point034", "Etude", "P508", "S007", info.setup_date, info.measure_date, 0.505, 0.0, "Point 34",
+                          (FIXTURES / "point034" / "point34_schema.png").read_bytes())
+    raw_t = read_temperature_file(FIXTURES / "point034" / "point034_T_measures.csv").frame.iloc[:300]
+    raw_p = read_pressure_file(FIXTURES / "point034" / "point034_P_measures.csv").frame.iloc[:300]
+    project.add_point(point, raw_t, raw_p)
+
+
+@pytest.fixture
+def window(qtbot, settings, tmp_path, shown_errors):
+    win = MainWindow(settings)
+    qtbot.addWidget(win)
+    project = Project.create(tmp_path / "ui.molo")
+    fill_project(project)
+    win._set_project(project)
+    yield win
+    win.tasks.cancel()
+    win.tasks.wait()
+
+
+def open_point(qtbot, window) -> PointView:
+    window.open_point("Etude", "Point034")
+    view = window.point_tabs.currentWidget()
+    assert isinstance(view, PointView)
+    return view
+
+
+def wait_task(qtbot, window):
+    qtbot.waitUntil(lambda: not window.tasks.busy, timeout=TASK_TIMEOUT)
+    for _ in range(5):
+        QtWidgets.QApplication.processEvents()
+
+
+# Démarrage et garde-fous ------------------------------------------------------------------
+
+
+def test_welcome_page_and_disabled_actions_explain_why(qtbot, settings):
+    win = MainWindow(settings)
+    qtbot.addWidget(win)
+    assert win.central.currentWidget() is win.welcome
+    assert not win.project_dock.isVisible()
+    for action in (win.import_lab_action, win.new_study_action, win.import_point_action):
+        assert not action.isEnabled()
+        assert action.toolTip()  # la raison est donnée
+
+
+def test_actions_become_available_step_by_step(qtbot, settings, tmp_path):
+    win = MainWindow(settings)
+    qtbot.addWidget(win)
+    project = Project.create(tmp_path / "steps.molo")
+    win._set_project(project)
+    assert win.import_lab_action.isEnabled()
+    assert not win.new_study_action.isEnabled() and "laboratory" in win.new_study_action.toolTip().lower()
+    project.add_lab(import_lab_directory(FIXTURES / "lab", name="Lab").lab)
+    win._project_changed()
+    assert win.new_study_action.isEnabled() and not win.import_point_action.isEnabled()
+    project.add_study(Study("E", "Lab"))
+    win._project_changed()
+    assert win.import_point_action.isEnabled()
+    assert str(project.path) in settings.recent_projects()
+
+
+def test_lab_import_dialog_previews_before_writing(qtbot):
+    dialog = LabImportDialog(existing_names=["Lab"])
+    qtbot.addWidget(dialog)
+    dialog.load(FIXTURES / "lab")
+    assert dialog.tree.topLevelItemCount() == 3
+    assert dialog.tree.topLevelItem(1).childCount() == 9
+    assert dialog.name.text() == "lab"  # nom proposé : celui du dossier
+    dialog.name.setText("Lab")
+    assert not dialog.import_button.isEnabled() and "already exists" in dialog.name_error.text()
+    dialog.name.setText("Montberneux")
+    assert dialog.import_button.isEnabled()
+    assert dialog.lab().name == "Montberneux"
+
+
+def test_point_import_dialog_fills_everything_from_the_folder(qtbot):
+    lab = import_lab_directory(FIXTURES / "lab", name="Lab").lab
+    dialog = PointImportDialog("Etude", lab, existing_points=[])
+    qtbot.addWidget(dialog)
+    dialog.fill_from_folder(FIXTURES / "point034")
+    assert dialog.name.text() == "Point034"
+    assert dialog.pressure_sensor.currentText() == "P508" and dialog.shaft.currentText() == "S007"
+    assert dialog.river_bed.value() == 0.505
+    assert "1460" in dialog.pressure_preview.text() and "1436" in dialog.temperature_preview.text()
+    assert "Several date formats" in dialog.pressure_preview.text()
+    assert dialog.import_button.isEnabled()
+    point, raw_t, raw_p = dialog.point_data()
+    assert point.notice.startswith("Point 34") and point.scheme is not None
+    assert len(raw_t) == 1436 and len(raw_p) == 1460
+
+
+def test_point_import_dialog_refuses_a_spreadsheet_altered_file(qtbot):
+    lab = import_lab_directory(FIXTURES / "lab", name="Lab").lab
+    dialog = PointImportDialog("Etude", lab, existing_points=["Point034"])
+    qtbot.addWidget(dialog)
+    dialog.fill_from_folder(FIXTURES / "point034")
+    assert "already exists" in dialog.problems.text()
+    dialog.name.setText("Autre")
+    dialog.temperature_file.set_path(FIXTURES / "hobo_spreadsheet_altered_T.csv")
+    assert "chronological" in dialog.temperature_preview.text()
+    assert not dialog.import_button.isEnabled()
+
+
+def test_computation_tabs_are_locked_until_measurements_are_cleaned(qtbot, window):
+    view = open_point(qtbot, window)
+    assert not view.tabs.isTabEnabled(view.FORWARD)
+    assert "Clean the measurements first" in view.tabs.tabToolTip(view.FORWARD)
+    assert not view.tabs.isTabEnabled(view.RESULTS)
+    assert view.tabs.currentIndex() == view.CLEANUP  # le point s'ouvre sur l'étape à faire
+
+
+# Flux de travail ---------------------------------------------------------------------------
+
+
+def test_cleanup_preview_then_apply(qtbot, window):
+    view = open_point(qtbot, window)
+    tab = view.cleanup_tab
+    tab.methods["t1"].setCurrentIndex(tab.methods["t1"].findData("zscore"))
+    tab.preview()
+    assert "dates kept out of" in tab.summary.text()
+    assert window.project.stage("Etude", "Point034") == PointStage.RAW  # rien n'est écrit avant d'appliquer
+    tab.apply()
+    assert view.context.stage == PointStage.CLEANED
+    assert view.tabs.isTabEnabled(view.FORWARD)
+    assert window.project.cleanup_settings("Etude", "Point034")["methods"]["t1"] == "zscore"
+    assert "Cleaned" in view.stage_bar.text()
+
+
+def test_direct_model_then_inversion_then_results(qtbot, window, shown_errors, tmp_path):
+    view = open_point(qtbot, window)
+    view.cleanup_tab.apply()
+    view.tabs.setCurrentIndex(view.FORWARD)
+    view.forward_tab.nb_cells.set_value(30)
+    view.run_current()  # F5
+    assert window.tasks.busy
+    assert not view.forward_tab.run_button.isEnabled()  # pas de second calcul en parallèle
+    wait_task(qtbot, window)
+    assert view.context.stage == PointStage.DIRECT_MODEL
+    assert view.forward_tab.summary.text().startswith("RMSE")
+    assert view.tabs.isTabEnabled(view.RESULTS)
+
+    tab = view.inversion_tab
+    view.tabs.setCurrentIndex(view.INVERSION)
+    tab.advanced.setChecked(True)
+    for field, value in ((tab.nb_cells, 20), (tab.nb_chains, 7), (tab.nb_iter, 20), (tab.burn_in_max, 20), (tab.n_field_samples, 14)):
+        field.set_value(value)
+    assert tab.run_button.isEnabled(), tab.issues.text()
+    tab.run()
+    wait_task(qtbot, window)
+    assert view.context.stage == PointStage.INVERSION
+    assert "Burn-in" in tab.status.text()
+
+    tab.show_results.emit(tab._last_id)
+    results = view.results_tab
+    assert view.tabs.currentIndex() == view.RESULTS
+    assert results.inversion is not None
+    assert results.tabs.isTabEnabled(results.parameters_index)
+    assert results.summary_model.rowCount() == 4
+    assert "seed" in results.provenance.text()
+
+    folder = tmp_path / "exports"
+    results.export_csv(str(folder))
+    assert {p.name for p in folder.iterdir()} >= {"temperature_C.csv", "sensors.csv", "posterior_summary.csv", "posterior_samples.csv"}
+    netcdf = tmp_path / "posterior.nc"
+    results.export_netcdf(str(netcdf))
+    import arviz as az
+
+    assert "neg_log10_k" in az.from_netcdf(str(netcdf)).posterior
+    results.tabs.setCurrentIndex(results.parameters_index)
+    figure = tmp_path / "histograms.svg"
+    results.histograms.export(figure)
+    assert figure.stat().st_size > 0
+    assert shown_errors == []
+
+
+def test_reusing_a_configuration_reloads_it(qtbot, window):
+    view = open_point(qtbot, window)
+    view.cleanup_tab.apply()
+    view.forward_tab.layers.add_layer()
+    view.forward_tab.nb_cells.set_value(24)
+    view.forward_tab.run()
+    wait_task(qtbot, window)
+    view.forward_tab.load_config(type(view.forward_tab.config())(view.forward_tab.layers.layers()[:1], 50))  # on change tout
+    view.results_tab.refresh()
+    view.results_tab._reuse()
+    assert view.tabs.currentIndex() == view.FORWARD
+    assert view.forward_tab.nb_cells.value() == 24
+    assert view.forward_tab.layers.rowCount() == 2
+
+
+def test_inversion_can_be_cancelled_and_saves_nothing(qtbot, window):
+    view = open_point(qtbot, window)
+    view.cleanup_tab.apply()
+    tab = view.inversion_tab
+    tab.advanced.setChecked(True)
+    tab.nb_cells.set_value(20)
+    tab.burn_in_max.set_value(100_000)
+    tab.nb_chains.set_value(7)
+    tab.run()
+    qtbot.waitUntil(lambda: "Burn-in" in tab.status.text(), timeout=TASK_TIMEOUT)
+    tab.cancel()
+    wait_task(qtbot, window)
+    assert "cancelled" in tab.status.text()
+    assert window.project.computations("Etude", "Point034") == []
+
+
+def test_invalid_settings_disable_running_with_a_reason(qtbot, window):
+    view = open_point(qtbot, window)
+    view.cleanup_tab.apply()
+    forward = view.forward_tab
+    forward.layers.item(0, 3).setText("abc")  # porosité illisible
+    assert not forward.run_button.isEnabled()
+    assert "Enter a number" in forward.issues.text()
+    inversion = view.inversion_tab
+    inversion.advanced.setChecked(True)
+    inversion.nb_chains.set_value(5)
+    inversion.delta.set_value(3)
+    assert not inversion.run_button.isEnabled()
+    assert "2·δ + 1" in inversion.issues.text()
+    inversion.layers.item(0, 4).setText("0.5")  # n min > n max
+    assert "Minimum must be lower than maximum" in inversion.issues.text()
+
+
+# Erreurs -----------------------------------------------------------------------------------
+
+
+def test_error_inside_a_computation_is_shown_and_the_app_keeps_working(qtbot, window, shown_errors, monkeypatch):
+    from molonaviz2.engine import api
+
+    view = open_point(qtbot, window)
+    view.cleanup_tab.apply()
+    monkeypatch.setattr(api, "run_forward", lambda inputs, config: (_ for _ in ()).throw(RuntimeError("panne simulée")))
+    view.forward_tab.run()
+    wait_task(qtbot, window)
+    assert len(shown_errors) == 1
+    title, message, details = shown_errors[0]
+    assert title == "Unexpected error" and "panne simulée" in message and "RuntimeError" in details
+    assert view.context.stage == PointStage.CLEANED  # rien n'a été enregistré
+    assert view.forward_tab.run_button.isEnabled()  # on peut relancer
+
+
+@pytest.mark.qt_no_exception_capture
+def test_exception_in_a_qt_slot_does_not_abort(qtbot, window, shown_errors):
+    """Le défaut qui faisait planter l'ancien Molonaviz : une exception dans un slot Qt."""
+
+    def broken_slot():
+        raise ValueError("bogue dans un slot")
+
+    QtCore.QTimer.singleShot(0, broken_slot)
+    qtbot.waitUntil(lambda: bool(shown_errors), timeout=5000)
+    assert "bogue dans un slot" in shown_errors[0][1]
+    window._project_changed()  # l'application répond toujours
+    assert window.explorer.topLevelItemCount() == 2
+
+
+def test_user_errors_show_only_the_message(shown_errors):
+    from molonaviz2.errors import UserError
+
+    ui_errors.report_exception(UserError("Le fichier est vide."))
+    assert shown_errors == [("Action not completed", "Le fichier est vide.", "")]
+
+
+def test_destructive_confirmation_requires_typing_the_name(qtbot):
+    dialog = TypedConfirmation("Supprimer", "…", "Point034", "Supprimer")
+    qtbot.addWidget(dialog)
+    assert not dialog.confirm.isEnabled()
+    dialog.edit.setText("Point03")
+    assert not dialog.confirm.isEnabled()
+    dialog.edit.setText("Point034")
+    assert dialog.confirm.isEnabled()
+
+
+# Langue et unités --------------------------------------------------------------------------
+
+
+def test_language_switch_keeps_the_project_open(qtbot, tmp_path, shown_errors):
+    from molonaviz2.app import Application
+
+    path = tmp_path / "lang.molo"
+    project = Project.create(path)
+    fill_project(project)
+    project.close()
+    controller = Application(QtWidgets.QApplication.instance(), str(path))
+    first = controller.window
+    qtbot.addWidget(first)
+    assert first.menuBar().actions()[0].text() == "&Fichier"  # français par défaut
+    controller.change_language("en")
+    second = controller.window
+    qtbot.addWidget(second)
+    assert second is not first
+    assert second.menuBar().actions()[0].text() == "&File"
+    assert second.project is not None and second.project.path == path
+    controller.change_language("fr")
+    assert controller.window.menuBar().actions()[0].text() == "&Fichier"
+    controller.window.close()
+
+
+def test_temperature_unit_applies_everywhere(qtbot, window):
+    view = open_point(qtbot, window)
+    plot = view.measures_tab.temperature_plot
+    window.set_temperature_unit("K")
+    assert "K" in plot.getPlotItem().getAxis("left").labelText
+    data = plot.getPlotItem().listDataItems()[0].getData()[1]
+    assert np.nanmin(data) > 250  # valeurs en kelvins
+    window.set_temperature_unit("°C")
+    data = plot.getPlotItem().listDataItems()[0].getData()[1]
+    assert np.nanmax(data) < 40
+
+
+def test_deleting_a_point_closes_its_tab(qtbot, window, monkeypatch):
+    open_point(qtbot, window)
+    monkeypatch.setattr("molonaviz2.ui.main_window.confirm_destructive", lambda *a, **k: True)
+    window._delete_point("Etude", "Point034")
+    assert window.point_tabs.count() == 0
+    assert window.project.point_names("Etude") == []
+
+
+def test_window_state_is_remembered(qtbot, settings, tmp_path):
+    win = MainWindow(settings)
+    qtbot.addWidget(win)
+    win.resize(900, 600)
+    win.close()
+    geometry, state = settings.window_state()
+    assert geometry is not None and state is not None
+
+
+def test_screenshot_is_not_blank(qtbot, window, tmp_path):
+    view = open_point(qtbot, window)
+    window.resize(1280, 800)
+    view.tabs.setCurrentIndex(view.MEASURES)
+    QtWidgets.QApplication.processEvents()
+    image = window.grab().toImage()
+    pixels = np.array([image.pixel(x, y) for x in range(0, image.width(), 37) for y in range(0, image.height(), 37)])
+    assert len(np.unique(pixels)) > 20  # du contenu, pas un cadre vide
