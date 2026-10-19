@@ -12,6 +12,16 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions : [S
 - Tags : `molonaviz2-vX.Y.Z`, posés sur `CGS-MOLO` après la fusion. La CI (`molonaviz2-version`) vérifie que le tag correspond à `pyproject.toml`.
 - La version entre dans `engine_version()`, donc dans chaque `twin_id`. Une nouvelle version donne de nouveaux identifiants, et un twin déjà calculé passe à l'état « modifié » : il faut créer un nouveau twin pour utiliser le nouveau code.
 
+## [0.1.0-alpha.4] - 2026-10-19
+
+### Ajouté
+- Modèle direct en JAX (float64) : écoulement puis chaleur en 1D, schéma semi-implicite, portage de pyheatmy (`lax.scan`, `tridiagonal_solve`). Identique à pyheatmy passé en float64, à 1e-9 près en relatif (#4).
+- Inversion DREAM vectorisée sur les chaînes (`vmap`), avec correction des chaînes aberrantes, R-hat split et diagnostics ArviZ (#4).
+- `engine_version()` : `molonaviz2 <version> · jax <version>` (#4).
+
+### Retiré
+- L'échange latéral d'eau (`q_s`, `T_lat`) n'est pas pris en charge dans cette version. Il sera réintroduit par une PR dédiée (#4).
+
 ## [0.1.0-alpha.3] - 2026-10-19
 
 ### Ajouté
