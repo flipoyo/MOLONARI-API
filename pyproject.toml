@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "molonaviz"
-version = "1.0"
+version = "1.0.1"
 description = "Graphical tool for the MOLONARI project. And MQTT receiver"
 readme = "README.md"
 authors = [

@@ -2,7 +2,17 @@
 This file holds different methods to import or get files from the molonaviz package more easily.
 """
 
-from pkg_resources import resource_filename
+from pathlib import Path
+
+_PACKAGE_ROOT = Path(__file__).resolve().parent.parent
+
+def resource_filename(package, filename):
+    """
+    Replacement for pkg_resources.resource_filename (removed in setuptools>=81).
+    package is a dotted name inside molonaviz, e.g. "molonaviz.frontend.ui".
+    """
+    subdirs = package.split(".")[1:]
+    return str(_PACKAGE_ROOT.joinpath(*subdirs, filename))
 
 def get_docs(filename):
     """
