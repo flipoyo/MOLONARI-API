@@ -12,6 +12,21 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions : [S
 - Tags : `molonaviz2-vX.Y.Z`, posés sur `CGS-MOLO` après la fusion. La CI (`molonaviz2-version`) vérifie que le tag correspond à `pyproject.toml`.
 - La version entre dans `engine_version()`, donc dans chaque `twin_id`. Une nouvelle version donne de nouveaux identifiants, et un twin déjà calculé passe à l'état « modifié » : il faut créer un nouveau twin pour utiliser le nouveau code.
 
+## [0.2.0] - 2026-10-19
+
+Rassemble les pré-versions 0.2.0-alpha.1 et 0.2.0-alpha.2 ci-dessous.
+
+### Ajouté
+- Notice des paramètres de calcul : Aide › Notice des paramètres (Maj+F1), une fiche par réglage (définition, unité, valeur par défaut, valeurs admises, clé de `twin.yaml`, conseils), avec recherche. Les infobulles des champs en reprennent le résumé, et Maj+F1 sur un champ ouvre sa fiche (#19).
+- `SETTING_LIMITS` : bornes des réglages, une seule source pour les onglets de calcul et la notice (#19).
+- README : installation de l'ensemble des dépôts par cgs (branche `CGS-MOLO`), et installation sans pyheatmy (#19).
+
+### Corrigé
+- README : `twin_04` est en mode mcmc (#19).
+
+### Identifiants de référence (0.2.0)
+- `twin_01` et `twin_02` : `45ec70ecf74b2f33` ; `twin_03` : `2d80e9fb04492ce3` ; `twin_04` : `5109a4ba2ac2ed32`.
+
 ## [0.2.0-alpha.2] - 2026-10-19
 
 ### Ajouté
