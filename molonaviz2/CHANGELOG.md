@@ -12,6 +12,17 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions : [S
 - Tags : `molonaviz2-vX.Y.Z`, posés sur `CGS-MOLO` après la fusion. La CI (`molonaviz2-version`) vérifie que le tag correspond à `pyproject.toml`.
 - La version entre dans `engine_version()`, donc dans chaque `twin_id`. Une nouvelle version donne de nouveaux identifiants, et un twin déjà calculé passe à l'état « modifié » : il faut créer un nouveau twin pour utiliser le nouveau code.
 
+## [0.1.0] - 2026-10-19
+
+Première version de Molonaviz 2. Elle rassemble les pré-versions 0.1.0-alpha.1 à 0.1.0-beta.1 ci-dessous, et remplace Molonaviz (PyQt5) sans le modifier.
+
+### Ajouté
+- Exécutable PyInstaller : dossier autonome, plus un `.app` sous macOS. La version est lue dans `pyproject.toml`, et les métadonnées de `molonaviz2` sont embarquées pour que `engine_version()` y soit la même que depuis les sources (#7).
+- README : identifiants de référence des twins d'exemple en 0.1.0, réinitialisation de la démo, organisation du code (#7).
+
+### Identifiants de référence (0.1.0)
+- `twin_01` et `twin_02` : `7b98a3053d8ddc44` ; `twin_03` : `c193219ee1831cc1` ; `twin_04` : `603275e2d2c924af`.
+
 ## [0.1.0-beta.1] - 2026-10-19
 
 ### Ajouté

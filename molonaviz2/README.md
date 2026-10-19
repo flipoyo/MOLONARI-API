@@ -75,10 +75,16 @@ uv run molonaviz2 twin run      examples/twins/twin_02   # étape 6 : même conf
 uv run molonaviz2 twin list     examples/twins
 ```
 
-Les exemples fournis portent tous sur Point034 :
-- `twin_01` : mode direct, monocouche ;
-- `twin_02` : copie renommée de `twin_01`, pour montrer la détection de doublon ;
-- `twin_03` : mcmc court.
+Les exemples fournis portent tous sur Point034. Leurs identifiants valent pour la version 0.1.0 : ils changent avec la version du code, qui entre dans le `twin_id`.
+
+| Twin | Mode | `twin_id` (0.1.0) | Contenu |
+|---|---|---|---|
+| `twin_01` | direct | `7b98a3053d8ddc44` | monocouche, −log₁₀ k = 12 |
+| `twin_02` | direct | `7b98a3053d8ddc44` | copie renommée de `twin_01`, pour montrer la détection de doublon |
+| `twin_03` | mcmc | `c193219ee1831cc1` | inversion courte (8 chaînes, 300 itérations, graine 1) |
+| `twin_04` | direct | `603275e2d2c924af` | créé depuis l'application |
+
+Pour réinitialiser la démo : fermer l'application, puis `rm examples/twins/registry.csv; rm -rf examples/results`.
 
 Le schéma complet de `twin.yaml`, avec toutes les clés acceptées, est documenté dans `src/molonaviz2/twin/config.py`.
 
@@ -106,6 +112,8 @@ make package             # PyInstaller : dist/Molonaviz2/ (et dist/Molonaviz2.ap
 make selftest-package    # lance un petit modèle direct dans l'exécutable construit
 ```
 
+La version de l'exécutable est lue dans `pyproject.toml`, comme celle de l'application : les `twin_id` sont les mêmes depuis les sources et depuis l'exécutable.
+
 Il faut un build par système d'exploitation, réalisé sur ce système. Un exécutable CUDA se construit sous Linux, avec `jax[cuda12]` installé.
 
 ## Versions
@@ -121,6 +129,7 @@ src/molonaviz2/
   storage/     fichier projet .molo (SQLite, schéma versionné, écritures transactionnelles)
   processing/  nettoyage des mesures
   engine/      moteur JAX (modèle direct, DREAM), adaptateur pyheatmy pour les tests
+  twin/        twins versionnés : twin.yaml, twin_id, registre, exécution, ligne de commande
   workers/     calculs en arrière-plan (annulation, progression)
   ui/          interface PySide6 : fenêtre, explorateur, onglets d'un point, graphiques
   i18n/        traduction française (fr.json) ; `make strings` liste les chaînes non traduites
