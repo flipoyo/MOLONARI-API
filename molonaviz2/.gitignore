@@ -1,0 +1,12 @@
+.venv/
+build/
+dist/
+build_log.txt
+__pycache__/
+*.pyc
+.pytest_cache/
+examples/results/
+examples/twins/registry.csv
+.ruff_cache/
+.mypy_cache/
+.DS_Store
