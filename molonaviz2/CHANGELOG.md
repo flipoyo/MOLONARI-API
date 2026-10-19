@@ -12,6 +12,16 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions : [S
 - Tags : `molonaviz2-vX.Y.Z`, posés sur `CGS-MOLO` après la fusion. La CI (`molonaviz2-version`) vérifie que le tag correspond à `pyproject.toml`.
 - La version entre dans `engine_version()`, donc dans chaque `twin_id`. Une nouvelle version donne de nouveaux identifiants, et un twin déjà calculé passe à l'état « modifié » : il faut créer un nouveau twin pour utiliser le nouveau code.
 
+## [0.2.0-alpha.1] - 2026-10-19
+
+### Ajouté
+- Intervalle d'incertitude de mesure autour des températures mesurées (onglet Résultats › Températures) : bande mesure ± z·σT, au niveau 1σ (68 %), 90 % (par défaut) ou 95 %. σT est celui de l'inversion, ou l'incertitude du thermomètre pour un modèle direct (#17).
+- Fenêtre d'un twin, onglet Résidus : lignes à ± z·σT, au même niveau (#17).
+
+### Corrigé
+- Fenêtre d'un twin en mode direct : les lignes d'incertitude des résidus n'apparaissaient pas, faute de σT dans les métadonnées ; σT est maintenant lu dans `twin.yaml` (#17).
+- La bande crédible du modèle a sa propre entrée dans la légende des graphes des capteurs (#17).
+
 ## [0.1.0] - 2026-10-19
 
 Première version de Molonaviz 2. Elle rassemble les pré-versions 0.1.0-alpha.1 à 0.1.0-beta.1 ci-dessous, et remplace Molonaviz (PyQt5) sans le modifier.

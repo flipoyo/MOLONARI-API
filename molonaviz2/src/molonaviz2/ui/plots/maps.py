@@ -96,10 +96,16 @@ def depth_time_map(ax, times, depths, values, label: str, signed: bool = False, 
     return mesh
 
 
-def sensor_comparison(ax_list, times, observed, simulated, band=None, unit="°C", rmse=None):
-    """Températures mesurées et simulées aux 3 capteurs, avec bande de quantiles facultative."""
+def sensor_comparison(ax_list, times, observed, simulated, band=None, unit="°C", rmse=None, measured_band=None, measured_label=None):
+    """Températures mesurées et simulées aux 3 capteurs.
+
+    band : bande de quantiles du modèle (facultative) ; measured_band : (bas, haut), intervalle
+    d'incertitude autour des mesures (facultatif), légendé par measured_label."""
     times = pd.to_datetime(times).to_numpy()
     for i, ax in enumerate(ax_list):
+        if measured_band is not None:
+            ax.fill_between(times, measured_band[0][:, i], measured_band[1][:, i], color=THERMOMETER_COLORS[i], alpha=0.22, lw=0,
+                            label=measured_label)
         ax.plot(times, observed[:, i], color=THERMOMETER_COLORS[i], lw=1.2, label=t("Measured"))
         if band is not None:
             ax.fill_between(times, band[0][:, i], band[1][:, i], color=SIMULATED_COLOR, alpha=0.2, lw=0, label=t("Credible interval"))
