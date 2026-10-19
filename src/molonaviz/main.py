@@ -1,7 +1,7 @@
 from PyQt5 import QtWidgets, QtGui, QtCore, uic
 from PyQt5.QtSql import QSqlDatabase
 from queue import Queue
-import sys, os.path
+import sys, os.path, traceback
 from pathlib import Path
 
 from .frontend.dialogAboutUs import DialogAboutUs
@@ -98,6 +98,7 @@ class MainWindow(QtWidgets.QMainWindow,From_MainWindow):
         sys.stdout = InterceptOutput(self.messageQueue)
 
         self.con = None #Connection to the database
+        self.study_lab_manager = None #Created when a database is opened
         
 
         '''self.study_lab_manager = StudyAndLabManager(self.con)
@@ -165,6 +166,10 @@ class MainWindow(QtWidgets.QMainWindow,From_MainWindow):
                     
 
 
+        if not databaseDir:
+            #The user cancelled the dialog or did not choose a folder: no database is opened.
+            return
+
         #Now create or check the integrity of the folder given by databaseDir
         if createNewDatabase:
             #Create all folders and subfolders
@@ -173,7 +178,8 @@ class MainWindow(QtWidgets.QMainWindow,From_MainWindow):
                 databaseDir = os.path.join(databaseDir, newDatabaseName)
             else:
                 displayCriticalMessage(f"Something went wrong when creating the directory and the database creation was aborted.\nPlease make sure a directory with the name {newDatabaseName} does not already exist at path {databaseDir}")
-                self.openDatabase(self.change)
+                self.openDatabase()
+                return
         else:
             #Check if the folder has the correct format
             if not checkDbFolderIntegrity(databaseDir):
@@ -182,7 +188,8 @@ class MainWindow(QtWidgets.QMainWindow,From_MainWindow):
                 configPath = os.path.join(os.path.dirname(__file__),'config.txt')
                 if os.path.isfile(configPath):
                     os.remove(configPath)
-                self.openDatabase(self.change)
+                self.openDatabase()
+                return
 
         #Now, databaseDir is the path to a valid folder containing a database. Open it!
         databaseFile = os.path.join(databaseDir,"Molonari.sqlite")
@@ -290,10 +297,21 @@ class MainWindow(QtWidgets.QMainWindow,From_MainWindow):
             os.remove(os.path.join(os.path.dirname(__file__),'config.txt'))
 
 
+    def isDatabaseOpen(self):
+        """
+        Return True if a database is open. Otherwise, tell the user to open one first and return False.
+        """
+        if self.study_lab_manager is None:
+            displayCriticalMessage("No database is open. Please open or create a database first (File > Open Database).")
+            return False
+        return True
+
     def importLab(self):
         """
         Display a dialog so the user may import a laboratory from a directory. The laboratory is added to the database.
         """
+        if not self.isDatabaseOpen():
+            return
         dlg = DialogImportLab()
         dlg.setWindowModality(QtCore.Qt.ApplicationModal)
         res = dlg.exec()
@@ -310,6 +328,8 @@ class MainWindow(QtWidgets.QMainWindow,From_MainWindow):
         """
         Display a dialog so the user may create a study.The study is added to the database. Then, open this study (by calling self.openStudy)
         """
+        if not self.isDatabaseOpen():
+            return
         labs = self.study_lab_manager.get_lab_names()
         if len(labs) == 0:
             displayCriticalMessage("No laboratory was found in the database. Please create one first.")
@@ -330,6 +350,8 @@ class MainWindow(QtWidgets.QMainWindow,From_MainWindow):
         """
         Display a dialog so the user may choose a study to open, or display an error message. Then, open a study (by calling self.openStudy).
         """
+        if not self.isDatabaseOpen():
+            return
         studies = self.study_lab_manager.get_study_names()
         if len(studies) ==0:
             displayCriticalMessage("No study was found in the database. Please create one first.")
@@ -535,8 +557,16 @@ class MainWindow(QtWidgets.QMainWindow,From_MainWindow):
         userguidepath = get_docs("UserguideFR.pdf")
         QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(userguidepath))
 
+def handleUncaughtException(exc_type, exc_value, exc_tb):
+    """
+    Report errors raised in Qt slots instead of letting PyQt abort the whole application.
+    """
+    traceback.print_exception(exc_type, exc_value, exc_tb, file=sys.__stderr__)
+    displayCriticalMessage("An unexpected error occurred. Molonaviz is still running, but the last action was not completed.", f"{exc_type.__name__}: {exc_value}")
+
 def main():
     app = QtWidgets.QApplication(sys.argv)
+    sys.excepthook = handleUncaughtException
     app.setWindowIcon(QtGui.QIcon(get_imgs("MolonavizIcon.png")))
 
     # Create thread that will be used to display application messages.
