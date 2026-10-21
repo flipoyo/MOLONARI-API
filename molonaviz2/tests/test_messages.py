@@ -20,8 +20,10 @@ CODE = re.compile(r"^[EW]_[A-Z0-9_]+$")
 
 # Position de l'argument « code » des constructeurs.
 CODE_ARGUMENT = {"UserError": 0, "Issue": 1}
+# Méthodes qui reçoivent un code, par fichier : nom → position (appel obj.nom(...)).
+CODE_METHODS = {"twin/config.py": {"add": 1}}
 # Fonctions qui relaient un code reçu en paramètre (code non littéral admis) : fichier → noms.
-FORWARDERS = {"errors.py": {"__init__", "__new__", "_rebuild_error", "from_error"}}
+FORWARDERS = {"errors.py": {"__init__", "__new__", "_rebuild_error", "from_error"}, "twin/config.py": {"add"}}
 
 
 def fields(template: str) -> set[str]:
@@ -42,15 +44,15 @@ def calls():
                 if isinstance(child, ast.Call):
                     func = child.func
                     name = func.id if isinstance(func, ast.Name) else func.attr if isinstance(func, ast.Attribute) else None
-                    if name in CODE_ARGUMENT:
+                    if name in CODE_ARGUMENT or (isinstance(func, ast.Attribute) and name in CODE_METHODS.get(relative, {})):
                         yield relative, child.lineno, function, name, child
                 yield from visit(child, function)
 
         yield from visit(tree, None)
 
 
-def code_argument(name, node):
-    position = CODE_ARGUMENT[name]
+def code_argument(file, name, node):
+    position = CODE_ARGUMENT[name] if name in CODE_ARGUMENT else CODE_METHODS[file][name]
     if len(node.args) > position:
         return node.args[position]
     return next((k.value for k in node.keywords if k.arg == "code"), None)
@@ -75,7 +77,7 @@ def test_translations_keep_the_template_fields():
 def test_codes_are_literal_and_known():
     problems = []
     for file, line, function, name, node in calls():
-        code = code_argument(name, node)
+        code = code_argument(file, name, node)
         where = f"{file}:{line}"
         if isinstance(code, ast.Constant) and isinstance(code.value, str):
             if CODE.match(code.value):
@@ -95,7 +97,7 @@ def test_codes_are_literal_and_known():
 def test_literal_codes_receive_every_template_field():
     problems = []
     for file, line, _, name, node in calls():
-        code = code_argument(name, node)
+        code = code_argument(file, name, node)
         if not (isinstance(code, ast.Constant) and isinstance(code.value, str) and code.value in MESSAGES):
             continue
         if any(k.arg is None for k in node.keywords):

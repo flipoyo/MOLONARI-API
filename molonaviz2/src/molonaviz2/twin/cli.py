@@ -14,7 +14,7 @@ import argparse
 import sys
 
 from ..errors import UserError
-from ..i18n import t
+from ..i18n import render, t
 
 
 def _setup_translation() -> None:
@@ -87,13 +87,13 @@ def main(argv: list[str]) -> int:
                     status = twin_status(path)
                     print(f"{path.name:12s} {status.config.mode:7s} {status.twin_id}  {state_label(status)}")
                 except TwinConfigError as exc:
-                    print(f"{path.name:12s} {t('invalid')}: {exc.issues[0]}")
+                    print(f"{path.name:12s} {t('invalid')}: {render(exc.issues[0], t)}")
     except TwinConfigError as exc:
         print(t("Invalid configuration:"), file=sys.stderr)
         for issue in exc.issues:
-            print(f"  - {issue}", file=sys.stderr)
+            print(f"  - {render(issue, t)}", file=sys.stderr)
         return 1
     except UserError as exc:
-        print(str(exc), file=sys.stderr)
+        print(render(exc, t), file=sys.stderr)
         return 1
     return 0

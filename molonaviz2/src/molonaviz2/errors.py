@@ -15,6 +15,9 @@ MESSAGES: dict[str, str] = {
     "E_LEGACY": "{text}",
     # Erreurs qui regroupent des problèmes (paramètre issues)
     "E_SETTINGS_INVALID": "{issues}",
+    "E_TWIN_CONFIG_INVALID": "{issues}",
+    # Texte d'une erreur système (OSError, ValueError…), non traduit
+    "E_SYSTEM_ERROR": "{detail}",
     # storage
     "E_CLEANED_EMPTY_VALUES": "Cleaned measures must not contain empty values.",
     "E_COMPUTATION_NOT_FOUND": "This computation no longer exists.",
@@ -98,6 +101,35 @@ MESSAGES: dict[str, str] = {
     "E_COLUMN_SENSOR_DEPTHS": "The shaft must define 4 strictly increasing, positive sensor depths.",
     "E_COLUMN_TOO_FEW_TIMES": "At least 3 cleaned measurement times are required to run a model.",
     "E_MODEL_NON_FINITE": "The model produced non-finite values. Check the layer parameters and the measurements.",
+    # twin
+    "E_NO_CLEANED_MEASURES": "No cleaned measurements yet: apply a cleaning first.",
+    "E_TWIN_CODE_VERSION": "this twin was defined for \"{declared}\" but the code is \"{current}\". Create a new twin to use this code.",
+    "E_TWIN_COLUMN_DEPTH": "must equal the deepest sensor depth + offset ({depth:g} m).",
+    "E_TWIN_DATA_NOT_FOUND": "file not found: {path}",
+    "E_TWIN_DATE_UNREADABLE": "unreadable date \"{value}\".",
+    "E_TWIN_DIRECT_KEYS": "direct mode needs {keys}.",
+    "E_TWIN_EMPTY": "must not be empty.",
+    "E_TWIN_END_BEFORE_START": "must be after data.start.",
+    "E_TWIN_EXPECTED_INTEGER": "expected a whole number.",
+    "E_TWIN_EXPECTED_MAPPING": "expected a mapping (key: value).",
+    "E_TWIN_EXPECTED_NUMBER": "expected a number.",
+    "E_TWIN_FOLDER_NOT_FOUND": "Twin folder not found: {path}",
+    "E_TWIN_FROZEN": "{name} was already run with another configuration (id {previous}). A configuration is frozen: create a new twin to change a parameter.",
+    "E_TWIN_INITIAL_CONDITION": "only \"linear\" is supported (linear interpolation of the measurements at t0).",
+    "E_TWIN_INVALID_YAML": "Invalid YAML: {error}",
+    "E_TWIN_LAYERS": "expected a non-empty list of layers.",
+    "E_TWIN_MCMC_ONLY": "only allowed in mcmc mode.",
+    "E_TWIN_MINIMUM": "must be at least {v}.",
+    "E_TWIN_MODE": "must be \"direct\" or \"mcmc\".",
+    "E_TWIN_PER_LAYER": "expected one entry per layer ({n}).",
+    "E_TWIN_POSITIVE": "must be positive.",
+    "E_TWIN_QUANTILES": "expected a list of numbers between 0 and 1.",
+    "E_TWIN_RANGE": "expected [min, max].",
+    "E_TWIN_REQUIRED": "required.",
+    "E_TWIN_SCHEMA": "unsupported schema \"{value}\" (expected {expected}).",
+    "E_TWIN_SENSOR_DEPTHS": "expected 4 strictly increasing positive depths (m).",
+    "E_TWIN_TOO_FEW_MEASUREMENTS": "fewer than 3 measurements in the selected period.",
+    "E_TWIN_UNKNOWN_KEY": "unknown key (allowed: {keys}).",
 }
 
 
