@@ -17,9 +17,14 @@ from ..twin.config import TwinConfigError
 from ..twin.run import list_twins, twin_status
 from ..workers.tasks import Task, TaskManager
 from .dialogs.lab_import import LabImportDialog
-from .dialogs.point_import import PointImportDialog
 from .dialogs.notice import NoticeDialog, key_for
-from .dialogs.simple import AboutDialog, AddSensorDialog, NewStudyDialog, QuickGuideDialog
+from .dialogs.point_import import PointImportDialog
+from .dialogs.simple import (
+    AboutDialog,
+    AddSensorDialog,
+    NewStudyDialog,
+    QuickGuideDialog,
+)
 from .errors import error_text, report_exception
 from .explorer import ProjectExplorer
 from .point_view.view import PointView

@@ -18,7 +18,13 @@ from matplotlib.figure import Figure
 from PySide6 import QtWidgets
 
 from ...i18n import t
-from .style import FLUX_CMAP, SIMULATED_COLOR, TEMPERATURE_CMAP, THERMOMETER_COLORS, style_mpl
+from .style import (
+    FLUX_CMAP,
+    SIMULATED_COLOR,
+    TEMPERATURE_CMAP,
+    THERMOMETER_COLORS,
+    style_mpl,
+)
 
 EXPORT_FILTER = "PNG (*.png);;SVG (*.svg);;PDF (*.pdf)"
 

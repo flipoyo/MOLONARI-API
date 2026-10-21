@@ -10,7 +10,12 @@ from conftest import FIXTURES
 from molonaviz2.domain.models import PressureSensor
 from molonaviz2.errors import UserError
 from molonaviz2.io.point_import import read_pressure_file, read_temperature_file
-from molonaviz2.processing.cleanup import CleanupSettings, clean, read_cleaned_csv, write_cleaned_csv
+from molonaviz2.processing.cleanup import (
+    CleanupSettings,
+    clean,
+    read_cleaned_csv,
+    write_cleaned_csv,
+)
 
 SENSOR = PressureSensor("P", "Hobo", None, intercept=1.5, du_dh=-8.0, du_dt=0.01, sigma=0.01, thermometer="T")
 
