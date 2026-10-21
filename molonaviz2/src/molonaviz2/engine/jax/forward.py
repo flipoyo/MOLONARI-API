@@ -203,7 +203,7 @@ def make_forward(geom: Geometry):
                 left = left.at[d, d - 1].set(array_k[d] / eps[d])
                 left = left.at[d, d].set(-array_k[d] / eps[d])
             right = right.at[size - 1, size - 1].set(array_k[-1] / eps[-1])
-            for d in range(0, size - 1):
+            for d in range(size - 1):
                 right = right.at[d, d + 1].set(-array_k[d + 1] / eps[d + 1])
                 right = right.at[d, d].set(array_k[d + 1] / eps[d + 1])
             scalar_left = jnp.zeros(size).at[0].set(array_k[0] * h_riv[0] / eps[0])
