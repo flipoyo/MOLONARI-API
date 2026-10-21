@@ -145,3 +145,9 @@ def test_advective_flux_is_relative_to_the_reference_temperature():
     assert HEAT_REFERENCE_C == 0.0
     np.testing.assert_allclose(result.advective_flux, RHO_W * C_W * 2e-6 * (12.0 - HEAT_REFERENCE_C), rtol=1e-12)
     np.testing.assert_allclose(result.conductive_flux_down, 0.0, atol=1e-9)
+
+
+def test_total_heat_flux_adds_both_components_downwards(inputs):
+    result = api.run_forward(inputs, ForwardConfig(CASES["one_layer"], nb_cells=30))
+    np.testing.assert_array_equal(result.total_heat_flux, result.advective_flux - result.conductive_flux)
+    np.testing.assert_array_equal(result.total_heat_flux, result.advective_flux + result.conductive_flux_down)

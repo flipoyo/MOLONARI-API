@@ -36,7 +36,8 @@ class ForwardResult:
 
     @property
     def total_heat_flux(self) -> np.ndarray:
-        return self.advective_flux + self.conductive_flux
+        """Flux de chaleur total, positif vers le bas : advectif + conductif vers le bas."""
+        return self.advective_flux + self.conductive_flux_down
 
     def to_arrays(self, prefix: str = "") -> dict[str, np.ndarray]:
         return {prefix + f.name: np.asarray(getattr(self, f.name)) for f in fields(self)}

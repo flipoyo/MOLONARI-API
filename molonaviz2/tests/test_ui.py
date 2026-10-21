@@ -244,6 +244,21 @@ def test_direct_model_then_inversion_then_results(qtbot, window, shown_errors, t
     assert shown_errors == []
 
 
+def test_csv_export_writes_heat_fluxes_positive_downwards(tmp_path):
+    import pandas as pd
+    from conftest import synthetic_inputs
+
+    from molonaviz2.domain.compute import ForwardConfig, LayerSpec
+    from molonaviz2.engine import api
+    from molonaviz2.ui.point_view.results_tab import write_csv_exports
+
+    forward = api.run_forward(synthetic_inputs(nb_times=50), ForwardConfig([LayerSpec("a", 0.4)], nb_cells=20))
+    names = {path.name for path in write_csv_exports(tmp_path, forward, None, ["a"])}
+    assert "conductive_heat_flux_down_W_m2.csv" in names and "conductive_heat_flux_W_m2.csv" not in names
+    exported = pd.read_csv(tmp_path / "conductive_heat_flux_down_W_m2.csv", index_col=0).to_numpy(float)
+    np.testing.assert_allclose(exported, -forward.conductive_flux, rtol=1e-12)
+
+
 def test_reusing_a_configuration_reloads_it(qtbot, window):
     view = open_point(qtbot, window)
     view.cleanup_tab.apply()

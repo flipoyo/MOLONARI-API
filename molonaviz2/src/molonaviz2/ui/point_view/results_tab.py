@@ -385,7 +385,7 @@ class ResultsTab(QtWidgets.QWidget):
         values = {
             "total": result.total_heat_flux,
             "advective": result.advective_flux,
-            "conductive": result.conductive_flux,
+            "conductive": result.conductive_flux_down,
         }[kind]
         figure = self.heat_map.figure
         figure.clear()
@@ -394,7 +394,7 @@ class ResultsTab(QtWidgets.QWidget):
             ax.axis("off")
             ax.text(0.5, 0.5, t("This flux is zero for this computation."), ha="center", va="center")
         else:
-            depth_time_map(ax, result.times, result.depths, values, t("Heat flux (W/m²)"), signed=True, sensor_depths=result.sensor_depths)
+            depth_time_map(ax, result.times, result.depths, values, t("Heat flux (W/m²), positive downwards"), signed=True, sensor_depths=result.sensor_depths)
             ax.set_title(self.heat_kind.currentText(), fontsize=10, loc="left")
         self.heat_map.draw()
 
@@ -444,7 +444,9 @@ class ResultsTab(QtWidgets.QWidget):
 
 
 def write_csv_exports(folder: Path, forward: ForwardResult, inversion: InversionResult | None, layer_names: list[str]) -> list[Path]:
-    """Écrit les résultats en CSV (°C, m/s, W/m²). Les cartes : une ligne par profondeur, une colonne par date."""
+    """Écrit les résultats en CSV (°C, m/s, W/m²). Les cartes : une ligne par profondeur, une colonne par date.
+
+    Flux d'eau et de chaleur positifs vers le bas."""
     folder.mkdir(parents=True, exist_ok=True)
     times = pd.to_datetime(forward.times).strftime("%Y-%m-%d %H:%M:%S")
     depths = pd.Index(np.round(forward.depths, 6), name="depth_m")
@@ -453,7 +455,7 @@ def write_csv_exports(folder: Path, forward: ForwardResult, inversion: Inversion
         ("temperature_C", forward.temperature),
         ("water_flux_m_per_s", forward.water_flux),
         ("advective_heat_flux_W_m2", forward.advective_flux),
-        ("conductive_heat_flux_W_m2", forward.conductive_flux),
+        ("conductive_heat_flux_down_W_m2", forward.conductive_flux_down),
     ):
         path = folder / f"{name}.csv"
         pd.DataFrame(values, index=depths, columns=times).to_csv(path)

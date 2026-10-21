@@ -199,7 +199,7 @@
  "HDI 90 % low": "HDI 90 % bas",
  "Head difference ΔH": "Charge différentielle ΔH",
  "Head difference ΔH (m)": "Charge différentielle ΔH (m)",
- "Heat flux (W/m²)": "Flux de chaleur (W/m²)",
+ "Heat flux (W/m²), positive downwards": "Flux de chaleur (W/m²), positif vers le bas",
  "Histogram bins": "Classes de l'histogramme",
  "IQR (1.5 × interquartile range)": "IQR (1,5 × écart interquartile)",
  "IQR outlier": "aberrante (IQR)",
