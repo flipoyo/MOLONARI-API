@@ -36,6 +36,7 @@ import pandas as pd
 from ..domain.compute import INVERTED_PARAMETERS
 from ..engine.results import ForwardResult, InversionResult
 from ..errors import Issue
+from .provenance import provenance_warnings
 
 FLOAT_FORMAT = "%.17g"
 RESULTS_FORMAT = "2.0.0"
@@ -173,7 +174,8 @@ def load_results(folder: Path) -> TwinResults:
         quantiles=_read_arrays(folder / "quantiles.npz"),
         posterior=_read_arrays(folder / "posterior.npz"),
         fields={kind: arrays for kind, arrays in fields.items() if arrays is not None},
-        warnings=[] if results_format.startswith("2.") else [Issue(None, "W_FIELD_UNAVAILABLE")],
+        warnings=([] if results_format.startswith("2.") else [Issue(None, "W_FIELD_UNAVAILABLE")])
+        + provenance_warnings(metadata.get("provenance")),
     )
 
 

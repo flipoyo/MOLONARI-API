@@ -143,6 +143,9 @@ MESSAGES: dict[str, str] = {
     "E_TWIN_TOO_FEW_MEASUREMENTS": "fewer than 3 measurements in the selected period.",
     "E_TWIN_UNKNOWN_KEY": "unknown key (allowed: {keys}).",
     "W_FIELD_UNAVAILABLE": "Results written before format 2.0.0: flux fields, quantiles and chains are unavailable. Create a new twin with this version to get them.",
+    "W_PROVENANCE_NOT_A_REPOSITORY": "The {target} is not in a git repository: its provenance is not recorded.",
+    "W_PROVENANCE_NO_GIT": "git was not found: the provenance of the code and of the twin is not recorded.",
+    "W_PROVENANCE_NO_REMOTE": "The git repository of the {target} has no remote: its URL is not recorded.",
 }
 
 

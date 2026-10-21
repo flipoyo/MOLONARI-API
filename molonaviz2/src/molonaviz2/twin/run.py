@@ -15,12 +15,13 @@ import os
 import shutil
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from ..errors import UserError
+from ..errors import Issue, UserError
 from .config import TwinConfig, config_path, file_digest, load_twin
+from .provenance import provenance_warnings, twin_provenance
 from .registry import (
     RegistryEntry,
     append_entry,
@@ -61,6 +62,7 @@ class TwinRun:
     status: TwinStatus
     computed: bool  # False : doublon, résultat existant renvoyé sans recalcul
     duration_s: float = 0.0
+    warnings: list[Issue] = field(default_factory=list)  # provenance incomplète (W_PROVENANCE_*)
 
 
 def twin_status(path_or_config, code_version: str | None = None) -> TwinStatus:
@@ -109,18 +111,21 @@ def run_twin(path_or_config, on_progress: Callable | None = None, should_cancel:
     duration = time.perf_counter() - started
 
     code_version = api.engine_version()
+    device = api.device()
+    provenance = twin_provenance(config.folder, device)
     target = results_dir(twins_folder, status.twin_id)
     partial = target.with_name(target.name + ".partial")
     if partial.exists():
         shutil.rmtree(partial)
-    write_results(partial, forward, inversion, [layer.name for layer in config.layers], _metadata(config, status.twin_id, code_version,
-                                                                                                   api.device(), duration, forward, inversion))
+    metadata = _metadata(config, status.twin_id, code_version, device, duration, forward, inversion)
+    metadata["provenance"] = provenance
+    write_results(partial, forward, inversion, [layer.name for layer in config.layers], metadata)
     if target.exists():
         shutil.rmtree(target)
     os.replace(partial, target)  # les résultats apparaissent complets ou pas du tout
     relative = target.relative_to(twins_root(twins_folder)).as_posix()
     append_entry(twins_folder, RegistryEntry(status.twin_id, config.name, config.mode, "computed", _now(), f"{duration:.3f}", code_version, relative))
-    return TwinRun(twin_status(config), computed=True, duration_s=duration)
+    return TwinRun(twin_status(config), computed=True, duration_s=duration, warnings=provenance_warnings(provenance))
 
 
 def _now() -> str:

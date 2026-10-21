@@ -1,27 +1,11 @@
 """État git d'un chemin et suffixe local de version, sur des dépôts temporaires (git init dans tmp_path)."""
 
-import subprocess
-
 import pytest
+from conftest import commit_file
+from conftest import git_run as run
 
 from molonaviz2 import gitinfo
 from molonaviz2.gitinfo import clean_url, repository_state, version_suffix
-
-# Identité et options neutres : les tests ne dépendent pas de la configuration git de la machine.
-GIT = ["git", "-c", "user.name=Test", "-c", "user.email=test@example.org", "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false",
-       "-c", "core.hooksPath=/dev/null", "-c", "init.defaultBranch=main"]
-
-
-def run(repo, *args):
-    return subprocess.run([*GIT, *args], cwd=repo, check=True, capture_output=True, text=True).stdout.strip()
-
-
-def commit_file(repo, name, text):
-    path = repo / name
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
-    run(repo, "add", name)
-    run(repo, "commit", "-q", "-m", f"modifie {name}")
 
 
 @pytest.fixture
