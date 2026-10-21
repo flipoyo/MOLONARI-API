@@ -58,8 +58,20 @@ Un twin est défini entièrement par son `twin.yaml` : données, paramètres du 
     registry.csv              ← une ligne par twin exécuté ou reconnu comme doublon
     twin_01/twin.yaml + measurements.csv
     twin_02/…
-  results/<twin_id>/          ← temperature.csv, water_flux.csv, residuals.csv, metadata.json
+  results/<twin_id>/          ← temperature.csv, water_flux.csv, residuals.csv, metadata.json, champs de flux (et .npz en mcmc)
 ```
+
+Les résultats sont au format 2.0.0 (`metadata.json["results_format"]`) :
+- **Format 1.x, toujours écrit à l'identique** : `temperature.csv` θ(z, t), `water_flux.csv` q(t) au fond de la rivière, `residuals.csv`, et en mcmc `posterior_summary.csv` et `posterior_samples.csv`.
+- **Champs de flux** : `water_flux_field.csv` q(z, t), `heat_flux_advective.csv` et `heat_flux_conductive.csv`, au format de `temperature.csv`. La première cellule donne la profondeur et l'unité (`depth_m|m_per_s`, `depth_m|W_per_m2`).
+- **En mcmc, des `.npz` lisibles avec `allow_pickle=False`** :
+  - `quantiles.npz` : quantiles des champs ;
+  - `posterior.npz` : échantillons, énergies, acceptation, réinitialisations, numéro d'itération ;
+  - selon `store_fields`, `fields_temperature.npz` et `fields_water_flux.npz` : champs avec leur chaîne et leur itération.
+- **Conventions** (`metadata.json["conventions"]`) :
+  - z, q et flux de chaleur sont positifs vers le bas ;
+  - le flux advectif ρw·cw·q·(T − T_ref) est rapporté à T_ref = 0 °C.
+- **Résultats écrits avant 0.4.0** : ils se relisent, avec un avertissement, mais sans les champs.
 
 Trois règles s'appliquent :
 - **Identifiant.** `twin_id` est le SHA-256 de la config canonique, qui inclut l'empreinte du fichier de mesures et la version du code. Les libellés (nom, description, point, noms des couches) n'en font pas partie.
@@ -85,14 +97,14 @@ uv run molonaviz2 twin list     examples/twins
 
 La ligne de commande n'a pas besoin de Qt. Ses messages sont en français par défaut ; `MOLONAVIZ_LANG=en` les affiche en anglais.
 
-Les exemples fournis portent tous sur Point034. Leurs identifiants valent pour la version 0.4.0-alpha.1 : ils changent avec la version du code, qui entre dans le `twin_id`.
+Les exemples fournis portent tous sur Point034. Leurs identifiants valent pour la version 0.4.0 : ils changent avec la version du code, qui entre dans le `twin_id`.
 
-| Twin | Mode | `twin_id` (0.4.0-alpha.1) | Contenu |
+| Twin | Mode | `twin_id` (0.4.0) | Contenu |
 |---|---|---|---|
-| `twin_01` | direct | `6d3dc56c5b0c5598` | monocouche, −log₁₀ k = 12 |
-| `twin_02` | direct | `6d3dc56c5b0c5598` | copie renommée de `twin_01`, pour montrer la détection de doublon |
-| `twin_03` | mcmc | `71dc5343e5b8118d` | inversion courte (8 chaînes, 300 itérations, graine 1) |
-| `twin_04` | mcmc | `a42e9c298aa44a94` | créé depuis l'application, à partir d'une inversion |
+| `twin_01` | direct | `c126c779567c5bbb` | monocouche, −log₁₀ k = 12 |
+| `twin_02` | direct | `c126c779567c5bbb` | copie renommée de `twin_01`, pour montrer la détection de doublon |
+| `twin_03` | mcmc | `e97b626a80613ebb` | inversion courte (8 chaînes, 300 itérations, graine 1) |
+| `twin_04` | mcmc | `a2ab3b5bb10ec53f` | créé depuis l'application, à partir d'une inversion |
 
 Pour réinitialiser la démo : fermer l'application, puis `rm examples/twins/registry.csv; rm -rf examples/results`.
 
