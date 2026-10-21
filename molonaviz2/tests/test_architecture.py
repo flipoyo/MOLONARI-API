@@ -15,7 +15,7 @@ SOURCE = Path(__file__).resolve().parents[1] / "src" / "molonaviz2"
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples" / "twins"
 
 # Modules et paquets de premier niveau de molonaviz2 ("__init__" : le paquet lui-même).
-CORE = {"__init__", "errors", "i18n", "domain", "io", "processing", "engine", "twin", "storage", "questions"}
+CORE = {"__init__", "errors", "gitinfo", "i18n", "domain", "io", "processing", "engine", "twin", "storage", "questions"}
 INTERFACE = {"__main__", "app", "settings", "notice", "logs", "ui", "workers"}
 # Sous-modules du cœur qui relèvent de l'interface.
 INTERFACE_SUBMODULES = {"i18n/qt.py"}
