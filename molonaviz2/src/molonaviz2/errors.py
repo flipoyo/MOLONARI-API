@@ -87,6 +87,7 @@ MESSAGES: dict[str, str] = {
     "E_MCMC_C_STAR": "c* must be positive.",
     "E_MCMC_DELTA": "At least one pair of chains is required.",
     "E_MCMC_FIELD_SAMPLES": "At least 2 field samples are required.",
+    "E_MCMC_FIELDS_BOTH": "give either n_field_samples or fields_per_chain, not both.",
     "E_MCMC_FIELDS_PER_CHAIN": "Fields per chain must be between 1 and the iterations kept per chain ({n}).",
     "E_MCMC_GR_THRESHOLD": "The Gelman-Rubin threshold must be greater than 1.",
     "E_MCMC_NB_CHAINS": "DREAM needs at least 2·δ + 1 = {n} chains.",

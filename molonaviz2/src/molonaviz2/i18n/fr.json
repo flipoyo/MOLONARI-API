@@ -578,6 +578,7 @@
  "fewer than 3 measurements in the selected period.": "moins de 3 mesures sur la période choisie.",
  "fields": "champs",
  "file not found: {path}": "fichier introuvable : {path}",
+ "give either n_field_samples or fields_per_chain, not both.": "donner soit n_field_samples, soit fields_per_chain, pas les deux.",
  "grain conductivity": "conductivité des grains",
  "grain heat capacity": "capacité thermique des grains",
  "invalid": "invalide",
