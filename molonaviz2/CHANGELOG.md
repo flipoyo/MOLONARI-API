@@ -12,6 +12,28 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions : [S
 - Tags : `molonaviz2-vX.Y.Z`, posés sur `CGS-MOLO` après la fusion. La CI (`molonaviz2-version`) vérifie que le tag correspond à `pyproject.toml`.
 - La version entre dans `engine_version()`, donc dans chaque `twin_id`. Une nouvelle version donne de nouveaux identifiants, et un twin déjà calculé passe à l'état « modifié » : il faut créer un nouveau twin pour utiliser le nouveau code.
 
+## [0.3.0] - 2026-10-21
+
+Cœur sans Qt et codes d'erreur (#23) : première étape de la séparation entre le futur backend twin
+et l'interface PySide6. Les textes affichés, en français comme en anglais, ne changent pas.
+
+### Ajouté
+- Codes d'erreur stables : chaque erreur attendue (`UserError`) et chaque problème de saisie ou de validation (`Issue`) porte un code `E_…` (erreur) ou `W_…` (avertissement), ses paramètres et le champ concerné. `errors.MESSAGES` associe chaque code à son modèle anglais, qui est aussi la clé de sa traduction dans `fr.json` (#23).
+- `i18n.render(obj, tr)` : traduction d'une erreur ou d'un problème au bord (interface, ligne de commande), à partir de son code (#23).
+- Ligne de commande des twins sans Qt : la langue vient de la variable d'environnement `MOLONAVIZ_LANG` (`fr`, `en`), sinon `fr` (#23).
+- `tests/test_architecture.py` : le cœur s'importe et s'exécute sans PySide6 ni interface, ne produit aucune phrase traduite, et l'interface n'ajoute pas d'import du cœur hors façade. `tests/test_messages.py` : chaque code a un modèle et une traduction, et chaque appel fournit les paramètres de son modèle (#23).
+- CI `molonaviz2-tests` : suite rapide, suite `slow`, et job `core-without-qt` (#23).
+
+### Modifié
+- `UserError(code, field=None, **params)` prend un code ; un texte libre reste accepté par l'API Python (code de repli `E_TEXT`), mais pas dans le code de molonaviz2 (#23).
+- `i18n` est scindé : la partie pure (`translate`, `load_catalog`, `N_`) ne dépend plus de Qt ; `t` et `install_language` passent par `i18n/qt.py` (#23).
+- Le script `molonaviz2` et `python -m molonaviz2` aiguillent `twin …` vers la ligne de commande avant tout import de Qt. La ligne de commande ne lit plus les préférences de l'application (#23).
+- `domain.compute.Issue` est désormais `errors.Issue` (toujours importable à l'ancien emplacement) (#23).
+- La description de `molonaviz2 twin -h` est traduite (#23).
+
+### Identifiants de référence (0.3.0)
+- `twin_01` et `twin_02` : `a0c8e1b5444c31ae` ; `twin_03` : `9eb09cb9985362fb` ; `twin_04` : `c99f719be178b74f`.
+
 ## [0.2.0] - 2026-10-19
 
 Rassemble les pré-versions 0.2.0-alpha.1 et 0.2.0-alpha.2 ci-dessous.
