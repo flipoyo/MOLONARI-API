@@ -32,7 +32,18 @@ def test_invalid_versions_are_reported(tmp_path, version):
 
 
 def test_engine_version_carries_the_package_version():
-    """La version du code entre dans engine_version(), donc dans chaque twin_id."""
-    from molonaviz2.engine.api import engine_version
+    """La version du code entre dans engine_version(), donc dans chaque twin_id, avec le suffixe local éventuel."""
+    import re
 
-    assert engine_version().startswith(f"molonaviz2 {check_version.declared_version()} · jax ")
+    from molonaviz2.engine.api import engine_version, local_suffix, release_version
+
+    version = re.escape(check_version.declared_version())
+    assert re.fullmatch(rf"molonaviz2 {version}(\+g[0-9a-f]{{12}}(\.dirty)?)? · jax \S+", engine_version()), engine_version()
+    assert engine_version() == release_version().replace(" · jax", f"{local_suffix()} · jax", 1)
+
+
+def test_frozen_application_has_no_local_suffix(monkeypatch):
+    from molonaviz2.engine import api
+
+    monkeypatch.setattr(api.sys, "frozen", True, raising=False)
+    assert api.local_suffix() == ""
