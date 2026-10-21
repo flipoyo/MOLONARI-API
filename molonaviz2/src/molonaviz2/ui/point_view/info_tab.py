@@ -53,8 +53,8 @@ class InfoTab(QtWidgets.QWidget):
         try:
             sensors = self.context.sensors()
             rows += [
-                (t("Pressure sensor"), f"{sensors.pressure.name} · dU/dH = {format_number(sensors.pressure.du_dh)} V/m · "
-                 f"dU/dT = {format_number(sensors.pressure.du_dt)} V/°C · intercept = {format_number(sensors.pressure.intercept)} V"),
+                (t("Pressure sensor"), (f"{sensors.pressure.name} · dU/dH = {format_number(sensors.pressure.du_dh)} V/m · "
+                 f"dU/dT = {format_number(sensors.pressure.du_dt)} V/°C · intercept = {format_number(sensors.pressure.intercept)} V")),
                 (t("Shaft"), f"{sensors.shaft.name} · " + t("depths {d} m").format(d=", ".join(format_number(d) for d in sensors.shaft.depths))),
                 (t("Thermometers"), f"{sensors.thermometer.name} · σ = {format_number(sensors.thermometer.sigma)} °C" if sensors.thermometer else "—"),
             ]
