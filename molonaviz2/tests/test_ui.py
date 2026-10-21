@@ -618,3 +618,46 @@ def test_predictive_band_is_explained_when_no_field_was_stored(qtbot, window):
     assert all(found == [] for found in predictive_collections(results))
     legend = [text.get_text() for text in results.sensors.figure.axes[0].get_legend().get_texts()]
     assert "Credible interval" in legend and any("σT (90 %)" in label for label in legend)
+
+
+def chain_lines(results, row=0):
+    """{chaîne: (abscisses, ordonnées)} des traces du graphe `row` de la vue Chaînes."""
+    ax = results.traces.figure.axes[row]
+    return {int(line.get_gid().removeprefix("chain-")): line.get_data() for line in ax.lines if (line.get_gid() or "").startswith("chain-")}
+
+
+def test_chains_view_selects_chains_thinning_and_iterations(qtbot, window):
+    from molonaviz2.questions import chain_data
+
+    view = open_point(qtbot, window)
+    results = run_small_inversion(qtbot, window, view, nb_iter=21, thin=1)
+    results.tabs.setCurrentIndex(results.parameters_index)
+    results.parameter_views.setCurrentIndex(results.chains_index)
+    assert len(results.traces.figure.axes) == 5  # 4 paramètres et l'énergie
+    assert results.chain_list.count() == 7 and results.checked_chains() == list(range(7))
+    full = chain_data(results.inversion).data
+    for i in range(7):
+        text = results.chain_list.item(i).text()
+        assert text.startswith(f"Chain {i} — acceptance {full['acceptance'].value[i] * 100:.0f} %")
+        assert f"{int(full['resets'].value[i])} reset(s)" in text
+    lines = chain_lines(results)
+    assert sorted(lines) == list(range(7)) and all(len(x) == 21 for x, _ in lines.values())
+    np.testing.assert_array_equal(lines[3][1], full["samples.neg_log10_k"].value[:, 3, 0])
+    np.testing.assert_array_equal(chain_lines(results, row=4)[3][1], full["energy"].value[:, 3])
+    assert results.chain_count.text().startswith("147 samples shown")  # 7 × 21
+
+    results.chain_list.item(2).setCheckState(QtCore.Qt.CheckState.Unchecked)  # décocher une chaîne retire sa trace
+    for row in range(5):
+        assert 2 not in chain_lines(results, row) and len(chain_lines(results, row)) == 6
+    assert results.chain_count.text().startswith("126 samples shown")
+
+    results.display_thin.setValue(2)  # une itération gardée sur 2 : ⌊21 / 2⌋ = 10 points, itérations 2, 4…, 20
+    x, _ = chain_lines(results)[0]
+    np.testing.assert_array_equal(x, np.arange(2, 21, 2))
+    assert results.chain_count.text().startswith("60 samples shown")  # 6 × 10
+
+    results.iteration_from.setValue(5)
+    results.iteration_to.setValue(12)
+    x, y = chain_lines(results)[0]
+    np.testing.assert_array_equal(x, [6, 8, 10, 12])
+    np.testing.assert_array_equal(y, results.inversion.samples[[5, 7, 9, 11], 0, 0, 0])
