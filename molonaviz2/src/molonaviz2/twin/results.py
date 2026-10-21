@@ -14,6 +14,10 @@ Ajouts du format 2.0.0 (metadata.json : results_format, instruments, conventions
 - water_flux_field.csv, heat_flux_advective.csv, heat_flux_conductive.csv : q(z, t) en m/s
   et flux de chaleur en W/m², au format de temperature.csv ; la première cellule donne
   la profondeur et l'unité (depth_m|m_per_s, depth_m|W_per_m2). Tous positifs vers le bas.
+- mcmc uniquement, tableaux .npz sans objet Python (lisibles avec allow_pickle=False) :
+  quantiles.npz (quantiles des champs), posterior.npz (échantillons, énergies, acceptation,
+  réinitialisations, numéro d'itération calculée), et selon store_fields fields_temperature.npz
+  et fields_water_flux.npz (champs avec leur chaîne et leur itération d'origine).
 
 Les fichiers de données ne dépendent que du calcul : deux exécutions d'un même twin
 donnent des fichiers identiques octet pour octet (metadata.json contient en plus la
@@ -81,8 +85,44 @@ def write_results(folder: Path, forward: ForwardResult, inversion: InversionResu
         flat = inversion.samples.reshape(-1, inversion.samples.shape[2], inversion.samples.shape[3])
         samples = {f"{name}[{layer}]": flat[:, i, k] for i, layer in enumerate(layer_names) for k, name in enumerate(INVERTED_PARAMETERS)}
         pd.DataFrame(samples).to_csv(folder / "posterior_samples.csv", index=False, float_format=FLOAT_FORMAT)
+        _write_arrays(folder, forward, inversion, layer_names)
 
     (folder / "metadata.json").write_text(json.dumps(metadata, indent=2, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+
+
+def _write_arrays(folder: Path, forward: ForwardResult, inversion: InversionResult, layer_names: list[str]) -> None:
+    """Tableaux du format 2.0.0 (mcmc) : np.savez, chaînes en <U et dates en datetime64[s], sans pickle."""
+    times = np.asarray(inversion.field_times).astype("datetime64[s]")
+    depths = np.asarray(inversion.field_depths, np.float64)
+    quantiles = inversion.quantiles
+    np.savez(
+        folder / "quantiles.npz",
+        quantile=np.array([q.quantile for q in quantiles], np.float64),
+        depth_m=depths,
+        time=times,
+        temperature_C=np.stack([q.temperature for q in quantiles]),
+        water_flux_m_per_s=np.stack([q.water_flux for q in quantiles]),
+    )
+    kept, chains = inversion.energies.shape
+    np.savez(
+        folder / "posterior.npz",
+        samples=inversion.samples,
+        parameter=np.array(INVERTED_PARAMETERS),
+        layer=np.array(layer_names),
+        energy=inversion.energies,
+        acceptance=inversion.acceptance,
+        resets=inversion.resets if inversion.resets is not None else np.zeros(chains, np.int64),
+        iteration=(np.arange(kept) + 1) * inversion.thin,  # itération calculée après le burn-in
+    )
+    if inversion.field_chain is None:
+        return
+    provenance = {"chain": inversion.field_chain, "iteration": inversion.field_iteration, "time": times}
+    if inversion.sensor_temperature is not None:
+        np.savez(folder / "fields_temperature.npz", values=inversion.sensor_temperature, depth_m=forward.sensor_depths, **provenance)
+    if inversion.field_temperature is not None:
+        np.savez(folder / "fields_temperature.npz", values=inversion.field_temperature, depth_m=depths, **provenance)
+    if inversion.field_water_flux is not None:
+        np.savez(folder / "fields_water_flux.npz", values=inversion.field_water_flux, depth_m=depths, **provenance)
 
 
 @dataclass

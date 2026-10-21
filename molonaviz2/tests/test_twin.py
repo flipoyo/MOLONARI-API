@@ -317,7 +317,64 @@ def test_mcmc_twin_is_marked_experimental(twins, point034):
     assert results.metadata["experimental"] is True
     assert {"burn_in_iterations", "acceptance_mean", "rhat", "best_parameters"} <= set(results.metadata["mcmc"])
     assert (run.status.results_dir / "posterior_summary.csv").is_file()
+    assert {p.name for p in run.status.results_dir.glob("*.npz")} == {"quantiles.npz", "posterior.npz", "fields_temperature.npz"}
     assert any(c.startswith("q_riverbed_q") for c in results.flux.columns)
+
+
+def small_inversion_config(**overrides):
+    values = {"layers": [LayerSpec("couche 1", 0.4)], "nb_cells": 20, "nb_chains": 7, "nb_iter": 10, "burn_in_max": 10, "n_field_samples": 7}
+    return InversionConfig(**{**values, **overrides})
+
+
+def load_npz(path):
+    with np.load(path, allow_pickle=False) as data:
+        return {key: data[key] for key in data.files}
+
+
+@pytest.mark.parametrize("store_fields, files", [
+    ("sensors", {"fields_temperature.npz"}),
+    ("full", {"fields_temperature.npz", "fields_water_flux.npz"}),
+    ("none", set()),
+])
+def test_mcmc_arrays_2_0_0(tmp_path, point034, store_fields, files):
+    from molonaviz2.engine import api
+    from molonaviz2.twin.results import write_results
+
+    twins = tmp_path / "twins"
+    twins.mkdir()
+    config = load_twin(make_twin(twins, point034.iloc[:150], small_inversion_config(thin=2, store_fields=store_fields), sigma_t=0.2))
+    inversion = api.run_inversion(config.column_inputs(), config.inversion_config())
+    folder = tmp_path / "results"
+    write_results(folder, inversion.best, inversion, ["couche 1"], {})
+    assert {p.name for p in folder.glob("*.npz")} == {"quantiles.npz", "posterior.npz", *files}
+
+    quantiles = load_npz(folder / "quantiles.npz")
+    np.testing.assert_array_equal(quantiles["quantile"], [0.05, 0.5, 0.95])
+    assert quantiles["time"].dtype == np.dtype("datetime64[s]") and quantiles["depth_m"].shape == inversion.field_depths.shape
+    np.testing.assert_array_equal(quantiles["temperature_C"], np.stack([q.temperature for q in inversion.quantiles]))
+    np.testing.assert_array_equal(quantiles["water_flux_m_per_s"], np.stack([q.water_flux for q in inversion.quantiles]))
+
+    posterior = load_npz(folder / "posterior.npz")
+    assert posterior["samples"].shape == (5, 7, 1, 4)  # 10 itérations, thin = 2
+    np.testing.assert_array_equal(posterior["samples"], inversion.samples)
+    np.testing.assert_array_equal(posterior["energy"], inversion.energies)
+    np.testing.assert_array_equal(posterior["acceptance"], inversion.acceptance)
+    np.testing.assert_array_equal(posterior["resets"], inversion.resets)
+    np.testing.assert_array_equal(posterior["iteration"], [2, 4, 6, 8, 10])
+    assert list(posterior["parameter"]) == ["neg_log10_k", "porosity", "lambda_s", "rhos_cs"] and list(posterior["layer"]) == ["couche 1"]
+
+    if "fields_temperature.npz" in files:
+        fields = load_npz(folder / "fields_temperature.npz")
+        np.testing.assert_array_equal(fields["chain"], inversion.field_chain)
+        np.testing.assert_array_equal(fields["iteration"], inversion.field_iteration)
+        expected = inversion.sensor_temperature if store_fields == "sensors" else inversion.field_temperature
+        np.testing.assert_array_equal(fields["values"], expected)
+        assert fields["values"].dtype == expected.dtype
+        depths = inversion.best.sensor_depths if store_fields == "sensors" else inversion.field_depths
+        np.testing.assert_array_equal(fields["depth_m"], depths)
+        assert fields["values"].shape == (len(fields["chain"]), len(depths), len(fields["time"]))
+    if "fields_water_flux.npz" in files:
+        np.testing.assert_array_equal(load_npz(folder / "fields_water_flux.npz")["values"], inversion.field_water_flux)
 
 
 def test_listing_and_next_twin_name(twins):
