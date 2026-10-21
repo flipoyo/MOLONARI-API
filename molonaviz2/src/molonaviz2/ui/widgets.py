@@ -11,6 +11,9 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from ..i18n import t
 from .theme import set_invalid
 
+# Index invalide : la racine d'un modèle Qt (parent par défaut de rowCount et columnCount).
+NO_PARENT = QtCore.QModelIndex()
+
 
 def heading(text: str) -> QtWidgets.QLabel:
     label = QtWidgets.QLabel(text)
@@ -136,10 +139,10 @@ class DataFrameModel(QtCore.QAbstractTableModel):
         self._marked = marked
         self.endResetModel()
 
-    def rowCount(self, parent=QtCore.QModelIndex()) -> int:  # API Qt
+    def rowCount(self, parent=NO_PARENT) -> int:  # API Qt
         return 0 if parent.isValid() else len(self._frame)
 
-    def columnCount(self, parent=QtCore.QModelIndex()) -> int:  # API Qt
+    def columnCount(self, parent=NO_PARENT) -> int:  # API Qt
         return 0 if parent.isValid() else len(self._frame.columns)
 
     def data(self, index, role=QtCore.Qt.ItemDataRole.DisplayRole):
