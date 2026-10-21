@@ -124,6 +124,8 @@ class TwinWindow(QtWidgets.QMainWindow):
         self.predictive = None  # PredictiveBand dessinée (twin mcmc avec champs stockés)
         self.predictive_note = hint("")  # bande prédictive indisponible : résultat 1.x, ou mcmc sans champs
         self.predictive_note.hide()
+        attach(self.predictive_note, "results.predictive_band")
+        self.sensors.setProperty("notice_key", "results.predictive_band")  # Maj+F1 sur le graphe, sans infobulle qui le masque
         sensors_page = QtWidgets.QWidget()
         sensors_layout = QtWidgets.QVBoxLayout(sensors_page)
         row = QtWidgets.QHBoxLayout()

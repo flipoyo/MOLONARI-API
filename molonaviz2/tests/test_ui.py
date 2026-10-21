@@ -634,6 +634,10 @@ def test_chains_view_selects_chains_thinning_and_iterations(qtbot, window):
     results.tabs.setCurrentIndex(results.parameters_index)
     results.parameter_views.setCurrentIndex(results.chains_index)
     assert len(results.traces.figure.axes) == 5  # 4 paramètres et l'énergie
+    from molonaviz2.ui.dialogs.notice import key_for
+
+    assert {key_for(w) for w in (results.chain_list, results.display_thin, results.iteration_from, results.iteration_to)} == {"results.chains"}
+    assert key_for(results.sensors.canvas) == "results.predictive_band" and key_for(results.predictive_note) == "results.predictive_band"
     assert results.chain_list.count() == 7 and results.checked_chains() == list(range(7))
     full = chain_data(results.inversion).data
     for i in range(7):

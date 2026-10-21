@@ -94,6 +94,8 @@ class ResultsTab(QtWidgets.QWidget):
         self.sigma_source = hint("")
         self.predictive_note = hint("")  # bande prédictive indisponible (pas de champs stockés)
         self.predictive_note.hide()
+        attach(self.predictive_note, "results.predictive_band")
+        self.sensors.setProperty("notice_key", "results.predictive_band")  # Maj+F1 sur le graphe, sans infobulle qui le masque
         sensors_page = QtWidgets.QWidget()
         sensors_layout = QtWidgets.QVBoxLayout(sensors_page)
         sensors_layout.setContentsMargins(0, 0, 0, 0)
@@ -173,6 +175,8 @@ class ResultsTab(QtWidgets.QWidget):
         for box in (self.iteration_from, self.iteration_to):
             box.valueChanged.connect(self._draw_chains)
         self.chain_count = hint("")
+        for widget in (self.chain_list, self.display_thin, self.iteration_from, self.iteration_to):
+            attach(widget, "results.chains")
         self.traces = FigurePanel(height=5)
         parameters_page = QtWidgets.QWidget()
         parameters_layout = QtWidgets.QVBoxLayout(parameters_page)
