@@ -113,6 +113,9 @@ MESSAGES: dict[str, str] = {
     "E_COLUMN_SENSOR_DEPTHS": "The shaft must define 4 strictly increasing, positive sensor depths.",
     "E_COLUMN_TOO_FEW_TIMES": "At least 3 cleaned measurement times are required to run a model.",
     "E_MODEL_NON_FINITE": "The model produced non-finite values. Check the layer parameters and the measurements.",
+    # questions
+    "E_QUESTION_SHAPES": "Incompatible shapes: expected {expected}, found {found}.",
+    "E_QUESTION_TIMES": "Times must be strictly increasing.",
     # twin
     "E_NO_CLEANED_MEASURES": "No cleaned measurements yet: apply a cleaning first.",
     "E_STRICT_DIRTY": "The {target} repository has uncommitted changes.",

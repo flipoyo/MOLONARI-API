@@ -10,5 +10,14 @@ from .intervals import (
     sensor_intervals,
     z_score,
 )
+from .volumes import exchanged_volume
 
-__all__ = ["MEASUREMENT_LEVELS", "Answer", "Quantity", "measurement_interval", "sensor_intervals", "z_score"]
+__all__ = [
+    "MEASUREMENT_LEVELS",
+    "Answer",
+    "Quantity",
+    "exchanged_volume",
+    "measurement_interval",
+    "sensor_intervals",
+    "z_score",
+]
