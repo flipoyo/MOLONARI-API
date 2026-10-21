@@ -15,8 +15,19 @@ from ...i18n import t
 from ...storage.project import ComputationInfo
 from ..dialogs.notice import attach
 from ..plots import posterior
-from ..plots.maps import FigurePanel, depth_time_map, profiles, sensor_comparison, time_series_with_band
-from ..units import level_label, measurement_interval, measurement_level, temperature_unit
+from ..plots.maps import (
+    FigurePanel,
+    depth_time_map,
+    profiles,
+    sensor_comparison,
+    time_series_with_band,
+)
+from ..units import (
+    level_label,
+    measurement_interval,
+    measurement_level,
+    temperature_unit,
+)
 from ..widgets import DataFrameModel, ask, format_number, hint, table_view
 from .context import PointContext
 

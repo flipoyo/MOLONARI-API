@@ -9,7 +9,11 @@ from PySide6 import QtCore, QtWidgets
 
 from molonaviz2.domain.models import PointStage, SamplingPoint, Study
 from molonaviz2.io.lab_import import import_lab_directory
-from molonaviz2.io.point_import import read_point_info, read_pressure_file, read_temperature_file
+from molonaviz2.io.point_import import (
+    read_point_info,
+    read_pressure_file,
+    read_temperature_file,
+)
 from molonaviz2.settings import Settings
 from molonaviz2.storage.project import Project
 from molonaviz2.ui import errors as ui_errors
@@ -17,7 +21,12 @@ from molonaviz2.ui.dialogs.lab_import import LabImportDialog
 from molonaviz2.ui.dialogs.point_import import PointImportDialog
 from molonaviz2.ui.main_window import MainWindow
 from molonaviz2.ui.point_view.view import PointView
-from molonaviz2.ui.units import measurement_interval, measurement_level, temperature_unit, z_score
+from molonaviz2.ui.units import (
+    measurement_interval,
+    measurement_level,
+    temperature_unit,
+    z_score,
+)
 from molonaviz2.ui.widgets import TypedConfirmation
 
 TASK_TIMEOUT = 120_000

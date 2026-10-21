@@ -8,6 +8,7 @@ l'aquifère, la température du capteur de pression fixe celle de la rivière.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import pairwise
 
 import numpy as np
 import pandas as pd
@@ -66,7 +67,7 @@ class ColumnInputs:
         if np.any(np.diff(times.astype(np.int64)) <= 0):
             raise UserError("E_COLUMN_DUPLICATE_TIMES")
         depths = tuple(float(d) for d in sensor_depths)
-        if len(depths) != 4 or any(b <= a for a, b in zip(depths, depths[1:])) or depths[0] <= 0:
+        if len(depths) != 4 or any(b <= a for a, b in pairwise(depths)) or depths[0] <= 0:
             raise UserError("E_COLUMN_SENSOR_DEPTHS")
         return cls(
             times=times,

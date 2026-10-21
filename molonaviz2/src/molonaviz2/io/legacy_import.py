@@ -15,7 +15,14 @@ from pathlib import Path
 
 import pandas as pd
 
-from ..domain.models import Lab, PressureSensor, SamplingPoint, Shaft, Study, Thermometer
+from ..domain.models import (
+    Lab,
+    PressureSensor,
+    SamplingPoint,
+    Shaft,
+    Study,
+    Thermometer,
+)
 from ..errors import Issue, UserError
 from ..storage.project import Project
 from .lab_import import read_text

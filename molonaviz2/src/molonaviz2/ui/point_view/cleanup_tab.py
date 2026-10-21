@@ -8,11 +8,23 @@ from PySide6 import QtCore, QtWidgets
 from ...domain.models import PointStage
 from ...errors import UserError
 from ...i18n import N_, t
-from ...processing.cleanup import VARIABLES, CleanupResult, CleanupSettings, clean, read_cleaned_csv, write_cleaned_csv
+from ...processing.cleanup import (
+    VARIABLES,
+    CleanupResult,
+    CleanupSettings,
+    clean,
+    read_cleaned_csv,
+    write_cleaned_csv,
+)
 from ..dialogs.notice import attach
 from ..errors import error_text, report_exception
 from ..plots.series import RegionSelector, TimeSeriesPlot
-from ..plots.style import PRESSURE_COLOR, REJECTED_COLOR, RIVER_COLOR, THERMOMETER_COLORS
+from ..plots.style import (
+    PRESSURE_COLOR,
+    REJECTED_COLOR,
+    RIVER_COLOR,
+    THERMOMETER_COLORS,
+)
 from ..units import temperature_unit
 from ..widgets import ask, from_qdatetime, heading, hint, to_qdatetime
 from .context import PointContext

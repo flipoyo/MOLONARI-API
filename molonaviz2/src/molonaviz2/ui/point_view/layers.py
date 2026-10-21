@@ -222,7 +222,7 @@ class LayersTable(QtWidgets.QTableWidget):
         self.blockSignals(False)
         return sorted(set(errors.values()))
 
-    def resizeEvent(self, event) -> None:  # noqa: N802
+    def resizeEvent(self, event) -> None:  # API Qt
         super().resizeEvent(event)
         self._fit_height()
 

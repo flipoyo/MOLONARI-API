@@ -19,11 +19,11 @@ class CatalogTranslator(QtCore.QTranslator):
         super().__init__(parent)
         self._catalog = catalog
 
-    def translate(self, context, source_text, disambiguation=None, n=-1):  # noqa: N802 (API Qt)
+    def translate(self, context, source_text, disambiguation=None, n=-1):  # API Qt
         # None : Qt retombe sur le texte source.
         return self._catalog.get(source_text)
 
-    def isEmpty(self) -> bool:  # noqa: N802 (API Qt)
+    def isEmpty(self) -> bool:  # API Qt
         return not self._catalog
 
 

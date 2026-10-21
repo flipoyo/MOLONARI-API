@@ -12,6 +12,20 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions : [S
 - Tags : `molonaviz2-vX.Y.Z`, posés sur `CGS-MOLO` après la fusion. La CI (`molonaviz2-version`) vérifie que le tag correspond à `pyproject.toml`.
 - La version entre dans `engine_version()`, donc dans chaque `twin_id`. Une nouvelle version donne de nouveaux identifiants, et un twin déjà calculé passe à l'état « modifié » : il faut créer un nouveau twin pour utiliser le nouveau code.
 
+## [0.3.1] - 2026-10-21
+
+Avertissements ruff existants (#29) : les 37 avertissements de `ruff check` (ruff 0.17.1, règles par défaut) sont corrigés, règle par règle. Aucun comportement ne change : résultats, textes affichés et tests identiques.
+
+### Corrigé
+- `RUF100` : directives `noqa` de règles non activées retirées ; la raison reste en commentaire (#29).
+- `I001` : imports triés ; aucun import à effet de bord (backend matplotlib, `sys.path`) ne change de place (#29).
+- `RUF007` : `itertools.pairwise` pour vérifier l'ordre des profondeurs (#29).
+- `B008` : l'index racine Qt par défaut de `DataFrameModel` devient une constante de module, `NO_PARENT` (#29).
+- `PLW1510`, `ISC004`, `PLR0402`, `RUF046`, `C408`, `PIE808` : une correction chacun (#29).
+
+### Identifiants de référence (0.3.1)
+- `twin_01` et `twin_02` : `cb91dd196c280674` ; `twin_03` : `a65838cf829d8a0b` ; `twin_04` : `150b1f2b0066f7d5`.
+
 ## [0.3.0] - 2026-10-21
 
 Cœur sans Qt et codes d'erreur (#23) : première étape de la séparation entre le futur backend twin

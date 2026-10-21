@@ -236,7 +236,7 @@ def test_command_line(twins, point034):
     folder = make_twin(twins, point034)
 
     def cli(*args):
-        return subprocess.run([sys.executable, "-m", "molonaviz2", "twin", *args], capture_output=True, text=True, timeout=300)
+        return subprocess.run([sys.executable, "-m", "molonaviz2", "twin", *args], capture_output=True, text=True, timeout=300, check=False)
 
     assert cli("validate", str(folder)).returncode == 0
     identity = cli("id", str(folder))

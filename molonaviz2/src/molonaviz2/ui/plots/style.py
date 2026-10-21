@@ -13,9 +13,10 @@ import matplotlib
 
 matplotlib.use("QtAgg")
 
-import pyqtgraph as pg  # noqa: E402
-from matplotlib import cm  # noqa: E402
-from PySide6 import QtGui, QtWidgets  # noqa: E402
+# Ces imports restent après matplotlib.use : ils chargent matplotlib et Qt.
+import pyqtgraph as pg
+from matplotlib import cm
+from PySide6 import QtGui, QtWidgets
 
 THERMOMETER_COLORS = [matplotlib.colors.to_hex(cm.viridis(x)) for x in (0.05, 0.35, 0.62, 0.85)]
 RIVER_COLOR = "#d55e00"

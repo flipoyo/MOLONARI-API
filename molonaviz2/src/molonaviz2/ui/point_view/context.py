@@ -6,7 +6,14 @@ from dataclasses import dataclass
 
 from PySide6 import QtCore
 
-from ...domain.models import Lab, PointStage, PressureSensor, SamplingPoint, Shaft, Thermometer
+from ...domain.models import (
+    Lab,
+    PointStage,
+    PressureSensor,
+    SamplingPoint,
+    Shaft,
+    Thermometer,
+)
 from ...engine.column import ColumnInputs
 from ...errors import UserError
 from ...i18n import N_

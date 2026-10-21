@@ -301,7 +301,7 @@ class TwinWindow(QtWidgets.QMainWindow):
         self.residuals.draw()
         self.metadata.setPlainText(json.dumps(meta, indent=2, ensure_ascii=False))
 
-    def closeEvent(self, event) -> None:  # noqa: N802
+    def closeEvent(self, event) -> None:  # API Qt
         if self._task is not None:
             self.tasks.cancel()
         super().closeEvent(event)

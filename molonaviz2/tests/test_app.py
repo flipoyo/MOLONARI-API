@@ -13,7 +13,7 @@ from molonaviz2.i18n import LANGUAGES, load_catalog
 
 TOOLS = Path(__file__).resolve().parents[1] / "tools"
 sys.path.insert(0, str(TOOLS))
-from extract_strings import extract  # noqa: E402
+from extract_strings import extract
 
 PLACEHOLDER = re.compile(r"\{[^{}]*\}")
 
@@ -52,7 +52,7 @@ def test_translator_is_used_by_qt(qapp):
 
 
 def test_selftest_command_line():
-    completed = subprocess.run([sys.executable, "-m", "molonaviz2.app", "--selftest"], capture_output=True, text=True, timeout=300)
+    completed = subprocess.run([sys.executable, "-m", "molonaviz2.app", "--selftest"], capture_output=True, text=True, timeout=300, check=False)
     assert completed.returncode == 0, completed.stderr
     assert "self-test: OK" in completed.stdout
 

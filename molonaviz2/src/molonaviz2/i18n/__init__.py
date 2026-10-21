@@ -22,7 +22,7 @@ LANGUAGES = {"fr": "Français", "en": "English"}
 DEFAULT_LANGUAGE = "fr"
 
 
-def N_(text: str) -> str:  # noqa: N802 (convention gettext)
+def N_(text: str) -> str:  # convention gettext
     """Marque une chaîne à traduire plus tard (constantes de module) ; la retourne telle quelle."""
     return text
 

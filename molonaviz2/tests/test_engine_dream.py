@@ -18,9 +18,9 @@ from molonaviz2.errors import UserError
 
 
 def small_config(**overrides):
-    values = dict(
-        layers=[LayerSpec("a", 0.4)], nb_cells=20, nb_chains=7, nb_iter=30, burn_in_max=20, n_field_samples=14, seed=1
-    )
+    values = {
+        "layers": [LayerSpec("a", 0.4)], "nb_cells": 20, "nb_chains": 7, "nb_iter": 30, "burn_in_max": 20, "n_field_samples": 14, "seed": 1
+    }
     values.update(overrides)
     return InversionConfig(**values)
 
