@@ -51,15 +51,23 @@ class QuantileResult:
 class InversionResult:
     best: ForwardResult  # modèle direct avec les paramètres d'énergie minimale
     best_parameters: np.ndarray  # (L, 4) dans l'espace des lois a priori (−log₁₀ k, n, λs, ρs·cs)
-    samples: np.ndarray  # paramètres après burn-in, (I, N, L, 4)
-    energies: np.ndarray  # énergie après burn-in, (I, N)
-    acceptance: np.ndarray  # taux d'acceptation par chaîne après burn-in, (N,)
+    samples: np.ndarray  # paramètres des itérations gardées après burn-in, (I, N, L, 4)
+    energies: np.ndarray  # énergie des itérations gardées, (I, N)
+    acceptance: np.ndarray  # taux d'acceptation par chaîne sur les itérations gardées, (N,)
     burn_in_iterations: int
     burn_in_converged: bool
     rhat: np.ndarray  # R-hat final par paramètre (L, 4)
     quantiles: list[QuantileResult] = field(default_factory=list)
     field_depths: np.ndarray | None = None  # profondeurs des champs sous-échantillonnés (C',)
     field_times: np.ndarray | None = None  # dates des champs sous-échantillonnés (T',)
+    # Ajouts de 0.4.0 : absents (None, thin = 1) dans un calcul enregistré avant.
+    thin: int = 1  # samples[i] est l'itération calculée (i + 1)·thin après le burn-in
+    field_chain: np.ndarray | None = None  # chaîne d'origine de chaque champ, (S,)
+    field_iteration: np.ndarray | None = None  # itération calculée d'origine, comptée à partir de 1 après le burn-in, (S,)
+    resets: np.ndarray | None = None  # réinitialisations de chaque chaîne pendant le burn-in, (N,)
+    sensor_temperature: np.ndarray | None = None  # °C, float64, aux 3 capteurs, (S, 3, T')
+    field_temperature: np.ndarray | None = None  # °C, float32, (S, C', T')
+    field_water_flux: np.ndarray | None = None  # m·s⁻¹, float32, (S, C', T')
 
     def to_arrays(self) -> dict[str, np.ndarray]:
         arrays = self.best.to_arrays("best.")
@@ -77,6 +85,8 @@ class InversionResult:
             quantile_rmse=np.stack([q.rmse for q in self.quantiles]),
             field_depths=self.field_depths,
             field_times=self.field_times,
+            thin=np.array(self.thin),
+            **{name: getattr(self, name) for name in OPTIONAL_ARRAYS},
         )
         return arrays
 
@@ -103,4 +113,10 @@ class InversionResult:
             quantiles=quantiles,
             field_depths=np.asarray(arrays["field_depths"]),
             field_times=np.asarray(arrays["field_times"]),
+            thin=int(arrays.get("thin", 1)),
+            **{name: None if arrays.get(name) is None else np.asarray(arrays[name]) for name in OPTIONAL_ARRAYS},
         )
+
+
+# Tableaux facultatifs d'InversionResult : le stockage n'écrit pas ceux qui valent None.
+OPTIONAL_ARRAYS = ("field_chain", "field_iteration", "resets", "sensor_temperature", "field_temperature", "field_water_flux")
