@@ -14,7 +14,6 @@ import pandas as pd
 
 from ..domain.models import CLEANED_COLUMNS
 from ..errors import UserError
-from ..i18n import t
 
 ZERO_CELSIUS = 273.15
 
@@ -59,16 +58,16 @@ class ColumnInputs:
     ) -> ColumnInputs:
         missing = [c for c in CLEANED_COLUMNS if c not in cleaned.columns]
         if missing:
-            raise UserError(t("Cleaned measures are missing columns: {cols}.").format(cols=", ".join(missing)))
+            raise UserError("E_COLUMN_MISSING_COLUMNS", cols=", ".join(missing))
         df = cleaned.dropna(subset=CLEANED_COLUMNS).sort_values("date")
         if len(df) < 3:
-            raise UserError(t("At least 3 cleaned measurement times are required to run a model."))
+            raise UserError("E_COLUMN_TOO_FEW_TIMES")
         times = df["date"].to_numpy().astype("datetime64[s]")
         if np.any(np.diff(times.astype(np.int64)) <= 0):
-            raise UserError(t("Measurement times must be strictly increasing (duplicate dates found)."))
+            raise UserError("E_COLUMN_DUPLICATE_TIMES")
         depths = tuple(float(d) for d in sensor_depths)
         if len(depths) != 4 or any(b <= a for a, b in zip(depths, depths[1:])) or depths[0] <= 0:
-            raise UserError(t("The shaft must define 4 strictly increasing, positive sensor depths."))
+            raise UserError("E_COLUMN_SENSOR_DEPTHS")
         return cls(
             times=times,
             head=df["pressure"].to_numpy(np.float64),

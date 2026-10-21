@@ -92,6 +92,12 @@ MESSAGES: dict[str, str] = {
     "E_PRIOR_OUT_OF_BOUNDS": "Range outside the physical bounds [{low:g}, {high:g}].",
     "E_SIGMA_T_POSITIVE": "The measurement uncertainty must be positive.",
     "E_VALUE_OUT_OF_RANGE": "Value outside the physical range [{low:g}, {high:g}].",
+    # engine
+    "E_COLUMN_DUPLICATE_TIMES": "Measurement times must be strictly increasing (duplicate dates found).",
+    "E_COLUMN_MISSING_COLUMNS": "Cleaned measures are missing columns: {cols}.",
+    "E_COLUMN_SENSOR_DEPTHS": "The shaft must define 4 strictly increasing, positive sensor depths.",
+    "E_COLUMN_TOO_FEW_TIMES": "At least 3 cleaned measurement times are required to run a model.",
+    "E_MODEL_NON_FINITE": "The model produced non-finite values. Check the layer parameters and the measurements.",
 }
 
 
