@@ -1,5 +1,5 @@
-"""Liste les chaînes à traduire du code source : appels t("...") et N_("...") avec un littéral, et
-modèles du catalogue des codes d'erreur (MESSAGES de errors.py).
+"""Liste les chaînes à traduire du code source : appels t("..."), tr("...") (ligne de commande) et
+N_("...") avec un littéral, et modèles du catalogue des codes d'erreur (MESSAGES de errors.py).
 
 Usage : python tools/extract_strings.py            → affiche les chaînes sans traduction française
         python tools/extract_strings.py --all      → affiche toutes les chaînes
@@ -25,7 +25,7 @@ def extract(source: Path = SOURCE) -> dict[str, list[str]]:
             if (
                 isinstance(node, ast.Call)
                 and isinstance(node.func, ast.Name)
-                and node.func.id in ("t", "N_")
+                and node.func.id in ("t", "tr", "N_")
                 and node.args
                 and isinstance(node.args[0], ast.Constant)
                 and isinstance(node.args[0].value, str)
