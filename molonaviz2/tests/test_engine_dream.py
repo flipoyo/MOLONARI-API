@@ -1,5 +1,7 @@
 """Inversion DREAM : exactitude de l'échantillonneur, déterminisme, annulation, convergence."""
 
+import math
+
 import arviz as az
 import jax.numpy as jnp
 import numpy as np
@@ -119,6 +121,48 @@ def test_sampling_layout_per_chain(nb_chains, nb_iter, fields, per_chain, interv
     assert sum(keep for _, keep in blocks) == per_chain
     assert (layout.field_cells, layout.field_times) == (7, 76)  # ⌈20 / 3⌉, ⌈301 / 4⌉
     assert layout.field_bytes == 2 * 4 * layout.fields_total * 7 * 76
+
+
+def blocks_of_0_3_0(nb_chains, nb_iter, n_field_samples):
+    """Blocs de 0.3.0 (sans thin ni fields_per_chain), recopiés pour la comparaison."""
+    per_chain = max(1, math.ceil(n_field_samples / nb_chains))
+    interval = max(1, nb_iter // per_chain)
+    full, rest = divmod(nb_iter, interval)
+    return [(interval, True)] * full + ([(rest, False)] if rest else [])
+
+
+@pytest.mark.parametrize("nb_chains, nb_iter, fields", [
+    (7, 30, 14), (7, 30, 15), (7, 30, 3), (7, 5, 100), (10, 1000, 200), (8, 300, 200), (12, 997, 37), (3, 1, 2),
+])
+def test_default_sampling_layout_keeps_the_blocks_of_0_3_0(nb_chains, nb_iter, fields):
+    layout = sampling_layout(small_config(nb_chains=nb_chains, nb_iter=nb_iter, n_field_samples=fields))
+    assert layout.blocks() == blocks_of_0_3_0(nb_chains, nb_iter, fields)
+    assert layout.kept == nb_iter and layout.parameter_sets == nb_chains * nb_iter
+
+
+def test_thinning_keeps_one_iteration_out_of_thin():
+    layout = sampling_layout(small_config(nb_iter=10, thin=3, n_field_samples=7))
+    assert (layout.kept, layout.parameter_sets) == (3, 7 * 3)
+    assert sum(length for length, _ in layout.blocks()) == 10
+    # Chaque champ tombe sur une itération gardée (multiple de thin).
+    ends = np.cumsum([length for length, _ in layout.blocks()])
+    assert all(end % 3 == 0 for end, (_, keep) in zip(ends, layout.blocks(), strict=True) if keep)
+
+
+@pytest.mark.parametrize("thin", [1, 2, 7])
+def test_fields_per_chain_sets_the_number_of_fields_exactly(thin):
+    layout = sampling_layout(small_config(nb_chains=8, nb_iter=300, thin=thin, fields_per_chain=5))
+    assert (layout.fields_per_chain, layout.fields_total, layout.fields_requested) == (5, 40, 40)
+    assert sum(keep for _, keep in layout.blocks()) == 5
+    assert sum(length for length, _ in layout.blocks()) == 300
+
+
+def test_stored_bytes_by_kind_of_stored_fields():
+    layout = sampling_layout(small_config(space_step=3, time_step=4), nb_times=301)  # 14 champs, 7 cellules, 76 dates
+    assert layout.stored_bytes("none") == 0
+    assert layout.stored_bytes("sensors") == 8 * 14 * 3 * 76
+    assert layout.stored_bytes("full") == layout.field_bytes == 2 * 4 * 14 * 7 * 76
+    assert sampling_layout(small_config()).stored_bytes("sensors") is None
 
 
 def test_sampling_layout_is_what_the_sampler_stores(monkeypatch):
