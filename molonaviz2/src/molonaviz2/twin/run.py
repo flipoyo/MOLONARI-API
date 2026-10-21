@@ -30,7 +30,7 @@ from .registry import (
     results_dir,
     twins_root,
 )
-from .results import write_results
+from .results import RESULTS_FORMAT, write_results
 
 TWIN_PREFIX = "twin_"
 
@@ -128,6 +128,7 @@ def _now() -> str:
 
 
 def _metadata(config: TwinConfig, twin_id: str, code_version: str, device: str, duration: float, forward, inversion) -> dict:
+    from ..engine.jax.forward import HEAT_REFERENCE_C
     measurements = config.load_measurements()
     metadata = {
         "twin_id": twin_id,
@@ -151,6 +152,14 @@ def _metadata(config: TwinConfig, twin_id: str, code_version: str, device: str, 
         "rmse_celsius": {"t1": float(forward.rmse[0]), "t2": float(forward.rmse[1]), "t3": float(forward.rmse[2]), "total": float(forward.rmse[3])},
         "sensor_cell_depths": [float(d) for d in forward.sensor_depths],
         "flux_convention": "q > 0: infiltration (river to aquifer); q < 0: exfiltration (aquifer to river)",
+        "results_format": RESULTS_FORMAT,
+        "instruments": {"sigma_temperature_C": float(config.sigma_temperature), "sigma_pressure_m": float(config.sigma_pressure)},
+        "conventions": {
+            "z": "positive downwards, m",
+            "q": "positive downwards (infiltration), m/s",
+            "heat_flux": "positive downwards, W/m2",
+            "advective_reference_C": HEAT_REFERENCE_C,
+        },
     }
     if inversion is not None:
         metadata["mcmc"] = {

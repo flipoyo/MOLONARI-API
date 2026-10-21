@@ -1,6 +1,6 @@
 """Écriture et relecture des résultats d'un twin (`results/<twin_id>/`).
 
-Fichiers :
+Fichiers du format 1.x (inchangés en 2.0.0) :
 - temperature.csv   θ(z, t) en °C : une ligne par profondeur (m), une colonne par date ;
 - water_flux.csv    q(t) en m/s au fond de la rivière (positif vers le bas : infiltration,
                     la rivière alimente la nappe ; négatif : exfiltration), moyenne sur la
@@ -9,6 +9,11 @@ Fichiers :
 - metadata.json     identité, config canonique, empreinte des données, version du code,
                     appareil, durée, RMSE, diagnostic mcmc ;
 - mcmc uniquement : posterior_summary.csv et posterior_samples.csv.
+
+Ajouts du format 2.0.0 (metadata.json : results_format, instruments, conventions) :
+- water_flux_field.csv, heat_flux_advective.csv, heat_flux_conductive.csv : q(z, t) en m/s
+  et flux de chaleur en W/m², au format de temperature.csv ; la première cellule donne
+  la profondeur et l'unité (depth_m|m_per_s, depth_m|W_per_m2). Tous positifs vers le bas.
 
 Les fichiers de données ne dépendent que du calcul : deux exécutions d'un même twin
 donnent des fichiers identiques octet pour octet (metadata.json contient en plus la
@@ -28,6 +33,7 @@ from ..domain.compute import INVERTED_PARAMETERS
 from ..engine.results import ForwardResult, InversionResult
 
 FLOAT_FORMAT = "%.17g"
+RESULTS_FORMAT = "2.0.0"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
@@ -35,11 +41,17 @@ def _dates(values) -> list[str]:
     return pd.to_datetime(values).strftime(DATE_FORMAT).tolist()
 
 
+def _write_field(path: Path, depths, dates: list[str], values, index_name: str) -> None:
+    pd.DataFrame(values, index=pd.Index(depths, name=index_name), columns=dates).to_csv(path, float_format=FLOAT_FORMAT)
+
+
 def write_results(folder: Path, forward: ForwardResult, inversion: InversionResult | None, layer_names: list[str], metadata: dict) -> None:
     folder.mkdir(parents=True, exist_ok=True)
     dates = _dates(forward.times)
-    pd.DataFrame(forward.temperature, index=pd.Index(forward.depths, name="depth_m"), columns=dates).to_csv(
-        folder / "temperature.csv", float_format=FLOAT_FORMAT)
+    _write_field(folder / "temperature.csv", forward.depths, dates, forward.temperature, "depth_m")
+    _write_field(folder / "water_flux_field.csv", forward.depths, dates, forward.water_flux, "depth_m|m_per_s")
+    _write_field(folder / "heat_flux_advective.csv", forward.depths, dates, forward.advective_flux, "depth_m|W_per_m2")
+    _write_field(folder / "heat_flux_conductive.csv", forward.depths, dates, forward.conductive_flux_down, "depth_m|W_per_m2")
 
     flux = pd.DataFrame({
         "date": dates,

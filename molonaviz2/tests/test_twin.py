@@ -23,6 +23,8 @@ from molonaviz2.twin.results import load_results
 from molonaviz2.twin.run import list_twins, next_twin_folder, run_twin, twin_status
 
 DEPTHS = (0.1, 0.2, 0.3, 0.4)
+# Champs du format 2.0.0, avec la première cellule (profondeur|unité).
+FIELD_FILES = {"water_flux_field.csv": "depth_m|m_per_s", "heat_flux_advective.csv": "depth_m|W_per_m2", "heat_flux_conductive.csv": "depth_m|W_per_m2"}
 
 
 @pytest.fixture(scope="module")
@@ -222,7 +224,7 @@ def test_full_lifecycle(twins, point034, monkeypatch):
     assert run.computed and run.status.state == "computed"
     results = run.status.results_dir
     assert results.parent == twins.parent / "results" and results.name == run.status.twin_id
-    assert {p.name for p in results.iterdir()} == {"temperature.csv", "water_flux.csv", "residuals.csv", "metadata.json"}
+    assert {p.name for p in results.iterdir()} == {"temperature.csv", "water_flux.csv", "residuals.csv", "metadata.json", *FIELD_FILES}
     meta = json.loads((results / "metadata.json").read_text())
     assert meta["twin_id"] == run.status.twin_id and meta["mode"] == "direct" and not meta["experimental"]
     assert meta["data"]["rows"] == 400 and len(meta["data"]["sha256"]) == 64
@@ -260,6 +262,38 @@ def test_results_are_identical_bit_for_bit(tmp_path, point034):
         folder = make_twin(twins, point034)
         folders.append(run_twin(folder).status.results_dir)
     for file in ("temperature.csv", "water_flux.csv", "residuals.csv"):
+        assert (folders[0] / file).read_bytes() == (folders[1] / file).read_bytes(), file
+
+
+def test_direct_results_2_0_0_fields_and_metadata(twins, point034):
+    from molonaviz2.engine import api
+
+    folder = make_twin(twins, point034)
+    results_dir = run_twin(folder).status.results_dir
+    config = load_twin(folder)
+    forward = api.run_forward(config.column_inputs(), config.forward_config())
+    expected = {"water_flux_field.csv": forward.water_flux, "heat_flux_advective.csv": forward.advective_flux,
+                "heat_flux_conductive.csv": forward.conductive_flux_down}
+    for name, index_name in FIELD_FILES.items():
+        frame = pd.read_csv(results_dir / name, index_col=0, float_precision="round_trip")
+        assert frame.index.name == index_name
+        np.testing.assert_array_equal(frame.index.to_numpy(float), forward.depths)
+        np.testing.assert_array_equal(frame.to_numpy(float), expected[name])
+    metadata = json.loads((results_dir / "metadata.json").read_text())
+    assert metadata["results_format"] == "2.0.0"
+    assert metadata["instruments"] == {"sigma_temperature_C": 0.05, "sigma_pressure_m": 0.01}
+    assert metadata["conventions"]["advective_reference_C"] == 0.0
+    assert {"z", "q", "heat_flux"} <= set(metadata["conventions"]) and "downwards" in metadata["conventions"]["heat_flux"]
+    assert not any(results_dir.glob("*.npz"))  # tableaux .npz : mode mcmc seulement
+
+
+def test_results_2_0_0_are_identical_bit_for_bit(tmp_path, point034):
+    folders = []
+    for name in ("a", "b"):
+        twins = tmp_path / name / "twins"
+        twins.mkdir(parents=True)
+        folders.append(run_twin(make_twin(twins, point034)).status.results_dir)
+    for file in FIELD_FILES:
         assert (folders[0] / file).read_bytes() == (folders[1] / file).read_bytes(), file
 
 
