@@ -39,7 +39,6 @@ from ..domain.models import (
     Thermometer,
 )
 from ..errors import UserError
-from ..i18n import t
 
 APPLICATION_ID = 0x4D4F4C4F  # « MOLO »
 SCHEMA_VERSION = 1
@@ -137,7 +136,7 @@ class Project:
         if path.suffix != SUFFIX:
             path = path.with_suffix(SUFFIX)
         if path.exists():
-            raise UserError(t("A file already exists at {path}.").format(path=path))
+            raise UserError("E_FILE_EXISTS", path=path)
         connection = cls._connect(path)
         connection.execute(f"PRAGMA application_id = {APPLICATION_ID}")
         project = cls(path, connection)
@@ -148,24 +147,24 @@ class Project:
     def open(cls, path: str | Path) -> Project:
         path = Path(path)
         if not path.is_file():
-            raise UserError(t("File not found: {path}").format(path=path))
+            raise UserError("E_FILE_NOT_FOUND", path=path)
         try:
             connection = cls._connect(path)
             app_id = connection.execute("PRAGMA application_id").fetchone()[0]
         except sqlite3.DatabaseError:
-            raise UserError(t("{name} is not a Molonaviz project.").format(name=path.name)) from None
+            raise UserError("E_PROJECT_INVALID", name=path.name) from None
         if app_id != APPLICATION_ID:
             tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             connection.close()
             if "Labo" in tables and "SamplingPoint" in tables:
                 raise UserError(
-                    t("{name} is a database from the previous Molonaviz. Use File › Import Molonaviz database to convert it.").format(name=path.name)
+                    "E_PROJECT_LEGACY_DATABASE", name=path.name
                 )
-            raise UserError(t("{name} is not a Molonaviz project.").format(name=path.name))
+            raise UserError("E_PROJECT_INVALID", name=path.name)
         version = connection.execute("PRAGMA user_version").fetchone()[0]
         if version > SCHEMA_VERSION:
             connection.close()
-            raise UserError(t("{name} was created by a newer version of Molonaviz. Please update the application.").format(name=path.name))
+            raise UserError("E_PROJECT_TOO_NEW", name=path.name)
         project = cls(path, connection)
         project._migrate()
         return project
@@ -212,14 +211,14 @@ class Project:
     def _lab_id(self, name: str) -> int:
         row = self._one("SELECT id FROM labs WHERE name = ?", (name,))
         if row is None:
-            raise UserError(t("Laboratory \"{name}\" does not exist.").format(name=name))
+            raise UserError("E_LAB_NOT_FOUND", name=name)
         return row[0]
 
     def add_lab(self, lab: Lab) -> None:
         if not lab.name.strip():
-            raise UserError(t("The laboratory needs a name."))
+            raise UserError("E_LAB_NAME_REQUIRED")
         if self._one("SELECT 1 FROM labs WHERE name = ?", (lab.name,)):
-            raise UserError(t("A laboratory named \"{name}\" already exists.").format(name=lab.name))
+            raise UserError("E_LAB_EXISTS", name=lab.name)
         with self._transaction():
             lab_id = self._con.execute("INSERT INTO labs (name) VALUES (?)", (lab.name,)).lastrowid
             for item in [*lab.thermometers, *lab.pressure_sensors, *lab.shafts]:
@@ -229,7 +228,7 @@ class Project:
         lab_id = self._lab_id(lab_name)
         table = {Thermometer: "thermometers", PressureSensor: "pressure_sensors", Shaft: "shafts"}[type(item)]
         if self._one(f"SELECT 1 FROM {table} WHERE lab_id = ? AND name = ?", (lab_id, item.name)):
-            raise UserError(t("\"{name}\" already exists in this laboratory.").format(name=item.name))
+            raise UserError("E_LAB_ITEM_EXISTS", name=item.name)
         with self._transaction():
             self._insert_lab_item(lab_id, item)
 
@@ -271,7 +270,7 @@ class Project:
         lab_id = self._lab_id(name)
         users = [row[0] for row in self._con.execute("SELECT name FROM studies WHERE lab_id = ?", (lab_id,))]
         if users:
-            raise UserError(t("This laboratory is used by: {studies}. Delete these studies first.").format(studies=", ".join(users)))
+            raise UserError("E_LAB_IN_USE", studies=", ".join(users))
         with self._transaction():
             self._con.execute("DELETE FROM labs WHERE id = ?", (lab_id,))
 
@@ -286,17 +285,17 @@ class Project:
 
     def add_study(self, study: Study) -> None:
         if not study.name.strip():
-            raise UserError(t("The study needs a name."))
+            raise UserError("E_STUDY_NAME_REQUIRED")
         lab_id = self._lab_id(study.lab)
         if self._one("SELECT 1 FROM studies WHERE name = ?", (study.name,)):
-            raise UserError(t("A study named \"{name}\" already exists.").format(name=study.name))
+            raise UserError("E_STUDY_EXISTS", name=study.name)
         with self._transaction():
             self._con.execute("INSERT INTO studies (name, lab_id) VALUES (?, ?)", (study.name, lab_id))
 
     def _study_id(self, name: str) -> int:
         row = self._one("SELECT id FROM studies WHERE name = ?", (name,))
         if row is None:
-            raise UserError(t("Study \"{name}\" does not exist.").format(name=name))
+            raise UserError("E_STUDY_NOT_FOUND", name=name)
         return row[0]
 
     def delete_study(self, name: str) -> None:
@@ -307,7 +306,7 @@ class Project:
     def study_lab(self, study: str) -> Lab:
         row = self._one("SELECT l.name FROM studies s JOIN labs l ON l.id = s.lab_id WHERE s.name = ?", (study,))
         if row is None:
-            raise UserError(t("Study \"{name}\" does not exist.").format(name=study))
+            raise UserError("E_STUDY_NOT_FOUND", name=study)
         return self.get_lab(row[0])
 
     # Points ---------------------------------------------------------------------------
@@ -316,7 +315,7 @@ class Project:
             "SELECT p.id FROM points p JOIN studies s ON s.id = p.study_id WHERE s.name = ? AND p.name = ?", (study, name)
         )
         if row is None:
-            raise UserError(t("Point \"{name}\" does not exist in study \"{study}\".").format(name=name, study=study))
+            raise UserError("E_POINT_NOT_FOUND", name=name, study=study)
         return row[0]
 
     def point_names(self, study: str) -> list[str]:
@@ -326,14 +325,14 @@ class Project:
     def add_point(self, point: SamplingPoint, raw_temperature: pd.DataFrame, raw_pressure: pd.DataFrame) -> None:
         study_id = self._study_id(point.study)
         if not point.name.strip():
-            raise UserError(t("The point needs a name."))
+            raise UserError("E_POINT_NAME_REQUIRED")
         if self._one("SELECT 1 FROM points WHERE study_id = ? AND name = ?", (study_id, point.name)):
-            raise UserError(t("A point named \"{name}\" already exists in this study.").format(name=point.name))
+            raise UserError("E_POINT_EXISTS", name=point.name)
         lab = self.study_lab(point.study)
         if point.pressure_sensor not in {p.name for p in lab.pressure_sensors}:
-            raise UserError(t("Pressure sensor \"{name}\" is not in laboratory \"{lab}\".").format(name=point.pressure_sensor, lab=lab.name))
+            raise UserError("E_POINT_PRESSURE_SENSOR_UNKNOWN", name=point.pressure_sensor, lab=lab.name)
         if point.shaft not in {s.name for s in lab.shafts}:
-            raise UserError(t("Shaft \"{name}\" is not in laboratory \"{lab}\".").format(name=point.shaft, lab=lab.name))
+            raise UserError("E_POINT_SHAFT_UNKNOWN", name=point.shaft, lab=lab.name)
         with self._transaction():
             point_id = self._con.execute(
                 "INSERT INTO points (study_id, name, pressure_sensor, shaft, setup_date, measure_date, river_bed, sensor_offset, notice, scheme, created_at)"
@@ -388,7 +387,7 @@ class Project:
         point_id = self._point_id(study, name)
         frame = cleaned[CLEANED_COLUMNS]
         if frame[CLEANED_COLUMNS[1:]].isna().any().any():
-            raise UserError(t("Cleaned measures must not contain empty values."))
+            raise UserError("E_CLEANED_EMPTY_VALUES")
         with self._transaction():
             self._con.execute("DELETE FROM cleaned WHERE point_id = ?", (point_id,))
             self._con.execute("DELETE FROM computations WHERE point_id = ?", (point_id,))
@@ -438,7 +437,7 @@ class Project:
     def load_result(self, computation_id: int) -> dict[str, np.ndarray]:
         row = self._one("SELECT results FROM computations WHERE id = ?", (computation_id,))
         if row is None:
-            raise UserError(t("This computation no longer exists."))
+            raise UserError("E_COMPUTATION_NOT_FOUND")
         with np.load(io.BytesIO(row[0]), allow_pickle=False) as data:
             return {key: data[key] for key in data.files}
 

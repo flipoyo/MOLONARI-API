@@ -13,6 +13,27 @@ from __future__ import annotations
 MESSAGES: dict[str, str] = {
     # Temporaire, le temps de la migration : `UserError(texte)` sans code.
     "E_LEGACY": "{text}",
+    # storage
+    "E_CLEANED_EMPTY_VALUES": "Cleaned measures must not contain empty values.",
+    "E_COMPUTATION_NOT_FOUND": "This computation no longer exists.",
+    "E_FILE_EXISTS": "A file already exists at {path}.",
+    "E_FILE_NOT_FOUND": "File not found: {path}",
+    "E_LAB_EXISTS": "A laboratory named \"{name}\" already exists.",
+    "E_LAB_IN_USE": "This laboratory is used by: {studies}. Delete these studies first.",
+    "E_LAB_ITEM_EXISTS": "\"{name}\" already exists in this laboratory.",
+    "E_LAB_NAME_REQUIRED": "The laboratory needs a name.",
+    "E_LAB_NOT_FOUND": "Laboratory \"{name}\" does not exist.",
+    "E_POINT_EXISTS": "A point named \"{name}\" already exists in this study.",
+    "E_POINT_NAME_REQUIRED": "The point needs a name.",
+    "E_POINT_NOT_FOUND": "Point \"{name}\" does not exist in study \"{study}\".",
+    "E_POINT_PRESSURE_SENSOR_UNKNOWN": "Pressure sensor \"{name}\" is not in laboratory \"{lab}\".",
+    "E_POINT_SHAFT_UNKNOWN": "Shaft \"{name}\" is not in laboratory \"{lab}\".",
+    "E_PROJECT_INVALID": "{name} is not a Molonaviz project.",
+    "E_PROJECT_LEGACY_DATABASE": "{name} is a database from the previous Molonaviz. Use File › Import Molonaviz database to convert it.",
+    "E_PROJECT_TOO_NEW": "{name} was created by a newer version of Molonaviz. Please update the application.",
+    "E_STUDY_EXISTS": "A study named \"{name}\" already exists.",
+    "E_STUDY_NAME_REQUIRED": "The study needs a name.",
+    "E_STUDY_NOT_FOUND": "Study \"{name}\" does not exist.",
 }
 
 
