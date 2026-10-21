@@ -23,7 +23,8 @@ CODE_ARGUMENT = {"UserError": 0, "Issue": 1}
 # Méthodes qui reçoivent un code, par fichier : nom → position (appel obj.nom(...)).
 CODE_METHODS = {"twin/config.py": {"add": 1}}
 # Fonctions qui relaient un code reçu en paramètre (code non littéral admis) : fichier → noms.
-FORWARDERS = {"errors.py": {"__init__", "__new__", "_rebuild_error", "from_error"}, "twin/config.py": {"add"}}
+FORWARDERS = {"errors.py": {"__init__", "__new__", "_rebuild_error", "from_error"}, "twin/config.py": {"add"},
+              "twin/provenance.py": {"provenance_warnings"}}  # avertissements relus de metadata.json
 
 
 def fields(template: str) -> set[str]:

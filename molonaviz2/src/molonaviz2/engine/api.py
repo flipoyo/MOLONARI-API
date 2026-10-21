@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import functools
+import sys
 from collections.abc import Callable
+from pathlib import Path
 
 from .. import __version__
 from ..domain.compute import ForwardConfig, InversionConfig
@@ -11,10 +14,33 @@ from .column import ColumnInputs
 from .results import ForwardResult, InversionResult
 
 
+@functools.cache
 def engine_version() -> str:
+    """Version du code chargé : `molonaviz2 X.Y.Z[+g<commit>[.dirty]] · jax A.B.C`.
+
+    Elle entre dans chaque twin_id. Calculée une fois par processus : elle décrit le code chargé."""
+    import jax
+
+    return f"molonaviz2 {__version__}{local_suffix()} · jax {jax.__version__}"
+
+
+def release_version() -> str:
+    """Version publiée du code chargé, sans suffixe local (celle qu'il aura une fois tagué)."""
     import jax
 
     return f"molonaviz2 {__version__} · jax {jax.__version__}"
+
+
+def local_suffix() -> str:
+    """Suffixe local de la version : vide pour l'exécutable figé, sans git ou hors dépôt (voir gitinfo)."""
+    if getattr(sys, "frozen", False):
+        return ""
+    project = Path(__file__).resolve().parents[3]  # molonaviz2/src/molonaviz2/engine/api.py → molonaviz2/
+    if not (project / "pyproject.toml").is_file():  # installé hors de son dépôt
+        return ""
+    from ..gitinfo import version_suffix
+
+    return version_suffix(project, f"molonaviz2-v{__version__}")
 
 
 def device() -> str:

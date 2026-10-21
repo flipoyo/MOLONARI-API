@@ -1,6 +1,8 @@
 """Twins : validation (C1), identifiant (C2), registre et doublons (C3), exécution et résultats (C4)."""
 
+import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -9,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
-from conftest import FIXTURES
+from conftest import FIXTURES, git_run
 
 from molonaviz2.domain.compute import ForwardConfig, InversionConfig, LayerSpec
 from molonaviz2.errors import UserError
@@ -318,7 +320,7 @@ def test_mcmc_twin_is_marked_experimental(twins, point034):
     assert {"burn_in_iterations", "acceptance_mean", "rhat", "best_parameters"} <= set(results.metadata["mcmc"])
     assert (run.status.results_dir / "posterior_summary.csv").is_file()
     assert {p.name for p in run.status.results_dir.glob("*.npz")} == {"quantiles.npz", "posterior.npz", "fields_temperature.npz"}
-    assert results.results_format == "2.0.0" and results.warnings == []
+    assert results.results_format == "2.0.0" and "W_FIELD_UNAVAILABLE" not in [w.code for w in results.warnings]
     assert results.posterior["samples"].shape == (10, 7, 1, 4) and set(results.fields) == {"temperature"}
     assert results.fields["temperature"]["values"].shape[1] == 3  # aux 3 capteurs (store_fields par défaut)
     assert results.quantiles["temperature_C"].shape[0] == 3 and results.heat_flux_conductive.shape == results.temperature.shape
@@ -339,12 +341,13 @@ def as_format_1(results_dir):
 def test_results_of_format_1_are_read_with_a_warning(twins, point034):
     results_dir = run_twin(make_twin(twins, point034)).status.results_dir
     current = load_results(results_dir)
-    assert current.results_format == "2.0.0" and current.warnings == [] and current.quantiles is None and current.fields == {}
+    assert current.results_format == "2.0.0" and current.quantiles is None and current.fields == {}
+    assert "W_FIELD_UNAVAILABLE" not in [w.code for w in current.warnings]  # tmp_path hors dépôt : seulement W_PROVENANCE_*
     written = pd.read_csv(results_dir / "heat_flux_conductive.csv", index_col=0, float_precision="round_trip")
     np.testing.assert_array_equal(current.heat_flux_conductive, written.to_numpy(float))
     old = as_format_1(shutil.copytree(results_dir, twins.parent / "old"))
     previous = load_results(old)
-    assert previous.results_format == "1" and [w.code for w in previous.warnings] == ["W_FIELD_UNAVAILABLE"]
+    assert previous.results_format == "1" and previous.warnings[0].code == "W_FIELD_UNAVAILABLE"
     assert previous.heat_flux_conductive is None and previous.water_flux_field is None and previous.posterior is None
     np.testing.assert_array_equal(previous.temperature, current.temperature)
     pd.testing.assert_frame_equal(previous.flux, current.flux)
@@ -404,6 +407,124 @@ def test_mcmc_arrays_2_0_0(tmp_path, point034, store_fields, files):
         assert fields["values"].shape == (len(fields["chain"]), len(depths), len(fields["time"]))
     if "fields_water_flux.npz" in files:
         np.testing.assert_array_equal(load_npz(folder / "fields_water_flux.npz")["values"], inversion.field_water_flux)
+
+
+# Provenance --------------------------------------------------------------------------------
+
+
+def test_provenance_of_a_twin_in_a_git_repository(twins, point034):
+    import os
+    import time
+
+    folder = make_twin(twins, point034)
+    workspace = twins.parent  # contient twins/ (dépôt du twin) et .cgitsync/ (espace cgs)
+    state = workspace / ".cgitsync" / "state"
+    state.mkdir(parents=True)
+    (state / "ancien.gts").write_text("ancien")
+    (state / "recent.gts").write_text("récent")
+    os.utime(state / "ancien.gts", (time.time() - 3600, time.time() - 3600))
+    git_run(twins, "init", "-q")
+    git_run(twins, "remote", "add", "origin", "https://user:ghp_secret@github.com/org/twins.git")
+    git_run(twins, "add", "twin_01")
+    git_run(twins, "commit", "-q", "-m", "twin_01")
+    git_run(twins, "tag", "campagne-2016")
+
+    run = run_twin(folder)
+    text = (run.status.results_dir / "metadata.json").read_text()
+    assert "ghp_secret" not in text
+    provenance = json.loads(text)["provenance"]
+    twin = provenance["twin"]
+    assert twin["remote"] == "https://github.com/org/twins.git" and twin["commit"] == git_run(twins, "rev-parse", "HEAD")
+    assert twin["tags"] == ["campagne-2016"] and twin["branch"] == "main" and twin["clean"] is True and twin["path"] == "twin_01"
+    assert provenance["code"]["commit"] is not None and provenance["code"]["path"].endswith("molonaviz2")
+    environment = provenance["environment"]
+    assert all(environment[name] for name in ("python", "platform", "processor", "device", "jax", "jaxlib", "numpy"))
+    assert provenance["cgs_state_sha256"] == hashlib.sha256("récent".encode()).hexdigest()
+    assert provenance["warnings"] == [] and run.warnings == []
+
+
+def test_provenance_outside_a_repository_is_null_with_a_warning(twins, point034):
+    folder = make_twin(twins, point034)  # tmp_path n'est dans aucun dépôt
+    run = run_twin(folder)
+    provenance = json.loads((run.status.results_dir / "metadata.json").read_text())["provenance"]
+    assert provenance["twin"]["commit"] is None and provenance["twin"]["remote"] is None
+    assert provenance["warnings"] == [{"code": "W_PROVENANCE_NOT_A_REPOSITORY", "params": {"target": "twin"}}]
+    assert [(w.code, w.params) for w in run.warnings] == [("W_PROVENANCE_NOT_A_REPOSITORY", {"target": "twin"})]
+    assert "W_PROVENANCE_NOT_A_REPOSITORY" in [w.code for w in load_results(run.status.results_dir).warnings]
+
+
+def test_provenance_without_remote_or_git(twins, point034, monkeypatch):
+    from molonaviz2.twin import provenance as provenance_module
+
+    folder = make_twin(twins, point034)
+    git_run(twins, "init", "-q")
+    entry = provenance_module.twin_provenance(folder, "CPU")
+    assert entry["twin"]["remote"] is None and entry["twin"]["clean"] is False  # twin_01 non suivi
+    assert {"code": "W_PROVENANCE_NO_REMOTE", "params": {"target": "twin"}} in entry["warnings"]
+    monkeypatch.setenv("PATH", "")
+    entry = provenance_module.twin_provenance(folder, "CPU")
+    assert entry["code"]["commit"] is None and entry["twin"]["commit"] is None
+    assert entry["warnings"] == [{"code": "W_PROVENANCE_NO_GIT", "params": {}}]
+
+
+# Mode strict -------------------------------------------------------------------------------
+
+PUBLISHED = "molonaviz2 1.0.0 · jax 0.11.2"
+
+
+@pytest.mark.parametrize("version, code_version, code, twin, expected", [
+    ("1.0.0", PUBLISHED, {}, {}, []),
+    ("1.0.0-alpha.1", PUBLISHED, {}, {}, [("E_STRICT_PRERELEASE", {"version": "1.0.0-alpha.1"})]),
+    ("1.0.0", "molonaviz2 1.0.0+g0123456789ab · jax 0.11.2", {}, {}, [("E_STRICT_LOCAL_BUILD", {"version": "molonaviz2 1.0.0+g0123456789ab · jax 0.11.2"})]),
+    ("1.0.0", PUBLISHED, {"clean": False}, {}, [("E_STRICT_DIRTY", {"target": "code"})]),
+    ("1.0.0", PUBLISHED, {}, {"clean": False}, [("E_STRICT_DIRTY", {"target": "twin"})]),
+    ("1.0.0", PUBLISHED, {}, {"tags": []}, [("E_STRICT_UNTAGGED", {})]),
+    ("1.0.0", PUBLISHED, {"commit": None}, {}, [("E_STRICT_NO_PROVENANCE", {"target": "code"})]),
+    ("1.0.0", PUBLISHED, {}, {"commit": None, "tags": []}, [("E_STRICT_NO_PROVENANCE", {"target": "twin"})]),
+])
+def test_each_reason_of_strict_mode(version, code_version, code, twin, expected):
+    from molonaviz2.twin.provenance import strict_problems
+
+    published = {"commit": "0" * 40, "clean": True, "tags": ["v1"]}
+    provenance = {"code": {**published, **code}, "twin": {**published, **twin}}
+    assert [(p.code, p.params) for p in strict_problems(code_version, version, provenance)] == expected
+
+
+def test_strict_run_is_refused_with_every_reason(twins, point034):
+    folder = make_twin(twins, point034)  # hors dépôt, avec le code de la branche de travail
+    completed = subprocess.run([sys.executable, "-m", "molonaviz2", "twin", "run", "--strict", str(folder)], capture_output=True, text=True,
+                               timeout=300, check=False, env={**os.environ, "MOLONAVIZ_LANG": "en"})
+    assert completed.returncode == 1
+    assert "Strict mode: the twin was not run." in completed.stderr
+    assert "The provenance of the twin cannot be read (no git repository)." in completed.stderr
+    assert not (twins.parent / "results").exists() and not (twins / "registry.csv").exists()
+
+
+def test_strict_run_accepts_a_published_code_and_a_clean_tagged_twin(tmp_path, twins, point034, monkeypatch):
+    import molonaviz2
+    from molonaviz2.engine import api
+    from molonaviz2.twin import provenance
+
+    code = tmp_path / "code"
+    code.mkdir()
+    git_run(code, "init", "-q")
+    (code / "pyproject.toml").write_text("[project]\n")
+    git_run(code, "add", ".")
+    git_run(code, "commit", "-q", "-m", "code")
+    git_run(code, "tag", "molonaviz2-v1.0.0")
+    monkeypatch.setattr(provenance, "code_path", lambda: code)
+    monkeypatch.setattr(api, "engine_version", lambda: PUBLISHED)
+    monkeypatch.setattr(molonaviz2, "__version__", "1.0.0")
+    folder = make_twin(twins, point034)
+    git_run(twins, "init", "-q")
+    git_run(twins, "add", "twin_01")
+    git_run(twins, "commit", "-q", "-m", "twin_01")
+    with pytest.raises(UserError) as refused:
+        run_twin(folder, strict=True)
+    assert [issue.code for issue in refused.value.params["issues"]] == ["E_STRICT_UNTAGGED"]
+    git_run(twins, "tag", "campagne-2016")
+    run = run_twin(folder, strict=True)
+    assert run.computed and json.loads((run.status.results_dir / "metadata.json").read_text())["provenance"]["twin"]["tags"] == ["campagne-2016"]
 
 
 def test_listing_and_next_twin_name(twins):
@@ -493,7 +614,7 @@ def test_twin_window_warns_about_results_of_format_1(qtbot, tmp_path, twins, poi
     assert twin_window.results is not None and not twin_window.result_warnings.isHidden()
     assert "before format 2.0.0" in twin_window.result_warnings.text()
     run_twin_window = window.open_twin(run_twin(make_twin(twins, point034.iloc[:200])).status.config.folder)
-    assert run_twin_window.result_warnings.isHidden()
+    assert "before format 2.0.0" not in run_twin_window.result_warnings.text()
 
 
 def test_create_twin_from_a_computation_in_the_app(qtbot, tmp_path, twins, point034, monkeypatch):

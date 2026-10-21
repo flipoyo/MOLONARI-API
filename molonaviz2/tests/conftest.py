@@ -76,3 +76,22 @@ def pyheatmy_float64():
     ls.solver, ls.tri_product, ls.float32, ls.np, core.np = solver, tri_product, np.float64, shim, shim
     yield
     ls.solver, ls.tri_product, ls.float32, ls.np, core.np = saved
+
+
+# Dépôts git temporaires : identité et options neutres, indépendantes de la configuration git de la machine.
+GIT = ["git", "-c", "user.name=Test", "-c", "user.email=test@example.org", "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false",
+       "-c", "core.hooksPath=/dev/null", "-c", "init.defaultBranch=main"]
+
+
+def git_run(repo, *args):
+    import subprocess
+
+    return subprocess.run([*GIT, *args], cwd=repo, check=True, capture_output=True, text=True).stdout.strip()
+
+
+def commit_file(repo, name, text):
+    path = repo / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+    git_run(repo, "add", name)
+    git_run(repo, "commit", "-q", "-m", f"modifie {name}")

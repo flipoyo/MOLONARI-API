@@ -12,6 +12,35 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions : [S
 - Tags : `molonaviz2-vX.Y.Z`, posés sur `CGS-MOLO` après la fusion. La CI (`molonaviz2-version`) vérifie que le tag correspond à `pyproject.toml`.
 - La version entre dans `engine_version()`, donc dans chaque `twin_id`. Une nouvelle version donne de nouveaux identifiants, et un twin déjà calculé passe à l'état « modifié » : il faut créer un nouveau twin pour utiliser le nouveau code.
 
+## [0.5.0-alpha.1] - 2026-10-21
+
+Provenance des twins et mode `--strict` (#26).
+
+### Ajouté
+- `metadata.json["provenance"]` (#26) :
+  - **dépôt du code et dépôt du twin** : URL distante sans identifiants, commit, tags exacts, branche ou HEAD détaché, état propre ou modifié limité au chemin ;
+  - **environnement** : Python, plateforme, processeur, appareil, versions de jax, jaxlib et numpy ;
+  - **empreinte SHA-256** du `.gts` cgs le plus récent ;
+  - **avertissements** `W_PROVENANCE_NO_GIT`, `W_PROVENANCE_NOT_A_REPOSITORY` et `W_PROVENANCE_NO_REMOTE` quand une information manque. La valeur vaut alors `null`, et l'exécution continue. `twin run` et la fenêtre du twin affichent ces avertissements.
+- `molonaviz2 twin run --strict` (`run_twin(strict=True)`) refuse de calculer, avant tout calcul et en citant tous les motifs : `E_STRICT_PRERELEASE`, `E_STRICT_LOCAL_BUILD`, `E_STRICT_DIRTY`, `E_STRICT_UNTAGGED` et `E_STRICT_NO_PROVENANCE` (#26).
+- `gitinfo.py` : seule partie du code qui appelle git (#26).
+- `release_version()` : version publiée du code chargé, sans suffixe local (#26).
+
+### Modifié
+- `engine_version()` porte un suffixe local quand le code chargé vient d'un dépôt git et n'est pas exactement sa version publiée. Elle est calculée une fois par processus (#26).
+  - **Suffixes** : `+g<commit>` si le tag `molonaviz2-vX.Y.Z` est absent ou si `molonaviz2/` en diffère, et `.dirty` en plus si `molonaviz2/` a des modifications non commitées. L'exécutable, ou un code sans git, n'a pas de suffixe.
+  - **Conséquence** : sur une branche de travail, les `twin_id` diffèrent de ceux de la version publiée.
+
+### Écarts au plan
+- pyheatmy n'est pas enregistré dans la provenance : le moteur est un portage JAX qui ne l'importe pas. pyheatmy ne sert qu'aux tests de parité (`engine/reference.py`).
+- Les tags exacts sont enregistrés en liste (`tags`), car un commit peut en porter plusieurs. Une branche absente vaut `null`, avec `detached_head: true`.
+- Les fichiers non suivis (et non ignorés) rendent un dépôt « modifié ».
+- `tests/test_version.py` admet le suffixe local dans `engine_version()`.
+- Les identifiants de référence ci-dessous sont calculés avec la version sans suffixe (`release_version()`), celle du code une fois tagué. Sur la branche, `twin id` affiche d'autres identifiants.
+
+### Identifiants de référence (0.5.0-alpha.1)
+- `twin_01` et `twin_02` : `e651e9b35210336c` ; `twin_03` : `e65140bfbf71d29c` ; `twin_04` : `d8d2e8b837c9f8c6`.
+
 ## [0.4.0] - 2026-10-21
 
 Résultats de twin au format 2.0.0 et conventions des flux de chaleur (#25). Rassemble la pré-version 0.4.0-alpha.1 ci-dessous (#24).
