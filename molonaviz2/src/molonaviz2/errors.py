@@ -62,6 +62,12 @@ MESSAGES: dict[str, str] = {
     "W_ROW_MISSING_COLUMNS": "missing columns",
     "W_ROW_NOT_A_NUMBER": "not a number: \"{value}\"",
     "W_ROW_NO_DATE": "no date",
+    # processing
+    "E_CLEANED_FILE_COLUMNS": "Missing columns in the cleaned file: {cols}.",
+    "E_CLEANED_FILE_NOT_CHRONOLOGICAL": "The dates of the cleaned file are not in chronological order.",
+    "E_CLEANUP_MISSING_MEASURES": "Both temperature and pressure measurements are needed.",
+    "E_CLEANUP_NO_COMMON_DATE": "The temperature and pressure files have no date in common.",
+    "E_CLEANUP_PRESSURE_CALIBRATION": "Pressure sensor \"{name}\" has dU/dH = 0: its calibration is unusable.",
 }
 
 

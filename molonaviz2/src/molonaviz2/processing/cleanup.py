@@ -24,7 +24,6 @@ import pandas as pd
 
 from ..domain.models import CLEANED_COLUMNS, PressureSensor
 from ..errors import UserError
-from ..i18n import t
 
 VARIABLES = ["temp_bed", "t1", "t2", "t3", "t4", "pressure"]
 METHODS = ("none", "iqr", "zscore")
@@ -82,14 +81,14 @@ class CleanupResult:
 def merge_raw(raw_temperature: pd.DataFrame, raw_pressure: pd.DataFrame, sensor: PressureSensor) -> tuple[pd.DataFrame, int, int]:
     """Associe température et pression par date et calcule la charge différentielle."""
     if raw_temperature.empty or raw_pressure.empty:
-        raise UserError(t("Both temperature and pressure measurements are needed."))
+        raise UserError("E_CLEANUP_MISSING_MEASURES")
     if sensor.du_dh == 0:
-        raise UserError(t("Pressure sensor \"{name}\" has dU/dH = 0: its calibration is unusable.").format(name=sensor.name))
+        raise UserError("E_CLEANUP_PRESSURE_CALIBRATION", name=sensor.name)
     raw_temperature = raw_temperature.assign(date=pd.to_datetime(raw_temperature["date"]).astype("datetime64[ns]"))
     raw_pressure = raw_pressure.assign(date=pd.to_datetime(raw_pressure["date"]).astype("datetime64[ns]"))
     merged = raw_temperature.merge(raw_pressure, on="date", how="inner").sort_values("date").reset_index(drop=True)
     if merged.empty:
-        raise UserError(t("The temperature and pressure files have no date in common."))
+        raise UserError("E_CLEANUP_NO_COMMON_DATE")
     merged["pressure"] = sensor.differential_head(merged["voltage"], merged["temp_bed"])
     unmatched_t = len(raw_temperature) - len(merged)
     unmatched_p = len(raw_pressure) - len(merged)
@@ -148,10 +147,10 @@ def read_cleaned_csv(path) -> pd.DataFrame:
     frame = frame.rename(columns=renamed)
     missing = [c for c in CLEANED_COLUMNS if c not in frame.columns]
     if missing:
-        raise UserError(t("Missing columns in the cleaned file: {cols}.").format(cols=", ".join(missing)))
+        raise UserError("E_CLEANED_FILE_COLUMNS", cols=", ".join(missing))
     dates, _, chronological = parse_dates(frame["date"].astype(str).tolist())
     if not chronological:
-        raise UserError(t("The dates of the cleaned file are not in chronological order."))
+        raise UserError("E_CLEANED_FILE_NOT_CHRONOLOGICAL")
     frame["date"] = dates.to_numpy().astype("datetime64[ns]")
     return frame[CLEANED_COLUMNS].dropna().sort_values("date").reset_index(drop=True)
 
