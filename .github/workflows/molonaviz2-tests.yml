@@ -61,7 +61,7 @@ jobs:
           ref: CGS-MOLO
           path: pyheatmy
       # Pas de paquets système Qt : le crochet du test interdit de toute façon PySide6 au cœur, et le
-      # plugin pytest-qt, qui chargerait Qt au démarrage de pytest, est désactivé (-p no:pytestqt).
+      # plugin pytest-qt, qui chargerait Qt au démarrage de pytest, est désactivé (-p no:pytest-qt).
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.13"
@@ -70,4 +70,4 @@ jobs:
         run: uv sync
       - name: Test d'architecture
         working-directory: Molonaviz/molonaviz2
-        run: uv run pytest -p no:pytestqt tests/test_architecture.py
+        run: uv run pytest -p no:pytest-qt tests/test_architecture.py
