@@ -3,7 +3,8 @@ name: molonaviz2-tests
 # Tests de Molonaviz 2 dans la disposition de l'espace cgs MOLONARI1D :
 #   Molonaviz/ (ce dépôt), pyheatmy/ (MOLONARI-computo, dépendance locale ../../pyheatmy)
 #   et data/ (MOLONARI-data, mesures lues par les tests).
-# Job tests : suite rapide et suite slow, Qt hors écran. Job core-without-qt : seulement le test
+# Job tests : suite rapide et suite slow, sous Xvfb : sans serveur X, matplotlib refuse le backend
+# QtAgg (« headless ») que choisit ui/plots/style.py. Job core-without-qt : seulement le test
 # d'architecture (le cœur s'importe et s'exécute sans Qt ni interface).
 on:
   push:
@@ -29,8 +30,8 @@ jobs:
           repository: flipoyo/MOLONARI-data
           ref: CGS-MOLO
           path: data
-      - name: Paquets système pour Qt hors écran
-        run: sudo apt-get update && sudo apt-get install -y libegl1 libxkbcommon-x11-0 libgl1 libdbus-1-3 libfontconfig1
+      - name: Paquets système pour Qt et serveur X virtuel
+        run: sudo apt-get update && sudo apt-get install -y xvfb libegl1 libxkbcommon-x11-0 libgl1 libdbus-1-3 libfontconfig1
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.13"
@@ -41,12 +42,12 @@ jobs:
         working-directory: Molonaviz/molonaviz2
         env:
           QT_QPA_PLATFORM: offscreen
-        run: uv run pytest
+        run: xvfb-run -a uv run pytest
       - name: Tests longs (slow)
         working-directory: Molonaviz/molonaviz2
         env:
           QT_QPA_PLATFORM: offscreen
-        run: uv run pytest -m slow
+        run: xvfb-run -a uv run pytest -m slow
 
   core-without-qt:
     runs-on: ubuntu-latest
@@ -59,7 +60,8 @@ jobs:
           repository: flipoyo/MOLONARI-computo
           ref: CGS-MOLO
           path: pyheatmy
-      # Pas de paquets système Qt : le crochet du test interdit de toute façon PySide6 au cœur.
+      # Pas de paquets système Qt : le crochet du test interdit de toute façon PySide6 au cœur, et le
+      # plugin pytest-qt, qui chargerait Qt au démarrage de pytest, est désactivé (-p no:pytestqt).
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.13"
@@ -68,4 +70,4 @@ jobs:
         run: uv sync
       - name: Test d'architecture
         working-directory: Molonaviz/molonaviz2
-        run: uv run pytest tests/test_architecture.py
+        run: uv run pytest -p no:pytestqt tests/test_architecture.py
