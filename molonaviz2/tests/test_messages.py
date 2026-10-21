@@ -145,3 +145,43 @@ def test_user_error_grouping_issues(template, monkeypatch):
 def test_unknown_code_is_refused():
     with pytest.raises(KeyError):
         UserError("E_DOES_NOT_EXIST")
+
+
+# Traduction au bord ------------------------------------------------------------------------------
+
+
+def french(text: str) -> str:
+    from molonaviz2.i18n import translate
+
+    return translate(text, "fr")
+
+
+def test_render_in_english_is_the_text(template, monkeypatch):
+    from molonaviz2.i18n import render
+
+    monkeypatch.setitem(MESSAGES, "E_TEST_GROUP", "{issues}")
+    issue = Issue("data", template, prefixed=True, path="a.csv")
+    for obj in (UserError(template, path="a.csv"), issue, Issue("data", template, path="a.csv"), UserError("E_TEST_GROUP", issues=[issue, issue])):
+        assert render(obj, lambda s: s) == str(obj)
+
+
+def test_render_in_french_uses_the_catalog(template, monkeypatch):
+    from molonaviz2.i18n import render
+
+    monkeypatch.setitem(MESSAGES, "E_TEST_GROUP", "{issues}")
+    assert render(UserError(template, path="a.csv"), french) == "Fichier introuvable : a.csv"
+    issue = Issue("data.measurements", template, prefixed=True, path="a.csv")
+    assert render(issue, french) == "data.measurements: Fichier introuvable : a.csv"
+    grouped = UserError("E_TEST_GROUP", issues=[issue, Issue("x", template, path="b.csv")])
+    assert render(grouped, french) == "data.measurements: Fichier introuvable : a.csv\nFichier introuvable : b.csv"
+
+
+def test_render_delegates_to_objects_that_localize_themselves():
+    from molonaviz2.i18n import render
+
+    class Located:
+        def localized(self, tr):
+            return tr("line {n}").format(n=3)
+
+    assert render(Located(), french) == "ligne 3"
+    assert render(ValueError("boom"), french) == "boom"

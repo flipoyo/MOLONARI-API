@@ -15,6 +15,8 @@ import json
 from functools import cache
 from importlib import resources
 
+from ..errors import Issue, UserError, message_template
+
 CONTEXT = "molonaviz2"
 LANGUAGES = {"fr": "Français", "en": "English"}
 DEFAULT_LANGUAGE = "fr"
@@ -39,6 +41,27 @@ def translate(text: str, language: str) -> str:
     if language not in LANGUAGES:
         language = DEFAULT_LANGUAGE
     return load_catalog(language).get(text, text)
+
+
+def render(obj, tr) -> str:
+    """Texte traduit d'une erreur ou d'un problème du cœur, à partir de son code et de ses paramètres.
+
+    `tr` traduit un texte anglais : `t` dans l'interface, `lambda s: translate(s, langue)` en ligne de
+    commande. Avec la fonction identité, le résultat est `str(obj)`. Gère `UserError` (y compris celles
+    qui regroupent des `issues`), `Issue`, et tout objet qui sait se rendre lui-même (`localized(tr)`,
+    par exemple un problème d'import rattaché à un fichier). Un autre objet est rendu par `str`.
+    """
+    if hasattr(obj, "localized"):
+        return obj.localized(tr)
+    if isinstance(obj, UserError | Issue):
+        params = dict(obj.params)
+        if "issues" in params:
+            params["issues"] = "\n".join(render(issue, tr) for issue in params["issues"])
+        message = tr(message_template(obj.code)).format(**params)
+        if isinstance(obj, Issue) and obj.prefixed and obj.field:
+            return f"{obj.field}: {message}"
+        return message
+    return str(obj)
 
 
 def t(text: str) -> str:
