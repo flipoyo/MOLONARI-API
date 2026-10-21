@@ -166,6 +166,7 @@ class ResultsTab(QtWidgets.QWidget):
         self.histograms = FigurePanel(height=3.5)
         # Chaînes : tout passe par questions.chain_data
         self.chain_list = QtWidgets.QListWidget()
+        self.chain_list.setWordWrap(True)  # « Chaîne n — acceptation … · … réinitialisation(s) » en entier
         self.chain_list.itemChanged.connect(lambda _: self._draw_chains())
         self.display_thin = QtWidgets.QSpinBox()
         self.display_thin.setMinimum(1)
@@ -198,11 +199,12 @@ class ResultsTab(QtWidgets.QWidget):
         controls.addRow(t("From iteration"), self.iteration_from)
         controls.addRow(t("To iteration"), self.iteration_to)
         controls.addRow(self.chain_count)
-        chain_controls.setMaximumWidth(320)
+        chain_controls.setMaximumWidth(420)
         chains_page = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
         chains_page.addWidget(chain_controls)
         chains_page.addWidget(self.traces)
         chains_page.setStretchFactor(1, 1)
+        chains_page.setSizes([380, 900])
         self.parameter_views = QtWidgets.QTabWidget()
         self.parameter_views.addTab(self.histograms, t("Histograms"))
         self.chains_index = self.parameter_views.addTab(chains_page, t("Chains"))
