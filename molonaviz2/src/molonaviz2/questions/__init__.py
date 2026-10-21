@@ -10,14 +10,19 @@ from .intervals import (
     sensor_intervals,
     z_score,
 )
+from .predictive import coverage, observed_at, predictive_band, sensor_samples
 from .volumes import exchanged_volume
 
 __all__ = [
     "MEASUREMENT_LEVELS",
     "Answer",
     "Quantity",
+    "coverage",
     "exchanged_volume",
     "measurement_interval",
+    "observed_at",
+    "predictive_band",
     "sensor_intervals",
+    "sensor_samples",
     "z_score",
 ]
