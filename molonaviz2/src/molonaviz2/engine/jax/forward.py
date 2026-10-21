@@ -37,6 +37,7 @@ C_W = 4185.0
 G = 9.81
 MU = 1e-3
 LAMBDA_W = 0.6071
+HEAT_REFERENCE_C = 0.0  # température de référence du flux advectif ρw·cw·q·(T − T_ref), en °C
 ALPHA = 0.6
 EPSILON = 1e-10
 
@@ -367,7 +368,7 @@ def run_forward(inputs: ColumnInputs, layers_physical, z_lows, nb_cells: int) ->
 def to_forward_result(fields, geom: Geometry, inputs: ColumnInputs) -> ForwardResult:
     temperature = fields["temperature"]
     water_flux = fields["water_flux"]
-    advective = RHO_W * C_W * water_flux * (temperature - ZERO_CELSIUS)
+    advective = RHO_W * C_W * water_flux * (temperature - (ZERO_CELSIUS + HEAT_REFERENCE_C))
     conductive = conductive_flux(temperature, fields["lambda_m"], geom.dz)
     temperature_np = np.asarray(temperature)
     if not np.all(np.isfinite(temperature_np)) or not np.all(np.isfinite(np.asarray(water_flux))):

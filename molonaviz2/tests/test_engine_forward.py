@@ -108,3 +108,40 @@ def test_real_point034_from_files_to_model(pyheatmy_float64):
     ours, ref = api.run_forward(inputs, config), reference.forward(inputs, config)
     for name in FIELDS:
         assert max_relative(getattr(ours, name), getattr(ref, name)) < 1e-9, name
+
+
+def test_conductive_flux_down_of_a_linear_gradient():
+    """T croît vers le bas (dT/dz = 5 K/m), q = 0 : la chaleur remonte, le flux vers le bas vaut −λm·dT/dz."""
+    from molonaviz2.engine.jax.forward import conductive_flux
+    from molonaviz2.engine.results import ForwardResult
+
+    dz, cells, times = 0.01, 10, 3
+    z = (np.arange(cells) + 0.5) * dz
+    temperature = np.repeat((288.0 + 5.0 * z)[:, None], times, axis=1)
+    lambda_m = np.full(cells, 2.0)
+    upward = np.asarray(conductive_flux(temperature, lambda_m, dz))
+    zeros = np.zeros((cells, times))
+    result = ForwardResult(z, np.arange(times), temperature - 273.15, zeros, zeros, upward, np.array([1, 2, 3]), np.zeros((times, 3)), np.zeros(4))
+    np.testing.assert_allclose(result.conductive_flux_down[1:-1], -2.0 * 5.0, rtol=1e-12)
+    assert np.all(result.conductive_flux_down < 0)
+
+
+def test_advective_flux_is_relative_to_the_reference_temperature():
+    """q constant et T uniforme : flux advectif = ρw·cw·q·(T − T_ref), T_ref = 0 °C."""
+    import jax.numpy as jnp
+
+    from molonaviz2.engine.jax.forward import (
+        C_W,
+        HEAT_REFERENCE_C,
+        RHO_W,
+        build_geometry,
+        to_forward_result,
+    )
+
+    inputs = synthetic_inputs(nb_times=5)
+    geom = build_geometry(inputs, [0.4], 10)
+    fields = {"temperature": jnp.full((10, 5), 273.15 + 12.0), "water_flux": jnp.full((10, 5), 2e-6), "lambda_m": jnp.full(10, 2.0)}
+    result = to_forward_result(fields, geom, inputs)
+    assert HEAT_REFERENCE_C == 0.0
+    np.testing.assert_allclose(result.advective_flux, RHO_W * C_W * 2e-6 * (12.0 - HEAT_REFERENCE_C), rtol=1e-12)
+    np.testing.assert_allclose(result.conductive_flux_down, 0.0, atol=1e-9)

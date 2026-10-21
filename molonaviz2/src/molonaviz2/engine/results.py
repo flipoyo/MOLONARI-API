@@ -13,8 +13,8 @@ class ForwardResult:
     times: np.ndarray  # datetime64[s], (T,)
     temperature: np.ndarray  # °C, (C, T)
     water_flux: np.ndarray  # débit spécifique vertical (m·s⁻¹), positif vers le bas, (C, T)
-    advective_flux: np.ndarray  # flux de chaleur advectif vertical (W·m⁻²), (C, T)
-    conductive_flux: np.ndarray  # flux de chaleur conductif (W·m⁻²), (C, T)
+    advective_flux: np.ndarray  # flux de chaleur advectif ρw·cw·q·(T − T_ref) (W·m⁻²), positif vers le bas, (C, T)
+    conductive_flux: np.ndarray  # flux de chaleur conductif λm·∂T/∂z (W·m⁻²), positif vers le haut comme pyheatmy, (C, T)
     sensor_index: np.ndarray  # indice de cellule des 3 capteurs, (3,)
     observed: np.ndarray  # températures mesurées aux 3 capteurs (°C), (T, 3)
     rmse: np.ndarray  # RMSE par capteur puis total (°C), (4,)
@@ -26,6 +26,13 @@ class ForwardResult:
     def simulated_at_sensors(self) -> np.ndarray:
         """Températures simulées aux cellules des capteurs (°C), (T, 3)."""
         return self.temperature[self.sensor_index].T
+
+    @property
+    def conductive_flux_down(self) -> np.ndarray:
+        """Flux conductif −λm·∂T/∂z, positif vers le bas comme le flux advectif (W·m⁻²).
+
+        `conductive_flux` garde le signe de pyheatmy (λm·∂T/∂z, positif vers le haut)."""
+        return -self.conductive_flux
 
     @property
     def total_heat_flux(self) -> np.ndarray:
