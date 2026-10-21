@@ -6,8 +6,8 @@ import numpy as np
 import pytest
 from conftest import synthetic_inputs
 
-from molonaviz2.domain.compute import InversionConfig, LayerSpec
-from molonaviz2.engine.api import run_inversion
+from molonaviz2.domain.compute import ForwardConfig, InversionConfig, LayerSpec
+from molonaviz2.engine.api import run_forward, run_inversion
 from molonaviz2.errors import UserError
 from molonaviz2.questions import (
     MEASUREMENT_LEVELS,
@@ -241,3 +241,34 @@ def test_sensor_samples_without_stored_fields(tmp_path, inversions):
         with pytest.raises(UserError) as error:
             sensor_samples(result)
         assert error.value.code == "E_QUESTION_NO_FIELDS"
+
+
+@pytest.mark.slow
+def test_predictive_coverage_of_a_synthetic_column_is_close_to_its_level():
+    """Mesures = modèle direct + bruit i.i.d. σ = 0,3 ; la bande prédictive à 90 % doit couvrir 87 à 93 % des mesures.
+
+    3 capteurs × 599 dates ≈ 1 800 points : l'écart-type d'échantillonnage de la couverture vaut environ
+    0,7 %, donc ± 3 % fait plus de 4σ. Le bruit n'a pas d'autocorrélation par construction ; la
+    dépendance qui reste vient des paramètres a posteriori, partagés par tous les points.
+
+    Les paramètres sont corrélés le long d'une crête (k, n, λs, ρs·cs) : les chaînes, toutes dans le
+    même mode, la parcourent lentement et R-hat reste au-dessus de 1,2. La bande prédictive, dominée
+    par le bruit, n'en dépend presque pas (89,4 % avec 600 itérations, 89,3 % avec 4 000)."""
+    sigma, layers = 0.3, [LayerSpec("a", 0.4, neg_log10_k=11.5, porosity=0.2, lambda_s=2.5, rhos_cs=4e6)]
+    inputs = synthetic_inputs(nb_times=600, sigma_t=sigma)
+    truth = run_forward(inputs, ForwardConfig(layers, nb_cells=40)).simulated_at_sensors()
+    measured = truth + np.random.default_rng(42).normal(0.0, sigma, truth.shape)
+    measured[0] = truth[0]  # même condition initiale (profil interpolé à t0) que la vérité
+    noisy = dataclasses.replace(inputs, t_sensors=measured)
+    config = InversionConfig(layers=[LayerSpec("a", 0.4)], nb_cells=40, sigma_t=sigma, nb_chains=8, nb_iter=4000,
+                             burn_in_max=1000, fields_per_chain=50, store_fields="sensors", seed=1)
+    inversion = run_inversion(noisy, config)
+    energies = inversion.energies.mean(axis=0)
+    assert energies.max() - energies.min() < 10, energies  # toutes les chaînes dans le même mode
+
+    samples = sensor_samples(inversion).data
+    band = predictive_band(samples["temperature"].value, sigma, 0.90, seed=3).data["temperature"]
+    observed = observed_at(noisy.times, measured, samples["time"].value).data["temperature"].value
+    answer = coverage(observed[:, 1:], Quantity(band.value[:, 1:], "°C", (band.interval[0][:, 1:], band.interval[1][:, 1:])))
+    assert answer.data["points"].value == 3 * 599
+    assert 0.87 <= answer.data["coverage"].value <= 0.93, answer.data
