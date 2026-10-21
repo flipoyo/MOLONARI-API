@@ -13,6 +13,7 @@ from molonaviz2.questions import (
     MEASUREMENT_LEVELS,
     Answer,
     Quantity,
+    chain_data,
     coverage,
     exchanged_volume,
     measurement_interval,
@@ -272,3 +273,76 @@ def test_predictive_coverage_of_a_synthetic_column_is_close_to_its_level():
     answer = coverage(observed[:, 1:], Quantity(band.value[:, 1:], "°C", (band.interval[0][:, 1:], band.interval[1][:, 1:])))
     assert answer.data["points"].value == 3 * 599
     assert 0.87 <= answer.data["coverage"].value <= 0.93, answer.data
+
+
+# Données par chaîne -------------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def unthinned():
+    """7 chaînes, nb_iter = 10, thin du calcul = 1."""
+    return run_inversion(synthetic_inputs(nb_times=60), small_config(thin=1))
+
+
+def test_bn36_when_nb_iter_is_not_a_multiple_of_the_display_thin(unthinned):
+    answer = chain_data(unthinned, thin=3)
+    assert answer.data["count"].value == 7 * (10 // 3) == 21
+    np.testing.assert_array_equal(answer.data["iteration"].value, [3, 6, 9])
+    np.testing.assert_array_equal(answer.data["samples.porosity"].value, unthinned.samples[2::3, :, :, 1])
+    np.testing.assert_array_equal(answer.data["energy"].value, unthinned.energies[2::3])
+    assert answer.data["samples.lambda_s"].unit == "W·m⁻¹·K⁻¹" and answer.data["samples.lambda_s"].value.shape == (3, 7, 1)
+
+
+def test_display_thin_follows_the_thin_of_the_computation(inversions):
+    inversion = inversions["sensors"]  # nb_iter = 10, thin du calcul = 2 : itérations 2, 4, 6, 8, 10
+    assert chain_data(inversion).data["count"].value == 7 * (10 // 2)
+    answer = chain_data(inversion, thin=2)
+    assert answer.data["count"].value == 7 * (10 // (2 * 2)) == 14
+    np.testing.assert_array_equal(answer.data["iteration"].value, [4, 8])
+
+
+def test_chain_selection(unthinned):
+    answer = chain_data(unthinned, chains=[2, 0])
+    np.testing.assert_array_equal(answer.data["chain"].value, [2, 0])
+    np.testing.assert_array_equal(answer.data["samples.neg_log10_k"].value, unthinned.samples[:, [2, 0]][..., 0])
+    np.testing.assert_array_equal(answer.data["acceptance"].value, unthinned.acceptance[[2, 0]])
+    np.testing.assert_array_equal(answer.data["resets"].value, unthinned.resets[[2, 0]])
+    assert answer.data["count"].value == 2 * 10
+    assert answer.provenance["parameters"] == {"chains": [2, 0], "thin": 1, "iterations": None}
+
+
+def test_iteration_range_is_inclusive(unthinned):
+    answer = chain_data(unthinned, iterations=(4, 7))
+    np.testing.assert_array_equal(answer.data["iteration"].value, [4, 5, 6, 7])
+    np.testing.assert_array_equal(answer.data["energy"].value, unthinned.energies[3:7])
+    np.testing.assert_array_equal(chain_data(unthinned, thin=2, iterations=(5, None)).data["iteration"].value, [6, 8, 10])
+
+
+def test_chain_data_of_twin_results_match_the_inversion(tmp_path, inversions):
+    inversion = inversions["full"]
+    expected = chain_data(inversion, chains=[1, 3], thin=2).data
+    found = chain_data(twin_results(tmp_path, inversion), chains=[1, 3], thin=2).data
+    assert found.keys() == expected.keys()
+    for name in expected:
+        np.testing.assert_array_equal(found[name].value, expected[name].value)
+        assert found[name].unit == expected[name].unit
+
+
+@pytest.mark.parametrize("kwargs, code", [
+    ({"chains": [7]}, "E_QUESTION_CHAINS"),
+    ({"chains": [-1]}, "E_QUESTION_CHAINS"),
+    ({"thin": 0}, "E_QUESTION_THIN"),
+    ({"thin": 1.5}, "E_QUESTION_THIN"),
+])
+def test_chain_data_settings_are_checked(unthinned, kwargs, code):
+    with pytest.raises(UserError) as error:
+        chain_data(unthinned, **kwargs)
+    assert error.value.code == code
+
+
+def test_results_without_posterior(tmp_path, inversions):
+    results = twin_results(tmp_path, inversions["none"])
+    results = dataclasses.replace(results, posterior=None)  # mode direct, ou résultat 1.x
+    with pytest.raises(UserError) as error:
+        chain_data(results)
+    assert error.value.code == "E_QUESTION_NO_POSTERIOR"

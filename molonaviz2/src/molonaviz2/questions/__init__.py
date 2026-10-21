@@ -4,6 +4,7 @@ Partie du cœur : ni Qt, ni HTTP, ni phrase traduite. Chaque question renvoie un
 """
 
 from .answer import Answer, Quantity
+from .chains import chain_data
 from .intervals import (
     MEASUREMENT_LEVELS,
     measurement_interval,
@@ -17,6 +18,7 @@ __all__ = [
     "MEASUREMENT_LEVELS",
     "Answer",
     "Quantity",
+    "chain_data",
     "coverage",
     "exchanged_volume",
     "measurement_interval",
