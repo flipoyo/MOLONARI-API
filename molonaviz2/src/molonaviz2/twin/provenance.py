@@ -1,4 +1,4 @@
-"""Provenance d'un twin, écrite dans metadata.json["provenance"].
+"""Provenance d'un twin, écrite dans metadata.json["provenance"], et motifs du mode strict.
 
 - code : dépôt du code (qui contient molonaviz2/) ; twin : dépôt du dossier du twin. Pour chacun :
   remote sans identifiants, commit, tags exacts, branche ou HEAD détaché, état propre limité au chemin.
@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import platform
+import re
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
@@ -83,3 +84,22 @@ def provenance_warnings(provenance: dict | None) -> list[Issue]:
     """Avertissements enregistrés dans une provenance, sous forme d'Issue (pour l'affichage)."""
     return [Issue(None, w["code"], **w.get("params", {})) for w in (provenance or {}).get("warnings", [])]
 
+PRERELEASE = re.compile(r"-(alpha|beta|rc)\.\d+")
+
+
+def strict_problems(code_version: str, package_version: str, provenance: dict) -> list[Issue]:
+    """Motifs de refus du mode strict : version pré-publiée ou locale, dépôts modifiés, twin sans tag, provenance illisible."""
+    problems = []
+    if PRERELEASE.search(package_version):
+        problems.append(Issue(None, "E_STRICT_PRERELEASE", version=package_version))
+    if "+g" in code_version:
+        problems.append(Issue(None, "E_STRICT_LOCAL_BUILD", version=code_version))
+    for target in ("code", "twin"):
+        entry = provenance[target]
+        if entry["commit"] is None:
+            problems.append(Issue(None, "E_STRICT_NO_PROVENANCE", target=target))
+        elif entry["clean"] is not True:
+            problems.append(Issue(None, "E_STRICT_DIRTY", target=target))
+    if provenance["twin"]["commit"] is not None and not provenance["twin"]["tags"]:
+        problems.append(Issue(None, "E_STRICT_UNTAGGED"))
+    return problems

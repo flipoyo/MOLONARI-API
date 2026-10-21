@@ -115,6 +115,12 @@ MESSAGES: dict[str, str] = {
     "E_MODEL_NON_FINITE": "The model produced non-finite values. Check the layer parameters and the measurements.",
     # twin
     "E_NO_CLEANED_MEASURES": "No cleaned measurements yet: apply a cleaning first.",
+    "E_STRICT_DIRTY": "The {target} repository has uncommitted changes.",
+    "E_STRICT_LOCAL_BUILD": "The code ({version}) is not exactly a published version.",
+    "E_STRICT_NO_PROVENANCE": "The provenance of the {target} cannot be read (no git repository).",
+    "E_STRICT_PRERELEASE": "Version {version} is a pre-release.",
+    "E_STRICT_REFUSED": "Strict mode: the twin was not run.\n{issues}",
+    "E_STRICT_UNTAGGED": "The twin repository has no tag on its commit.",
     "E_TWIN_CODE_VERSION": "this twin was defined for \"{declared}\" but the code is \"{current}\". Create a new twin to use this code.",
     "E_TWIN_COLUMN_DEPTH": "must equal the deepest sensor depth + offset ({depth:g} m).",
     "E_TWIN_DATA_NOT_FOUND": "file not found: {path}",

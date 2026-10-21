@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -464,6 +465,66 @@ def test_provenance_without_remote_or_git(twins, point034, monkeypatch):
     entry = provenance_module.twin_provenance(folder, "CPU")
     assert entry["code"]["commit"] is None and entry["twin"]["commit"] is None
     assert entry["warnings"] == [{"code": "W_PROVENANCE_NO_GIT", "params": {}}]
+
+
+# Mode strict -------------------------------------------------------------------------------
+
+PUBLISHED = "molonaviz2 1.0.0 · jax 0.11.2"
+
+
+@pytest.mark.parametrize("version, code_version, code, twin, expected", [
+    ("1.0.0", PUBLISHED, {}, {}, []),
+    ("1.0.0-alpha.1", PUBLISHED, {}, {}, [("E_STRICT_PRERELEASE", {"version": "1.0.0-alpha.1"})]),
+    ("1.0.0", "molonaviz2 1.0.0+g0123456789ab · jax 0.11.2", {}, {}, [("E_STRICT_LOCAL_BUILD", {"version": "molonaviz2 1.0.0+g0123456789ab · jax 0.11.2"})]),
+    ("1.0.0", PUBLISHED, {"clean": False}, {}, [("E_STRICT_DIRTY", {"target": "code"})]),
+    ("1.0.0", PUBLISHED, {}, {"clean": False}, [("E_STRICT_DIRTY", {"target": "twin"})]),
+    ("1.0.0", PUBLISHED, {}, {"tags": []}, [("E_STRICT_UNTAGGED", {})]),
+    ("1.0.0", PUBLISHED, {"commit": None}, {}, [("E_STRICT_NO_PROVENANCE", {"target": "code"})]),
+    ("1.0.0", PUBLISHED, {}, {"commit": None, "tags": []}, [("E_STRICT_NO_PROVENANCE", {"target": "twin"})]),
+])
+def test_each_reason_of_strict_mode(version, code_version, code, twin, expected):
+    from molonaviz2.twin.provenance import strict_problems
+
+    published = {"commit": "0" * 40, "clean": True, "tags": ["v1"]}
+    provenance = {"code": {**published, **code}, "twin": {**published, **twin}}
+    assert [(p.code, p.params) for p in strict_problems(code_version, version, provenance)] == expected
+
+
+def test_strict_run_is_refused_with_every_reason(twins, point034):
+    folder = make_twin(twins, point034)  # hors dépôt, avec le code de la branche de travail
+    completed = subprocess.run([sys.executable, "-m", "molonaviz2", "twin", "run", "--strict", str(folder)], capture_output=True, text=True,
+                               timeout=300, check=False, env={**os.environ, "MOLONAVIZ_LANG": "en"})
+    assert completed.returncode == 1
+    assert "Strict mode: the twin was not run." in completed.stderr
+    assert "The provenance of the twin cannot be read (no git repository)." in completed.stderr
+    assert not (twins.parent / "results").exists() and not (twins / "registry.csv").exists()
+
+
+def test_strict_run_accepts_a_published_code_and_a_clean_tagged_twin(tmp_path, twins, point034, monkeypatch):
+    import molonaviz2
+    from molonaviz2.engine import api
+    from molonaviz2.twin import provenance
+
+    code = tmp_path / "code"
+    code.mkdir()
+    git_run(code, "init", "-q")
+    (code / "pyproject.toml").write_text("[project]\n")
+    git_run(code, "add", ".")
+    git_run(code, "commit", "-q", "-m", "code")
+    git_run(code, "tag", "molonaviz2-v1.0.0")
+    monkeypatch.setattr(provenance, "code_path", lambda: code)
+    monkeypatch.setattr(api, "engine_version", lambda: PUBLISHED)
+    monkeypatch.setattr(molonaviz2, "__version__", "1.0.0")
+    folder = make_twin(twins, point034)
+    git_run(twins, "init", "-q")
+    git_run(twins, "add", "twin_01")
+    git_run(twins, "commit", "-q", "-m", "twin_01")
+    with pytest.raises(UserError) as refused:
+        run_twin(folder, strict=True)
+    assert [issue.code for issue in refused.value.params["issues"]] == ["E_STRICT_UNTAGGED"]
+    git_run(twins, "tag", "campagne-2016")
+    run = run_twin(folder, strict=True)
+    assert run.computed and json.loads((run.status.results_dir / "metadata.json").read_text())["provenance"]["twin"]["tags"] == ["campagne-2016"]
 
 
 def test_listing_and_next_twin_name(twins):

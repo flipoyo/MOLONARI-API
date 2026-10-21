@@ -21,7 +21,7 @@ from pathlib import Path
 
 from ..errors import Issue, UserError
 from .config import TwinConfig, config_path, file_digest, load_twin
-from .provenance import provenance_warnings, twin_provenance
+from .provenance import provenance_warnings, strict_problems, twin_provenance
 from .registry import (
     RegistryEntry,
     append_entry,
@@ -82,7 +82,11 @@ def twin_status(path_or_config, code_version: str | None = None) -> TwinStatus:
     return TwinStatus(config, twin_id, "new")
 
 
-def run_twin(path_or_config, on_progress: Callable | None = None, should_cancel: Callable[[], bool] | None = None) -> TwinRun:
+def run_twin(path_or_config, on_progress: Callable | None = None, should_cancel: Callable[[], bool] | None = None,
+             strict: bool = False) -> TwinRun:
+    """Exécute un twin (ou renvoie le résultat existant). `strict` : refuse un code non publié ou des dépôts
+    modifiés ou non tagués (E_STRICT_REFUSED, avec tous les motifs), avant tout calcul."""
+    from .. import __version__
     from ..engine import api
 
     status = twin_status(path_or_config)
@@ -92,6 +96,12 @@ def run_twin(path_or_config, on_progress: Callable | None = None, should_cancel:
         raise UserError(
             "E_TWIN_FROZEN", name=config.name, previous=status.previous_id
         )
+    provenance = None
+    if strict:
+        provenance = twin_provenance(config.folder, api.device())
+        problems = strict_problems(api.engine_version(), __version__, provenance)
+        if problems:
+            raise UserError("E_STRICT_REFUSED", issues=problems)
     if status.has_results:
         entries = read_registry(twins_folder)
         if status.state == "duplicate" and entry_for_name(entries, config.name) is None:
@@ -112,7 +122,7 @@ def run_twin(path_or_config, on_progress: Callable | None = None, should_cancel:
 
     code_version = api.engine_version()
     device = api.device()
-    provenance = twin_provenance(config.folder, device)
+    provenance = provenance or twin_provenance(config.folder, device)
     target = results_dir(twins_folder, status.twin_id)
     partial = target.with_name(target.name + ".partial")
     if partial.exists():

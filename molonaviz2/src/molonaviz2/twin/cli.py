@@ -47,6 +47,8 @@ def main(argv: list[str]) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     for command in ("validate", "id", "run"):
         sub.add_parser(command).add_argument("twin", help="twin_xx folder or twin.yaml")
+    sub.choices["run"].add_argument("--strict", action="store_true",
+                                    help="refuse an unpublished code version or modified or untagged repositories")
     sub.add_parser("list").add_argument("folder", help="twins folder")
     args = parser.parse_args(argv)
 
@@ -69,9 +71,11 @@ def main(argv: list[str]) -> int:
                     shown.append(True)
                     print(f"  {p.phase} {p.iteration}/{p.total}    ", end="\r", flush=True)
 
-            run = run_twin(args.twin, on_progress=progress)
+            run = run_twin(args.twin, on_progress=progress, strict=args.strict)
             if shown:
                 print()  # termine la ligne de progression
+            for warning in run.warnings:
+                print(tr("Warning:"), render(warning, tr), file=sys.stderr)
             status = run.status
             if run.computed:
                 print(tr("{name} computed in {seconds:.1f} s → {folder}").format(name=status.config.name, seconds=run.duration_s, folder=status.results_dir))
