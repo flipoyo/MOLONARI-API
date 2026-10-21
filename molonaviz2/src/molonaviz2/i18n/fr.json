@@ -450,6 +450,7 @@
  "Sensor offset (Δh)": "Décalage des capteurs (Δh)",
  "Sensor {n}": "Capteur {n}",
  "Sensors": "Capteurs",
+ "Sensors t₁–t₃": "Capteurs t₁–t₃",
  "Set the prior ranges and run DREAM. Follow convergence live; cancel at any time (Esc).": "Réglez les bornes a priori et lancez DREAM. Suivez la convergence en direct ; annulez à tout moment (Échap).",
  "Several date formats in the same file: check the period above.": "Plusieurs formats de date dans le même fichier : vérifiez la période ci-dessus.",
  "Shaft": "Tige",

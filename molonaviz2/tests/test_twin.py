@@ -654,3 +654,73 @@ def test_create_twin_from_a_computation_in_the_app(qtbot, tmp_path, twins, point
     app_result = view.results_tab.forward
     twin_temperature = load_results(run.status.results_dir).temperature
     assert np.max(np.abs(twin_temperature - app_result.temperature)) < 1e-4  # mesures relues depuis le CSV (6 chiffres)
+
+
+def open_twin_window(qtbot, tmp_path, folder):
+    from PySide6 import QtCore
+
+    from molonaviz2.settings import Settings
+    from molonaviz2.ui.main_window import MainWindow
+
+    settings = Settings(QtCore.QSettings(str(tmp_path / "s.ini"), QtCore.QSettings.Format.IniFormat))
+    window = MainWindow(settings)
+    qtbot.addWidget(window)
+    return window.open_twin(folder)
+
+
+def predictive_in(twin_window):
+    return [[c for c in ax.collections if c.get_gid() == "predictive"] for ax in twin_window.sensors.figure.axes]
+
+
+def test_twin_window_draws_the_predictive_band_of_questions(qtbot, tmp_path, twins, point034):
+    from molonaviz2.questions import (
+        coverage,
+        observed_at,
+        predictive_band,
+        sensor_samples,
+    )
+    from molonaviz2.ui.predictive import PREDICTIVE_SEED
+    from molonaviz2.ui.units import measurement_level
+
+    folder = make_twin(twins, point034.iloc[:150], small_inversion_config(store_fields="sensors", time_step=2), sigma_t=0.2)
+    results = load_results(run_twin(folder).status.results_dir)
+    twin_window = open_twin_window(qtbot, tmp_path, folder)
+    assert twin_window.tabs.tabText(twin_window.sensors_index) == "Sensors t₁–t₃" and twin_window.predictive_note.isHidden()
+
+    samples = sensor_samples(results).data
+    band = predictive_band(samples["temperature"].value, 0.2, measurement_level.level, seed=PREDICTIVE_SEED).data["temperature"]
+    n = len(samples["time"].value)
+    for i, (found,) in enumerate(predictive_in(twin_window)):
+        vertices = found.get_paths()[0].vertices[:, 1]
+        np.testing.assert_array_equal(vertices[1:n + 1], band.interval[0][i])
+        np.testing.assert_array_equal(vertices[n + 2:2 * n + 2][::-1], band.interval[1][i])
+    observed = np.stack([results.residuals[f"t{i + 1}_measured"].to_numpy(float) for i in range(3)], axis=1)
+    dates = pd.to_datetime(results.residuals["date"]).to_numpy()
+    expected = coverage(observed_at(dates, observed, samples["time"].value).data["temperature"].value, band).data
+    assert expected["points"].value == 3 * n  # dates des champs = une date sur 2 des mesures
+    label = f"Predictive 90 % — {expected['coverage'].value * 100:.0f} % of measurements (n = {expected['points'].value})"
+    assert label in [text.get_text() for text in twin_window.sensors.figure.axes[0].get_legend().get_texts()]
+
+
+@pytest.mark.parametrize("kind, mention", [
+    ("format_1", "Results written before format 2.0.0"),
+    ("mcmc_without_fields", "No temperature fields were stored"),
+    ("direct", None),
+])
+def test_twin_window_explains_a_missing_predictive_band(qtbot, tmp_path, twins, point034, kind, mention):
+    if kind == "mcmc_without_fields":
+        folder = make_twin(twins, point034.iloc[:150], small_inversion_config(store_fields="none"), sigma_t=0.2)
+        run_twin(folder)
+    else:
+        folder = make_twin(twins, point034)
+        results_dir = run_twin(folder).status.results_dir
+        if kind == "format_1":
+            as_format_1(results_dir)
+    twin_window = open_twin_window(qtbot, tmp_path, folder)
+    assert twin_window.results is not None and twin_window.predictive is None
+    assert all(found == [] for found in predictive_in(twin_window))
+    assert len(twin_window.sensors.figure.axes) == 3  # mesures et simulation restent dessinées
+    if mention is None:
+        assert twin_window.predictive_note.isHidden()
+    else:
+        assert not twin_window.predictive_note.isHidden() and mention in twin_window.predictive_note.text()
