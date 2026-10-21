@@ -12,6 +12,31 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions : [S
 - Tags : `molonaviz2-vX.Y.Z`, posés sur `CGS-MOLO` après la fusion. La CI (`molonaviz2-version`) vérifie que le tag correspond à `pyproject.toml`.
 - La version entre dans `engine_version()`, donc dans chaque `twin_id`. Une nouvelle version donne de nouveaux identifiants, et un twin déjà calculé passe à l'état « modifié » : il faut créer un nouveau twin pour utiliser le nouveau code.
 
+## [0.5.0-alpha.2] - 2026-10-21
+
+Cœur des questions : volumes, intervalles, bande prédictive et données par chaîne (#27).
+
+### Ajouté
+- Paquet `questions/` dans le cœur, sans Qt ni HTTP. Chaque question renvoie une `Answer(data, provenance, warnings)`, dont `data` associe un nom à une `Quantity(value, unit, interval)`. Les deux sont des dataclasses figées (#27).
+- `exchanged_volume(times, q, area=None)` : volume d'eau échangé par la méthode des trapèzes, sur des pas de temps irréguliers. L'infiltration (≥ 0) et l'exfiltration (≤ 0, signée comme q) sont intégrées séparément, en coupant chaque intervalle au point où q change de signe. Le résultat est en m³/m², ou en m³ avec `area` (#27).
+- `sensor_intervals(observed, sigma, level)` : intervalle de mesure ± z·σ (#27).
+- `sensor_samples(result)` : échantillons de température aux 3 capteurs (S, 3, T′), depuis un résultat d'inversion ou les résultats relus d'un twin, avec des champs stockés aux capteurs ou en entier (#27).
+- `predictive_band(sensor_samples, sigma, level, seed)` : bande prédictive, c'est-à-dire les quantiles des échantillons bruités par N(0, σ²), tirés avec une graine. `coverage(observed, band)` : part des mesures dans une bande, NaN ignorés, avec le nombre de points, au total et par capteur. `observed_at(times, observed, at_times)` : mesures alignées sur les dates des champs (#27).
+- `chain_data(result, chains=None, thin=1, iterations=None)` : paramètres, énergies, acceptation et réinitialisations par chaîne, avec un `thin` d'affichage cohérent avec celui du calcul. Avec toutes les chaînes, `count` = `nb_chains × ⌊nb_iter / (thin_calcul·thin)⌋` (BN-36) (#27).
+- Codes `E_QUESTION_CHAINS`, `E_QUESTION_LEVEL`, `E_QUESTION_NO_FIELDS`, `E_QUESTION_NO_POSTERIOR`, `E_QUESTION_SHAPES`, `E_QUESTION_SIGMA`, `E_QUESTION_THIN`, `E_QUESTION_TIMES` et `W_COVERAGE_NO_POINTS`, traduits (#27).
+
+### Modifié
+- `MEASUREMENT_LEVELS`, `z_score` et `measurement_interval` passent de `ui/units.py` à `questions/intervals.py`. `ui/units.py` les réexporte, sans changement de comportement (#27).
+
+### Écarts au plan
+- `sensor_intervals` n'existait pas sous ce nom : on déplace les fonctions de l'intervalle de mesure (B1), et `sensor_intervals` les enveloppe dans une `Answer`. Le « mode D » du plan consolidé est lu comme cet intervalle de mesure.
+- Ajouts pour A6 : `sensor_samples` et `observed_at`, pour que l'interface n'ait rien à extraire ni à aligner. `chain_data` accepte aussi les résultats relus d'un twin.
+- La `provenance` d'une réponse ne contient que la question et ses paramètres. La provenance du calcul (code, twin, environnement) reste dans `metadata.json`.
+- Test de couverture (`slow`) : les paramètres de la colonne synthétique sont corrélés le long d'une crête, et R-hat reste au-dessus de 1,2 après 4 000 itérations, alors que les 8 chaînes sont dans le même mode (le test le vérifie). La couverture, dominée par le bruit, n'en dépend presque pas : 89,4 % avec 600 itérations, 89,3 % avec 4 000.
+
+### Identifiants de référence (0.5.0-alpha.2)
+- `twin_01` et `twin_02` : `31c13214a9932979` ; `twin_03` : `8177890967a15401` ; `twin_04` : `9b10240b767a1f0c`.
+
 ## [0.5.0-alpha.1] - 2026-10-21
 
 Provenance des twins et mode `--strict` (#26).
