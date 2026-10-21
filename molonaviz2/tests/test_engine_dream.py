@@ -183,7 +183,78 @@ def test_sampling_layout_is_what_the_sampler_stores(monkeypatch):
     result = run_inversion(inputs, config)
     layout = sampling_layout(config, nb_times=60)
     assert stored[0] == (layout.fields_total, layout.field_cells, layout.field_times)  # champs de température
-    assert result.samples.shape[:2] == (layout.nb_iter, layout.nb_chains)
+    assert result.samples.shape[:2] == (layout.kept, layout.nb_chains)
+
+
+@pytest.mark.slow
+def test_thinning_gives_exactly_a_subset_of_the_unthinned_result():
+    inputs = synthetic_inputs(nb_times=60)
+    full = run_inversion(inputs, small_config(thin=1))
+    thinned = run_inversion(inputs, small_config(thin=3))
+    np.testing.assert_array_equal(thinned.samples, full.samples[2::3])
+    np.testing.assert_array_equal(thinned.energies, full.energies[2::3])
+    assert thinned.thin == 3 and full.thin == 1
+
+
+def test_iterations_not_multiple_of_thin():
+    result = run_inversion(synthetic_inputs(nb_times=60), small_config(nb_iter=10, thin=3, n_field_samples=7))
+    assert result.samples.shape[0] == result.energies.shape[0] == 3  # itérations 3, 6 et 9
+    assert set(result.field_iteration) <= {3, 6, 9}
+
+
+@pytest.mark.slow
+def test_each_stored_field_is_the_direct_model_of_its_chain_and_iteration():
+    from molonaviz2.engine.jax.dream import to_physical
+
+    config = small_config(thin=2, n_field_samples=14, time_step=3)
+    sampler = DreamSampler(synthetic_inputs(nb_times=60), config)
+    result = sampler.run()
+    layout = sampling_layout(config)
+    assert result.sensor_temperature.dtype == np.float64
+    assert result.sensor_temperature.shape == (layout.fields_total, 3, len(result.field_times))
+    np.testing.assert_array_equal(result.field_chain, np.tile(np.arange(7), layout.fields_per_chain))
+    for k, (chain, iteration) in enumerate(zip(result.field_chain, result.field_iteration, strict=True)):
+        x = result.samples[iteration // result.thin - 1, chain]
+        temperature = np.asarray(sampler._forward(to_physical(jnp.asarray(x)))["temperature"])
+        expected = temperature[sampler.geom.sensor_index][:, ::3] - 273.15
+        np.testing.assert_allclose(result.sensor_temperature[k], expected, rtol=1e-12, atol=0)
+
+
+@pytest.mark.slow
+def test_resets_are_counted_per_chain(monkeypatch):
+    from molonaviz2.engine.jax import dream
+
+    inputs = synthetic_inputs(nb_times=60)
+    result = run_inversion(inputs, small_config())  # burn-in de 20 itérations : aucun contrôle des chaînes aberrantes
+    assert result.resets.shape == (7,) and not result.resets.any()
+
+    def reset_first_chain(carry, recent_energies, margin):
+        return carry, np.arange(7) == 0
+
+    monkeypatch.setattr(dream, "_reset_outlier_chains", reset_first_chain)
+    result = run_inversion(inputs, small_config(burn_in_max=100, gr_threshold=1.0001))
+    assert result.burn_in_iterations == 100
+    np.testing.assert_array_equal(result.resets, [2, 0, 0, 0, 0, 0, 0])  # contrôles à 50 et 100
+
+
+@pytest.mark.parametrize("store_fields", ["none", "sensors", "full"])
+def test_stored_fields_by_setting(store_fields):
+    config = small_config(store_fields=store_fields, space_step=2, time_step=3)
+    result = run_inversion(synthetic_inputs(nb_times=60), config)
+    layout = sampling_layout(config, nb_times=60)
+    fields, cells, times = layout.fields_total, layout.field_cells, layout.field_times
+    assert result.field_chain.shape == result.field_iteration.shape == (fields,)
+    if store_fields == "sensors":
+        assert result.sensor_temperature.shape == (fields, 3, times)
+    else:
+        assert result.sensor_temperature is None
+    if store_fields == "full":
+        assert result.field_temperature.shape == result.field_water_flux.shape == (fields, cells, times)
+        assert result.field_temperature.dtype == result.field_water_flux.dtype == np.float32
+        median = np.quantile(result.field_temperature, 0.5, axis=0)
+        np.testing.assert_allclose(median, result.quantiles[1].temperature, atol=1e-3)
+    else:
+        assert result.field_temperature is None and result.field_water_flux is None
 
 
 def test_invalid_configuration_is_rejected():

@@ -317,6 +317,7 @@ class DreamSampler:
         history: list[np.ndarray] = [np.asarray(x0)]
         energy_history: list[np.ndarray] = [np.asarray(e0)]
         burn_in, converged, rhat_max = 0, False, float("nan")
+        resets = np.zeros(n_chain, np.int64)  # réinitialisations de chaque chaîne
         while burn_in < cfg.burn_in_max:
             length = min(BURN_IN_BLOCK, cfg.burn_in_max - burn_in)
             carry, (xs, es, acc) = self._block(length, True)(carry)
@@ -329,6 +330,7 @@ class DreamSampler:
                 carry, reset = _reset_outlier_chains(
                     carry, np.stack(energy_history[len(energy_history) // 2 :]), margin=float(self.nb_layers * N_PARAM)
                 )
+            resets += reset
             if reset.any():
                 # Les chaînes replacées repartent d'un nouvel état : on oublie leur passé pour R-hat.
                 history = history[-1:]
@@ -344,22 +346,27 @@ class DreamSampler:
                 break
         del history
 
-        # Échantillonnage : paramètres à chaque itération, un champ (T, q) par chaîne à la fin de chaque bloc complet.
+        # Échantillonnage : paramètres des itérations gardées (multiples de thin, comptées à partir de 1),
+        # un champ (T, q) par chaîne à la fin de chaque bloc complet.
+        layout = sampling_layout(cfg)
         sl_space = slice(None, None, cfg.space_step)
         sl_time = slice(None, None, cfg.time_step)
         samples, energies, accepted = [], [], []
-        field_temp, field_flux = [], []
+        field_temp, field_flux, sensor_temp = [], [], []
         done = 0
-        for length, keep_field in sampling_layout(cfg).blocks():
+        for length, keep_field in layout.blocks():
             carry, (xs, es, acc) = self._block(length, False)(carry)
+            kept = (done + np.arange(1, length + 1)) % cfg.thin == 0
             done += length
-            samples.append(np.asarray(xs))
-            energies.append(np.asarray(es))
-            accepted.append(np.asarray(acc))
+            samples.append(np.asarray(xs)[kept])
+            energies.append(np.asarray(es)[kept])
+            accepted.append(np.asarray(acc)[kept])
             track_best(xs, es)
             if keep_field:
                 field_temp.append(np.asarray(carry[3][:, sl_space, sl_time], np.float32))
                 field_flux.append(np.asarray(carry[4][:, sl_space, sl_time], np.float32))
+                if cfg.store_fields == "sensors":
+                    sensor_temp.append(np.asarray(carry[3][:, self.geom.sensor_index, sl_time], np.float64) - 273.15)
             report("sampling", done, cfg.nb_iter, float(np.mean(acc)), carry[2], rhat_max)
 
         report("finalize", 0, 1, float("nan"), carry[2], rhat_max)
@@ -385,6 +392,11 @@ class DreamSampler:
             total = np.sqrt(np.nansum(per_sensor**2) / len(per_sensor))
             quantiles.append(QuantileResult(float(q), temp_q - 273.15, flux_q, np.append(per_sensor, total)))
 
+        # Provenance : le champ m·N + j vient de la chaîne j, à l'itération calculée (m + 1)·interval·thin.
+        fields_per_chain = layout.fields_per_chain
+        field_chain = np.tile(np.arange(n_chain), fields_per_chain)
+        field_iteration = np.repeat(layout.interval * cfg.thin * np.arange(1, fields_per_chain + 1), n_chain)
+        full = cfg.store_fields == "full"
         return InversionResult(
             best=best,
             best_parameters=best_x,
@@ -397,6 +409,13 @@ class DreamSampler:
             quantiles=quantiles,
             field_depths=field_depths,
             field_times=field_times,
+            thin=cfg.thin,
+            field_chain=field_chain,
+            field_iteration=field_iteration,
+            resets=resets,
+            sensor_temperature=np.concatenate(sensor_temp) if sensor_temp else None,
+            field_temperature=(temps - 273.15).astype(np.float32) if full else None,
+            field_water_flux=fluxes if full else None,
         )
 
 
