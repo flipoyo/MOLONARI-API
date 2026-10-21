@@ -9,10 +9,15 @@ anglais servant de clé dans le catalogue (`i18n.render`).
 
 from __future__ import annotations
 
+import re
+
+CODE_PATTERN = re.compile(r"^[EW]_[A-Z0-9_]+$")
+
 # Code → modèle anglais. Le modèle est aussi la clé de sa traduction dans i18n/fr.json.
 MESSAGES: dict[str, str] = {
-    # Temporaire, le temps de la migration : `UserError(texte)` sans code.
-    "E_LEGACY": "{text}",
+    # Repli de l'API Python : `UserError(texte)` sans code (texte affiché tel quel). Interdit dans le code
+    # de molonaviz2 (tests/test_messages.py), admis pour les appelants externes et les tests.
+    "E_TEXT": "{text}",
     # Erreurs qui regroupent des problèmes (paramètre issues)
     "E_SETTINGS_INVALID": "{issues}",
     "E_TWIN_CONFIG_INVALID": "{issues}",
@@ -95,6 +100,9 @@ MESSAGES: dict[str, str] = {
     "E_PRIOR_OUT_OF_BOUNDS": "Range outside the physical bounds [{low:g}, {high:g}].",
     "E_SIGMA_T_POSITIVE": "The measurement uncertainty must be positive.",
     "E_VALUE_OUT_OF_RANGE": "Value outside the physical range [{low:g}, {high:g}].",
+    # interface
+    "E_POINT_NOT_CLEANED": "Clean the measurements first (Cleaning tab).",
+    "E_POINT_SENSORS_MISSING": "The sensors of this point are no longer in laboratory \"{lab}\".",
     # engine
     "E_COLUMN_DUPLICATE_TIMES": "Measurement times must be strictly increasing (duplicate dates found).",
     "E_COLUMN_MISSING_COLUMNS": "Cleaned measures are missing columns: {cols}.",
@@ -138,10 +146,6 @@ def message_template(code: str) -> str:
     return MESSAGES[code]
 
 
-def _is_code(text: str) -> bool:
-    return len(text) > 2 and text[0] in "EW" and text[1] == "_" and all(c.isupper() or c.isdigit() or c == "_" for c in text[2:])
-
-
 def format_message(code: str, params: dict) -> str:
     """Modèle anglais du code formaté avec ses paramètres ; une liste de problèmes est jointe ligne par ligne."""
     values = {key: "\n".join(map(str, value)) if key == "issues" else value for key, value in params.items()}
@@ -154,12 +158,13 @@ class UserError(Exception):
     `UserError(code, field=None, **params)`. `str(exc)` est le message anglais formaté ; le bord le
     traduit à partir de `.code` et `.params`. Le paramètre `issues` (liste d'`Issue`) est réservé aux
     erreurs qui regroupent plusieurs problèmes. `code` et `field` sont positionnels : un paramètre de
-    message peut donc s'appeler `field`.
+    message peut donc s'appeler `field`. Un premier argument qui n'est pas un code connu est pris pour un
+    texte libre (code `E_TEXT`).
     """
 
     def __init__(self, code: str, field: str | None = None, /, **params):
-        if not _is_code(code):  # ancienne forme : texte libre (temporaire)
-            code, params = "E_LEGACY", {"text": code}
+        if code not in MESSAGES and not CODE_PATTERN.match(code):
+            code, params = "E_TEXT", {"text": code}
         self.code = code
         self.field = field
         self.params = params

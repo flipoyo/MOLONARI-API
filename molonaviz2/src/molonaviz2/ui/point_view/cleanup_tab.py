@@ -280,7 +280,7 @@ class CleanupTab(QtWidgets.QWidget):
         try:
             cleaned = read_cleaned_csv(path)
         except (UserError, ValueError, OSError) as exc:
-            report_exception(exc if isinstance(exc, UserError) else UserError(str(exc)))
+            report_exception(exc if isinstance(exc, UserError) else UserError("E_SYSTEM_ERROR", detail=str(exc)))
             return
         if self.context.stage >= PointStage.CLEANED and not ask(
             self, t("Replace the cleaned measurements"), t("This replaces the current cleaned measurements and deletes the computations of this point."), t("Replace")
@@ -292,7 +292,7 @@ class CleanupTab(QtWidgets.QWidget):
     def _export_cleaned(self) -> None:
         cleaned = self.context.project.cleaned(self.context.study, self.context.name)
         if cleaned.empty:
-            report_exception(UserError(t("No cleaned measurements yet: apply a cleaning first.")))
+            report_exception(UserError("E_NO_CLEANED_MEASURES"))
             return
         path, _ = QtWidgets.QFileDialog.getSaveFileName(self, t("Export cleaned measurements"), f"{self.context.name}_cleaned.csv", "CSV (*.csv)")
         if path:

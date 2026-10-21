@@ -9,7 +9,7 @@ from PySide6 import QtCore
 from ...domain.models import Lab, PointStage, PressureSensor, SamplingPoint, Shaft, Thermometer
 from ...engine.column import ColumnInputs
 from ...errors import UserError
-from ...i18n import N_, t
+from ...i18n import N_
 from ...storage.project import Project
 
 STAGE_LABELS = {
@@ -52,7 +52,7 @@ class PointContext(QtCore.QObject):
         pressure = next((p for p in self.lab.pressure_sensors if p.name == self.point.pressure_sensor), None)
         shaft = next((s for s in self.lab.shafts if s.name == self.point.shaft), None)
         if pressure is None or shaft is None:
-            raise UserError(t("The sensors of this point are no longer in laboratory \"{lab}\".").format(lab=self.lab.name))
+            raise UserError("E_POINT_SENSORS_MISSING", lab=self.lab.name)
         thermometer = next((th for th in self.lab.thermometers if th.name == shaft.thermometer), None)
         return Sensors(pressure, shaft, thermometer)
 
@@ -70,7 +70,7 @@ class PointContext(QtCore.QObject):
         sensors = self.sensors()
         cleaned = self.project.cleaned(self.study, self.name)
         if cleaned.empty:
-            raise UserError(t("Clean the measurements first (Cleaning tab)."))
+            raise UserError("E_POINT_NOT_CLEANED")
         return ColumnInputs.from_cleaned(cleaned, sensors.shaft.depths, self.point.offset, sensors.pressure.sigma, self.default_sigma_t())
 
     @property

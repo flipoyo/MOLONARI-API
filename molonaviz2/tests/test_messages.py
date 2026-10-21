@@ -12,11 +12,11 @@ from pathlib import Path
 
 import pytest
 
-from molonaviz2.errors import MESSAGES, Issue, UserError, message_template
+from molonaviz2.errors import CODE_PATTERN, MESSAGES, Issue, UserError, message_template
 
 SOURCE = Path(__file__).resolve().parents[1] / "src" / "molonaviz2"
 CATALOG = json.loads((SOURCE / "i18n" / "fr.json").read_text(encoding="utf-8"))
-CODE = re.compile(r"^[EW]_[A-Z0-9_]+$")
+CODE = CODE_PATTERN
 
 # Position de l'argument « code » des constructeurs.
 CODE_ARGUMENT = {"UserError": 0, "Issue": 1}
@@ -80,15 +80,12 @@ def test_codes_are_literal_and_known():
         code = code_argument(file, name, node)
         where = f"{file}:{line}"
         if isinstance(code, ast.Constant) and isinstance(code.value, str):
-            if CODE.match(code.value):
-                if code.value not in MESSAGES:
-                    problems.append(f"{where} code inconnu {code.value}")
-            elif "E_LEGACY" not in MESSAGES:
+            if not CODE.match(code.value):
                 problems.append(f"{where} {code.value!r} n'est pas un code")
+            elif code.value not in MESSAGES:
+                problems.append(f"{where} code inconnu {code.value}")
         elif function in FORWARDERS.get(file, set()):
             continue
-        elif "E_LEGACY" in MESSAGES:
-            continue  # migration en cours : texte libre encore admis
         else:
             problems.append(f"{where} code non littéral")
     assert not problems, "\n".join(problems)
@@ -147,6 +144,11 @@ def test_user_error_grouping_issues(template, monkeypatch):
 def test_unknown_code_is_refused():
     with pytest.raises(KeyError):
         UserError("E_DOES_NOT_EXIST")
+
+
+def test_free_text_falls_back_to_e_text():
+    error = UserError("Le fichier est vide.")
+    assert (error.code, error.params, str(error)) == ("E_TEXT", {"text": "Le fichier est vide."}, "Le fichier est vide.")
 
 
 # Traduction au bord ------------------------------------------------------------------------------
