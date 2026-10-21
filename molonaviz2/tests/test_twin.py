@@ -325,19 +325,24 @@ def test_mcmc_twin_is_marked_experimental(twins, point034):
     assert any(c.startswith("q_riverbed_q") for c in results.flux.columns)
 
 
+def as_format_1(results_dir):
+    """Ramène un dossier de résultats direct au format 1.x : sans les fichiers ni les clés de 2.0.0."""
+    for name in FIELD_FILES:
+        (results_dir / name).unlink()
+    metadata = json.loads((results_dir / "metadata.json").read_text())
+    for key in ("results_format", "instruments", "conventions"):
+        del metadata[key]
+    (results_dir / "metadata.json").write_text(json.dumps(metadata))
+    return results_dir
+
+
 def test_results_of_format_1_are_read_with_a_warning(twins, point034):
     results_dir = run_twin(make_twin(twins, point034)).status.results_dir
     current = load_results(results_dir)
     assert current.results_format == "2.0.0" and current.warnings == [] and current.quantiles is None and current.fields == {}
     written = pd.read_csv(results_dir / "heat_flux_conductive.csv", index_col=0, float_precision="round_trip")
     np.testing.assert_array_equal(current.heat_flux_conductive, written.to_numpy(float))
-    old = shutil.copytree(results_dir, twins.parent / "old")  # résultat 1.x : sans les fichiers ni les clés de 2.0.0
-    for name in FIELD_FILES:
-        (old / name).unlink()
-    metadata = json.loads((old / "metadata.json").read_text())
-    for key in ("results_format", "instruments", "conventions"):
-        del metadata[key]
-    (old / "metadata.json").write_text(json.dumps(metadata))
+    old = as_format_1(shutil.copytree(results_dir, twins.parent / "old"))
     previous = load_results(old)
     assert previous.results_format == "1" and [w.code for w in previous.warnings] == ["W_FIELD_UNAVAILABLE"]
     assert previous.heat_flux_conductive is None and previous.water_flux_field is None and previous.posterior is None
@@ -471,6 +476,24 @@ def test_welcome_page_lists_twins_and_window_runs_them(qtbot, tmp_path, twins, p
     assert "Duplicate of twin_01" in duplicate_window.state.text() and duplicate_window.results is not None
     ui_errors.set_presenter(previous)
     assert shown == []
+
+
+def test_twin_window_warns_about_results_of_format_1(qtbot, tmp_path, twins, point034):
+    from PySide6 import QtCore
+
+    from molonaviz2.settings import Settings
+    from molonaviz2.ui.main_window import MainWindow
+
+    folder = make_twin(twins, point034)
+    as_format_1(run_twin(folder).status.results_dir)
+    settings = Settings(QtCore.QSettings(str(tmp_path / "s.ini"), QtCore.QSettings.Format.IniFormat))
+    window = MainWindow(settings)
+    qtbot.addWidget(window)
+    twin_window = window.open_twin(folder)
+    assert twin_window.results is not None and not twin_window.result_warnings.isHidden()
+    assert "before format 2.0.0" in twin_window.result_warnings.text()
+    run_twin_window = window.open_twin(run_twin(make_twin(twins, point034.iloc[:200])).status.config.folder)
+    assert run_twin_window.result_warnings.isHidden()
 
 
 def test_create_twin_from_a_computation_in_the_app(qtbot, tmp_path, twins, point034, monkeypatch):
