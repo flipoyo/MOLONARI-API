@@ -34,7 +34,7 @@ def calls():
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         relative = path.relative_to(SOURCE).as_posix()
 
-        def visit(node, function):
+        def visit(node, function, relative=relative):
             for child in ast.iter_child_nodes(node):
                 if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
                     yield from visit(child, child.name)
@@ -130,7 +130,7 @@ def test_issue_is_a_string_with_its_code(template):
     assert (issue.code, issue.field, issue.params) == (template, "data.measurements", {"path": "a.csv"})
     prefixed = Issue("data.measurements", template, prefixed=True, path="a.csv")
     assert prefixed == "data.measurements: File not found: a.csv" and prefixed.message == "File not found: a.csv"
-    assert "measurements" in prefixed and "\n".join([prefixed, issue]).count("a.csv") == 2
+    assert "measurements" in prefixed and f"{prefixed}\n{issue}".count("a.csv") == 2
     for copied in (pickle.loads(pickle.dumps(prefixed)), copy.deepcopy(prefixed)):
         assert (copied, copied.code, copied.field, copied.prefixed) == (prefixed, template, "data.measurements", True)
 
