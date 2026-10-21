@@ -148,6 +148,30 @@ def test_invalid_configuration_is_rejected():
         run_inversion(inputs, small_config(nb_chains=5, delta=3))
 
 
+def test_older_configurations_take_the_defaults_of_the_new_settings():
+    stored = small_config().to_dict()
+    for key in ("thin", "fields_per_chain", "store_fields"):
+        del stored[key]
+    config = InversionConfig.from_dict(stored)
+    assert (config.thin, config.fields_per_chain, config.store_fields) == (1, None, "sensors")
+
+
+@pytest.mark.parametrize("overrides, code", [
+    ({"thin": 30}, None),  # thin = nb_iter : une itération gardée par chaîne
+    ({"thin": 0}, "E_MCMC_THIN"),
+    ({"thin": 31}, "E_MCMC_THIN"),
+    ({"thin": 3, "fields_per_chain": 10}, None),  # 10 itérations gardées
+    ({"thin": 3, "fields_per_chain": 11}, "E_MCMC_FIELDS_PER_CHAIN"),
+    ({"fields_per_chain": 0}, "E_MCMC_FIELDS_PER_CHAIN"),
+    ({"store_fields": "none"}, None),
+    ({"store_fields": "full"}, None),
+    ({"store_fields": "tout"}, "E_MCMC_STORE_FIELDS"),
+])
+def test_new_settings_are_checked_at_their_bounds(overrides, code):
+    codes = [issue.code for issue in small_config(**overrides).validate()]
+    assert codes == ([code] if code else [])
+
+
 @pytest.mark.slow
 def test_recovers_known_parameters_on_synthetic_column():
     """Données synthétiques bruitées (σ = 0,3 °C), paramètres connus.

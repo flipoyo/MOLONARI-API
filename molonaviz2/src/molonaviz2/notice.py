@@ -17,6 +17,7 @@ from .domain.compute import (
     PARAMETER_UNITS,
     PHYSICAL_BOUNDS,
     SETTING_LIMITS,
+    STORE_FIELDS,
     ForwardConfig,
     InversionConfig,
     LayerSpec,
@@ -73,6 +74,10 @@ class Entry:
 
 def _inversion_default(name: str) -> Callable[[], str]:
     return lambda: number(getattr(InversionConfig(layers=[]), name))
+
+
+def _store_fields_default() -> str:
+    return InversionConfig(layers=[]).store_fields
 
 
 def _setting_limits(name: str) -> Callable[[], str]:
@@ -228,6 +233,24 @@ ENTRIES: tuple[Entry, ...] = (
           N_("Keep one date out of k in the stored fields."),
           N_("It reduces the memory used for long series; the credible bands are drawn on fewer dates."),
           default=_inversion_default("time_step"), limits=_setting_limits("time_step"), twin_key="mcmc.time_step"),
+    Entry("inversion.thin", ADVANCED, N_("Thinning step (thin)"),
+          N_("Keep one iteration out of k after the burn-in, for the parameters, the energies, the acceptance and the fields."),
+          N_("Every iteration is still computed: with the same seed, the result is exactly the iterations k, 2k, 3k… of the result "
+             "without thinning. Iterations kept per chain = iterations ÷ k, rounded down; the Per chain box gives the exact numbers. "
+             "Thinning reduces the memory and the correlation between kept iterations, not the computing time."),
+          default=_inversion_default("thin"), limits=_setting_limits("thin"), twin_key="mcmc.thin"),
+    Entry("inversion.fields_per_chain", ADVANCED, N_("Fields per chain"),
+          N_("Number of fields (T, q) kept per chain; it replaces the total number of fields kept for quantiles."),
+          N_("It has no field in this tab: it is set in twin.yaml only. A twin cannot give both n_field_samples and fields_per_chain. "
+             "It cannot exceed the iterations kept per chain."),
+          unit=N_("fields"), default=lambda: t("not set: the total number of fields is used"), limits=_setting_limits("fields_per_chain"),
+          twin_key="mcmc.fields_per_chain"),
+    Entry("inversion.store_fields", ADVANCED, N_("Fields stored"),
+          N_("What the inversion stores of the sampled fields, besides the quantiles."),
+          N_("none: nothing. sensors: the temperature at the 3 sensors of each field. full: the temperature and the water flux of each "
+             "field on the sub-sampled grid, which can use a lot of memory (the Per chain box gives an estimate). Each field keeps its "
+             "chain and its iteration of origin."),
+          default=_store_fields_default, limits=lambda: ", ".join(STORE_FIELDS), twin_key="mcmc.store_fields"),
     Entry("inversion.per_chain", ADVANCED, N_("Per chain"),
           N_("What the settings give for each chain: iterations, fields kept, memory and model evaluations."),
           N_("It is computed exactly as the engine does, and updated at every change of a setting.")),
