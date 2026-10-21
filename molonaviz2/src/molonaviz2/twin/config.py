@@ -51,7 +51,7 @@ from ..domain.compute import (
     PriorRange,
 )
 from ..engine.column import ColumnInputs
-from ..errors import UserError
+from ..errors import Issue, UserError
 from ..i18n import t
 
 SCHEMA = "molonaviz-twin/1"
@@ -368,7 +368,7 @@ def load_twin(path: str | Path, check_data: bool = True) -> TwinConfig:
     if layers and column_depth is not None and nb_cells:
         engine_config = mcmc if mcmc is not None else ForwardConfig(layers, nb_cells)
         for issue in engine_config.validate(column_depth):
-            check.add(issue.field, issue.message)
+            check.issues.append(Issue.from_error(issue.field, issue, prefixed=True))
 
     declared_version = doc.get("code_version")
     if declared_version is not None:

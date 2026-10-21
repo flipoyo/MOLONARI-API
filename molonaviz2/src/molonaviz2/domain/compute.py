@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 
-from ..i18n import N_, t
+from ..errors import Issue  # aussi importable d'ici (ancien emplacement)
+from ..i18n import N_
 
 # Paramètres estimés par l'inversion, dans l'espace où les lois a priori sont uniformes.
 INVERTED_PARAMETERS = ("neg_log10_k", "porosity", "lambda_s", "rhos_cs")
@@ -104,31 +105,23 @@ def default_priors() -> dict[str, PriorRange]:
     return {name: PriorRange(p.low, p.high) for name, p in DEFAULT_PRIORS.items()}
 
 
-@dataclass
-class Issue:
-    """Problème de saisie, rattaché à un champ pour l'afficher au bon endroit."""
-
-    field: str
-    message: str
-
-
 def _validate_layers(layers: list[LayerSpec], column_depth: float | None) -> list[Issue]:
     issues: list[Issue] = []
     if not layers:
-        return [Issue("layers", t("At least one layer is required."))]
+        return [Issue("layers", "E_LAYERS_REQUIRED")]
     previous = 0.0
     for i, layer in enumerate(layers):
         prefix = f"layers[{i}]"
         if layer.z_low <= previous:
-            issues.append(Issue(f"{prefix}.z_low", t("Layer bottoms must be strictly increasing and positive.")))
+            issues.append(Issue(f"{prefix}.z_low", "E_LAYERS_ORDER"))
         previous = layer.z_low
         for name in INVERTED_PARAMETERS:
             low, high = PHYSICAL_BOUNDS[name]
             value = getattr(layer, name)
             if not low <= value <= high:
-                issues.append(Issue(f"{prefix}.{name}", t("Value outside the physical range [{low:g}, {high:g}].").format(low=low, high=high)))
+                issues.append(Issue(f"{prefix}.{name}", "E_VALUE_OUT_OF_RANGE", low=low, high=high))
     if column_depth is not None and abs(layers[-1].z_low - column_depth) > 1e-9:
-        issues.append(Issue(f"layers[{len(layers) - 1}].z_low", t("The last layer must end at the column depth ({depth:g} m).").format(depth=column_depth)))
+        issues.append(Issue(f"layers[{len(layers) - 1}].z_low", "E_LAYERS_COLUMN_DEPTH", depth=column_depth))
     return issues
 
 
@@ -140,7 +133,7 @@ class ForwardConfig:
     def validate(self, column_depth: float | None = None) -> list[Issue]:
         issues = _validate_layers(self.layers, column_depth)
         if not 10 <= self.nb_cells <= 2000:
-            issues.append(Issue("nb_cells", t("The number of cells must be between 10 and 2000.")))
+            issues.append(Issue("nb_cells", "E_NB_CELLS_RANGE"))
         return issues
 
     def to_dict(self) -> dict:
@@ -178,45 +171,45 @@ class InversionConfig:
     def validate(self, column_depth: float | None = None) -> list[Issue]:
         issues = _validate_layers(self.layers, column_depth)
         if len(self.priors) != len(self.layers):
-            issues.append(Issue("priors", t("Each layer needs its own prior ranges.")))
+            issues.append(Issue("priors", "E_PRIORS_PER_LAYER"))
         for i, priors in enumerate(self.priors):
             for name in INVERTED_PARAMETERS:
                 prior = priors.get(name)
                 key = f"priors[{i}].{name}"
                 if prior is None:
-                    issues.append(Issue(key, t("Missing prior range.")))
+                    issues.append(Issue(key, "E_PRIOR_MISSING"))
                     continue
                 low, high = PHYSICAL_BOUNDS[name]
                 if not prior.low < prior.high:
-                    issues.append(Issue(key, t("Minimum must be lower than maximum.")))
+                    issues.append(Issue(key, "E_PRIOR_ORDER"))
                 elif prior.low < low or prior.high > high:
-                    issues.append(Issue(key, t("Range outside the physical bounds [{low:g}, {high:g}].").format(low=low, high=high)))
+                    issues.append(Issue(key, "E_PRIOR_OUT_OF_BOUNDS", low=low, high=high))
         if not 10 <= self.nb_cells <= 2000:
-            issues.append(Issue("nb_cells", t("The number of cells must be between 10 and 2000.")))
+            issues.append(Issue("nb_cells", "E_NB_CELLS_RANGE"))
         if self.sigma_t <= 0:
-            issues.append(Issue("sigma_t", t("The measurement uncertainty must be positive.")))
+            issues.append(Issue("sigma_t", "E_SIGMA_T_POSITIVE"))
         if self.delta < 1:
-            issues.append(Issue("delta", t("At least one pair of chains is required.")))
+            issues.append(Issue("delta", "E_MCMC_DELTA"))
         if self.nb_chains < 2 * self.delta + 1:
-            issues.append(Issue("nb_chains", t("DREAM needs at least 2·δ + 1 = {n} chains.").format(n=2 * self.delta + 1)))
+            issues.append(Issue("nb_chains", "E_MCMC_NB_CHAINS", n=2 * self.delta + 1))
         if self.nb_iter < 1:
-            issues.append(Issue("nb_iter", t("At least one iteration is required.")))
+            issues.append(Issue("nb_iter", "E_MCMC_NB_ITER"))
         if self.burn_in_max < 2:
-            issues.append(Issue("burn_in_max", t("The burn-in needs at least 2 iterations.")))
+            issues.append(Issue("burn_in_max", "E_MCMC_BURN_IN"))
         if self.n_cr < 1:
-            issues.append(Issue("n_cr", t("At least one crossover value is required.")))
+            issues.append(Issue("n_cr", "E_MCMC_N_CR"))
         if not 0 < self.c < 1:
-            issues.append(Issue("c", t("c must be between 0 and 1.")))
+            issues.append(Issue("c", "E_MCMC_C"))
         if self.c_star <= 0:
-            issues.append(Issue("c_star", t("c* must be positive.")))
+            issues.append(Issue("c_star", "E_MCMC_C_STAR"))
         if self.gr_threshold <= 1:
-            issues.append(Issue("gr_threshold", t("The Gelman-Rubin threshold must be greater than 1.")))
+            issues.append(Issue("gr_threshold", "E_MCMC_GR_THRESHOLD"))
         if not self.quantiles or any(not 0 < q < 1 for q in self.quantiles):
-            issues.append(Issue("quantiles", t("Quantiles must be strictly between 0 and 1.")))
+            issues.append(Issue("quantiles", "E_MCMC_QUANTILES"))
         if self.n_field_samples < 2:
-            issues.append(Issue("n_field_samples", t("At least 2 field samples are required.")))
+            issues.append(Issue("n_field_samples", "E_MCMC_FIELD_SAMPLES"))
         if self.space_step < 1 or self.time_step < 1:
-            issues.append(Issue("space_step", t("Sub-sampling steps must be at least 1.")))
+            issues.append(Issue("space_step", "E_MCMC_SUBSAMPLING"))
         return issues
 
     def to_dict(self) -> dict:

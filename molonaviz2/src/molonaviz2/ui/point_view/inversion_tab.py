@@ -15,6 +15,7 @@ from ...errors import UserError
 from ...i18n import N_, t
 from ...workers.tasks import Task, TaskManager
 from ..dialogs.notice import attach
+from ..errors import error_text
 from ..plots.live import LiveMonitor
 from ..widgets import NumberField, format_number, heading, hint
 from .context import PointContext
@@ -310,7 +311,7 @@ class InversionTab(QtWidgets.QWidget):
         if quantiles is None or any(not 0 < q < 1 for q in quantiles):
             problems.append(t("Quantiles: numbers strictly between 0 and 1, separated by commas."))
         if not problems:
-            problems += [issue.message for issue in self.config().validate(self.context.column_depth)]
+            problems += [error_text(issue) for issue in self.config().validate(self.context.column_depth)]
         if self.tasks.busy:
             problems.append(t("A computation is already running."))
         self.issues.setText("\n".join(dict.fromkeys(problems)))

@@ -13,6 +13,8 @@ from __future__ import annotations
 MESSAGES: dict[str, str] = {
     # Temporaire, le temps de la migration : `UserError(texte)` sans code.
     "E_LEGACY": "{text}",
+    # Erreurs qui regroupent des problèmes (paramètre issues)
+    "E_SETTINGS_INVALID": "{issues}",
     # storage
     "E_CLEANED_EMPTY_VALUES": "Cleaned measures must not contain empty values.",
     "E_COMPUTATION_NOT_FOUND": "This computation no longer exists.",
@@ -68,6 +70,28 @@ MESSAGES: dict[str, str] = {
     "E_CLEANUP_MISSING_MEASURES": "Both temperature and pressure measurements are needed.",
     "E_CLEANUP_NO_COMMON_DATE": "The temperature and pressure files have no date in common.",
     "E_CLEANUP_PRESSURE_CALIBRATION": "Pressure sensor \"{name}\" has dU/dH = 0: its calibration is unusable.",
+    # domain
+    "E_LAYERS_COLUMN_DEPTH": "The last layer must end at the column depth ({depth:g} m).",
+    "E_LAYERS_ORDER": "Layer bottoms must be strictly increasing and positive.",
+    "E_LAYERS_REQUIRED": "At least one layer is required.",
+    "E_MCMC_BURN_IN": "The burn-in needs at least 2 iterations.",
+    "E_MCMC_C": "c must be between 0 and 1.",
+    "E_MCMC_C_STAR": "c* must be positive.",
+    "E_MCMC_DELTA": "At least one pair of chains is required.",
+    "E_MCMC_FIELD_SAMPLES": "At least 2 field samples are required.",
+    "E_MCMC_GR_THRESHOLD": "The Gelman-Rubin threshold must be greater than 1.",
+    "E_MCMC_NB_CHAINS": "DREAM needs at least 2·δ + 1 = {n} chains.",
+    "E_MCMC_NB_ITER": "At least one iteration is required.",
+    "E_MCMC_N_CR": "At least one crossover value is required.",
+    "E_MCMC_QUANTILES": "Quantiles must be strictly between 0 and 1.",
+    "E_MCMC_SUBSAMPLING": "Sub-sampling steps must be at least 1.",
+    "E_NB_CELLS_RANGE": "The number of cells must be between 10 and 2000.",
+    "E_PRIORS_PER_LAYER": "Each layer needs its own prior ranges.",
+    "E_PRIOR_MISSING": "Missing prior range.",
+    "E_PRIOR_ORDER": "Minimum must be lower than maximum.",
+    "E_PRIOR_OUT_OF_BOUNDS": "Range outside the physical bounds [{low:g}, {high:g}].",
+    "E_SIGMA_T_POSITIVE": "The measurement uncertainty must be positive.",
+    "E_VALUE_OUT_OF_RANGE": "Value outside the physical range [{low:g}, {high:g}].",
 }
 
 
@@ -134,8 +158,8 @@ class Issue(str):
         return issue
 
     @classmethod
-    def from_error(cls, field: str | None, error: UserError, prefixed: bool = False) -> Issue:
-        """Problème qui reprend le code et les paramètres d'une erreur attendue."""
+    def from_error(cls, field: str | None, error: UserError | Issue, prefixed: bool = False) -> Issue:
+        """Problème qui reprend le code et les paramètres d'une erreur attendue (ou d'un autre problème)."""
         return cls(field, error.code, prefixed=prefixed, **error.params)
 
     def __getnewargs_ex__(self):
