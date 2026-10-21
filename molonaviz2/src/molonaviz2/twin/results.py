@@ -27,7 +27,7 @@ date et la durée de l'exécution).
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -35,6 +35,7 @@ import pandas as pd
 
 from ..domain.compute import INVERTED_PARAMETERS
 from ..engine.results import ForwardResult, InversionResult
+from ..errors import Issue
 
 FLOAT_FORMAT = "%.17g"
 RESULTS_FORMAT = "2.0.0"
@@ -134,6 +135,15 @@ class TwinResults:
     flux: pd.DataFrame
     residuals: pd.DataFrame
     metadata: dict
+    # Format 2.0.0 : None (ou vide) pour un résultat 1.x, qui porte alors l'avertissement W_FIELD_UNAVAILABLE.
+    results_format: str = "1"
+    water_flux_field: np.ndarray | None = None  # (profondeurs, dates), m/s, positif vers le bas
+    heat_flux_advective: np.ndarray | None = None  # (profondeurs, dates), W/m², positif vers le bas
+    heat_flux_conductive: np.ndarray | None = None  # (profondeurs, dates), W/m², positif vers le bas
+    quantiles: dict[str, np.ndarray] | None = None  # quantiles.npz (mcmc)
+    posterior: dict[str, np.ndarray] | None = None  # posterior.npz (mcmc)
+    fields: dict[str, dict[str, np.ndarray]] = field(default_factory=dict)  # "temperature", "water_flux" : fields_*.npz
+    warnings: list[Issue] = field(default_factory=list)
 
     @property
     def sensor_depths(self) -> list[float]:
@@ -146,6 +156,8 @@ def load_results(folder: Path) -> TwinResults:
     flux = pd.read_csv(folder / "water_flux.csv", parse_dates=["date"])
     residuals = pd.read_csv(folder / "residuals.csv", parse_dates=["date"])
     metadata = json.loads((folder / "metadata.json").read_text(encoding="utf-8"))
+    results_format = str(metadata.get("results_format", "1"))
+    fields = {kind: _read_arrays(folder / f"fields_{kind}.npz") for kind in ("temperature", "water_flux")}
     return TwinResults(
         folder=folder,
         depths=temperature.index.to_numpy(float),
@@ -154,4 +166,26 @@ def load_results(folder: Path) -> TwinResults:
         flux=flux,
         residuals=residuals,
         metadata=metadata,
+        results_format=results_format,
+        water_flux_field=_read_field(folder / "water_flux_field.csv"),
+        heat_flux_advective=_read_field(folder / "heat_flux_advective.csv"),
+        heat_flux_conductive=_read_field(folder / "heat_flux_conductive.csv"),
+        quantiles=_read_arrays(folder / "quantiles.npz"),
+        posterior=_read_arrays(folder / "posterior.npz"),
+        fields={kind: arrays for kind, arrays in fields.items() if arrays is not None},
+        warnings=[] if results_format.startswith("2.") else [Issue(None, "W_FIELD_UNAVAILABLE")],
     )
+
+
+def _read_field(path: Path) -> np.ndarray | None:
+    if not path.is_file():
+        return None
+    return pd.read_csv(path, index_col=0, float_precision="round_trip").to_numpy(float)
+
+
+def _read_arrays(path: Path) -> dict[str, np.ndarray] | None:
+    """Tableaux d'un .npz, copiés en mémoire ; allow_pickle=False refuse tout objet Python."""
+    if not path.is_file():
+        return None
+    with np.load(path, allow_pickle=False) as data:
+        return {key: data[key] for key in data.files}

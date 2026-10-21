@@ -318,7 +318,31 @@ def test_mcmc_twin_is_marked_experimental(twins, point034):
     assert {"burn_in_iterations", "acceptance_mean", "rhat", "best_parameters"} <= set(results.metadata["mcmc"])
     assert (run.status.results_dir / "posterior_summary.csv").is_file()
     assert {p.name for p in run.status.results_dir.glob("*.npz")} == {"quantiles.npz", "posterior.npz", "fields_temperature.npz"}
+    assert results.results_format == "2.0.0" and results.warnings == []
+    assert results.posterior["samples"].shape == (10, 7, 1, 4) and set(results.fields) == {"temperature"}
+    assert results.fields["temperature"]["values"].shape[1] == 3  # aux 3 capteurs (store_fields par défaut)
+    assert results.quantiles["temperature_C"].shape[0] == 3 and results.heat_flux_conductive.shape == results.temperature.shape
     assert any(c.startswith("q_riverbed_q") for c in results.flux.columns)
+
+
+def test_results_of_format_1_are_read_with_a_warning(twins, point034):
+    results_dir = run_twin(make_twin(twins, point034)).status.results_dir
+    current = load_results(results_dir)
+    assert current.results_format == "2.0.0" and current.warnings == [] and current.quantiles is None and current.fields == {}
+    written = pd.read_csv(results_dir / "heat_flux_conductive.csv", index_col=0, float_precision="round_trip")
+    np.testing.assert_array_equal(current.heat_flux_conductive, written.to_numpy(float))
+    old = shutil.copytree(results_dir, twins.parent / "old")  # résultat 1.x : sans les fichiers ni les clés de 2.0.0
+    for name in FIELD_FILES:
+        (old / name).unlink()
+    metadata = json.loads((old / "metadata.json").read_text())
+    for key in ("results_format", "instruments", "conventions"):
+        del metadata[key]
+    (old / "metadata.json").write_text(json.dumps(metadata))
+    previous = load_results(old)
+    assert previous.results_format == "1" and [w.code for w in previous.warnings] == ["W_FIELD_UNAVAILABLE"]
+    assert previous.heat_flux_conductive is None and previous.water_flux_field is None and previous.posterior is None
+    np.testing.assert_array_equal(previous.temperature, current.temperature)
+    pd.testing.assert_frame_equal(previous.flux, current.flux)
 
 
 def small_inversion_config(**overrides):

@@ -406,6 +406,7 @@
  "Restore manually excluded dates ({n})": "Rétablir les dates exclues à la main ({n})",
  "Result": "Résultat",
  "Results": "Résultats",
+ "Results written before format 2.0.0: flux fields, quantiles and chains are unavailable. Create a new twin with this version to get them.": "Résultats écrits avant le format 2.0.0 : les champs de flux, les quantiles et les chaînes ne sont pas disponibles. Créez un nouveau twin avec cette version pour les obtenir.",
  "Reuse this configuration": "Réutiliser cette configuration",
  "River / pressure sensor temperature": "Température rivière / capteur de pression",
  "River / sensor ({unit})": "Rivière / capteur ({unit})",
