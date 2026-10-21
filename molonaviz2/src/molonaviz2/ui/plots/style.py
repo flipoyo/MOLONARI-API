@@ -23,6 +23,7 @@ RIVER_COLOR = "#d55e00"
 PRESSURE_COLOR = "#0072b2"
 REJECTED_COLOR = "#c0392b"
 SIMULATED_COLOR = "#444444"
+PREDICTIVE_COLOR = "#7b3294"  # bande prédictive : violet, distinct des thermomètres et du gris de la bande crédible
 CHAIN_COLORMAP = cm.tab10
 TEMPERATURE_CMAP = "viridis"
 FLUX_CMAP = "RdBu_r"

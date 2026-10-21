@@ -14,14 +14,17 @@ from ...engine.results import ForwardResult, InversionResult
 from ...i18n import t
 from ...storage.project import ComputationInfo
 from ..dialogs.notice import attach
+from ..errors import error_text
 from ..plots import posterior
 from ..plots.maps import (
     FigurePanel,
     depth_time_map,
+    predictive_band,
     profiles,
     sensor_comparison,
     time_series_with_band,
 )
+from ..predictive import try_predictive_at_sensors
 from ..units import (
     level_label,
     measurement_interval,
@@ -47,6 +50,7 @@ class ResultsTab(QtWidgets.QWidget):
         self._infos: list[ComputationInfo] = []
         self.forward: ForwardResult | None = None
         self.inversion: InversionResult | None = None
+        self.predictive = None  # PredictiveBand dessinée aux capteurs (inversion avec champs stockés)
         self.info: ComputationInfo | None = None
 
         self.selector = QtWidgets.QComboBox()
@@ -85,6 +89,8 @@ class ResultsTab(QtWidgets.QWidget):
         self.measurement_level = measurement_level.combo()
         attach(self.measurement_level, "results.measurement_level")
         self.sigma_source = hint("")
+        self.predictive_note = hint("")  # bande prédictive indisponible (pas de champs stockés)
+        self.predictive_note.hide()
         sensors_page = QtWidgets.QWidget()
         sensors_layout = QtWidgets.QVBoxLayout(sensors_page)
         sensors_layout.setContentsMargins(0, 0, 0, 0)
@@ -93,6 +99,7 @@ class ResultsTab(QtWidgets.QWidget):
         row.addWidget(self.measurement_level)
         row.addWidget(self.sigma_source, 1)
         sensors_layout.addLayout(row)
+        sensors_layout.addWidget(self.predictive_note)
         sensors_layout.addWidget(self.sensors, 1)
         temps = QtWidgets.QSplitter(QtCore.Qt.Orientation.Vertical)
         temps.addWidget(self.temperature_map)
@@ -329,6 +336,13 @@ class ResultsTab(QtWidgets.QWidget):
                 ax.fill_between(pd.to_datetime(band_times).to_numpy(), band[0][:, i], band[1][:, i], color="#444444", alpha=0.18, lw=0,
                                 label=t("Credible interval") if i == 0 else None)
             axes[0].legend(loc="upper right", fontsize=8)
+        self.predictive, error = (None, None) if self.inversion is None else try_predictive_at_sensors(
+            self.inversion, result.times, result.observed, sigma, level)
+        if self.predictive is not None:
+            predictive_band(list(axes), self.predictive.times, temperature_unit.convert(self.predictive.low),
+                            temperature_unit.convert(self.predictive.high), self.predictive.label())
+        self.predictive_note.setText("" if error is None else t("Predictive band unavailable: {reason}").format(reason=error_text(error)))
+        self.predictive_note.setVisible(error is not None)
         self.sensors.draw()
 
     def _draw_profile(self) -> None:

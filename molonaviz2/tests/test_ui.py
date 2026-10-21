@@ -546,3 +546,75 @@ def test_screenshot_is_not_blank(qtbot, window, tmp_path):
     image = window.grab().toImage()
     pixels = np.array([image.pixel(x, y) for x in range(0, image.width(), 37) for y in range(0, image.height(), 37)])
     assert len(np.unique(pixels)) > 20  # du contenu, pas un cadre vide
+
+
+# Bande prédictive et vue Chaînes (A6) ------------------------------------------------------
+
+
+def run_small_inversion(qtbot, window, view, store_fields="sensors", nb_iter=20, thin=1):
+    """Inversion courte lancée depuis l'onglet Inversion, puis affichée dans l'onglet Résultats."""
+    view.cleanup_tab.apply()
+    tab = view.inversion_tab
+    view.tabs.setCurrentIndex(view.INVERSION)
+    tab.advanced.setChecked(True)
+    for field, value in ((tab.nb_cells, 20), (tab.nb_chains, 7), (tab.nb_iter, nb_iter), (tab.burn_in_max, 20), (tab.n_field_samples, 14),
+                         (tab.thin, thin)):
+        field.set_value(value)
+    tab.store_fields.setCurrentIndex(tab.store_fields.findData(store_fields))
+    assert tab.run_button.isEnabled(), tab.issues.text()
+    tab.run()
+    wait_task(qtbot, window)
+    tab.show_results.emit(tab._last_id)
+    return view.results_tab
+
+
+def predictive_collections(results):
+    return [[c for c in ax.collections if c.get_gid() == "predictive"] for ax in results.sensors.figure.axes]
+
+
+def test_predictive_band_and_its_coverage_come_from_questions(qtbot, window):
+    from molonaviz2.questions import (
+        coverage,
+        observed_at,
+        predictive_band,
+        sensor_samples,
+    )
+    from molonaviz2.ui.predictive import PREDICTIVE_SEED
+
+    view = open_point(qtbot, window)
+    results = run_small_inversion(qtbot, window, view)
+    assert results.inversion.sensor_temperature is not None and results.predictive_note.isHidden()
+    sigma, _ = results.sigma_t()
+    samples = sensor_samples(results.inversion).data
+    band = predictive_band(samples["temperature"].value, sigma, 0.90, seed=PREDICTIVE_SEED).data["temperature"]
+    low, high = band.interval
+    collections = predictive_collections(results)
+    assert all(len(found) == 1 for found in collections)
+    n = len(samples["time"].value)
+    for i, (found,) in enumerate(collections):
+        vertices = found.get_paths()[0].vertices[:, 1]
+        np.testing.assert_array_equal(vertices[1:n + 1], low[i])  # sommets bas, dans l'ordre des dates
+        np.testing.assert_array_equal(vertices[n + 2:2 * n + 2][::-1], high[i])  # sommets hauts, en sens inverse
+
+    measured = observed_at(results.forward.times, results.forward.observed, samples["time"].value).data["temperature"].value
+    expected = coverage(measured, band).data
+    label = f"Predictive 90 % — {expected['coverage'].value * 100:.0f} % of measurements (n = {expected['points'].value})"
+    legend = [text.get_text() for text in results.sensors.figure.axes[0].get_legend().get_texts()]
+    assert label in legend and "Credible interval" in legend
+    assert results.predictive.coverage == expected["coverage"].value and results.predictive.points == expected["points"].value
+
+    results.measurement_level.setCurrentIndex(2)  # 95 % : la bande prédictive suit le niveau partagé
+    wider = predictive_band(samples["temperature"].value, sigma, 0.95, seed=PREDICTIVE_SEED).data["temperature"].interval[0]
+    vertices = predictive_collections(results)[0][0].get_paths()[0].vertices[:, 1]
+    np.testing.assert_array_equal(vertices[1:n + 1], wider[0])
+    assert any(text.get_text().startswith("Predictive 95 %") for text in results.sensors.figure.axes[0].get_legend().get_texts())
+
+
+def test_predictive_band_is_explained_when_no_field_was_stored(qtbot, window):
+    view = open_point(qtbot, window)
+    results = run_small_inversion(qtbot, window, view, store_fields="none")
+    assert not results.predictive_note.isHidden()
+    assert "No temperature fields were stored" in results.predictive_note.text()
+    assert all(found == [] for found in predictive_collections(results))
+    legend = [text.get_text() for text in results.sensors.figure.axes[0].get_legend().get_texts()]
+    assert "Credible interval" in legend and any("σT (90 %)" in label for label in legend)
