@@ -546,3 +546,122 @@ def test_screenshot_is_not_blank(qtbot, window, tmp_path):
     image = window.grab().toImage()
     pixels = np.array([image.pixel(x, y) for x in range(0, image.width(), 37) for y in range(0, image.height(), 37)])
     assert len(np.unique(pixels)) > 20  # du contenu, pas un cadre vide
+
+
+# Bande prédictive et vue Chaînes (A6) ------------------------------------------------------
+
+
+def run_small_inversion(qtbot, window, view, store_fields="sensors", nb_iter=20, thin=1):
+    """Inversion courte lancée depuis l'onglet Inversion, puis affichée dans l'onglet Résultats."""
+    view.cleanup_tab.apply()
+    tab = view.inversion_tab
+    view.tabs.setCurrentIndex(view.INVERSION)
+    tab.advanced.setChecked(True)
+    for field, value in ((tab.nb_cells, 20), (tab.nb_chains, 7), (tab.nb_iter, nb_iter), (tab.burn_in_max, 20), (tab.n_field_samples, 14),
+                         (tab.thin, thin)):
+        field.set_value(value)
+    tab.store_fields.setCurrentIndex(tab.store_fields.findData(store_fields))
+    assert tab.run_button.isEnabled(), tab.issues.text()
+    tab.run()
+    wait_task(qtbot, window)
+    tab.show_results.emit(tab._last_id)
+    return view.results_tab
+
+
+def predictive_collections(results):
+    return [[c for c in ax.collections if c.get_gid() == "predictive"] for ax in results.sensors.figure.axes]
+
+
+def test_predictive_band_and_its_coverage_come_from_questions(qtbot, window):
+    from molonaviz2.questions import (
+        coverage,
+        observed_at,
+        predictive_band,
+        sensor_samples,
+    )
+    from molonaviz2.ui.predictive import PREDICTIVE_SEED
+
+    view = open_point(qtbot, window)
+    results = run_small_inversion(qtbot, window, view)
+    assert results.inversion.sensor_temperature is not None and results.predictive_note.isHidden()
+    sigma, _ = results.sigma_t()
+    samples = sensor_samples(results.inversion).data
+    band = predictive_band(samples["temperature"].value, sigma, 0.90, seed=PREDICTIVE_SEED).data["temperature"]
+    low, high = band.interval
+    collections = predictive_collections(results)
+    assert all(len(found) == 1 for found in collections)
+    n = len(samples["time"].value)
+    for i, (found,) in enumerate(collections):
+        vertices = found.get_paths()[0].vertices[:, 1]
+        np.testing.assert_array_equal(vertices[1:n + 1], low[i])  # sommets bas, dans l'ordre des dates
+        np.testing.assert_array_equal(vertices[n + 2:2 * n + 2][::-1], high[i])  # sommets hauts, en sens inverse
+
+    measured = observed_at(results.forward.times, results.forward.observed, samples["time"].value).data["temperature"].value
+    expected = coverage(measured, band).data
+    label = f"Predictive 90 % — {expected['coverage'].value * 100:.0f} % of measurements (n = {expected['points'].value})"
+    legend = [text.get_text() for text in results.sensors.figure.axes[0].get_legend().get_texts()]
+    assert label in legend and "Credible interval" in legend
+    assert results.predictive.coverage == expected["coverage"].value and results.predictive.points == expected["points"].value
+
+    results.measurement_level.setCurrentIndex(2)  # 95 % : la bande prédictive suit le niveau partagé
+    wider = predictive_band(samples["temperature"].value, sigma, 0.95, seed=PREDICTIVE_SEED).data["temperature"].interval[0]
+    vertices = predictive_collections(results)[0][0].get_paths()[0].vertices[:, 1]
+    np.testing.assert_array_equal(vertices[1:n + 1], wider[0])
+    assert any(text.get_text().startswith("Predictive 95 %") for text in results.sensors.figure.axes[0].get_legend().get_texts())
+
+
+def test_predictive_band_is_explained_when_no_field_was_stored(qtbot, window):
+    view = open_point(qtbot, window)
+    results = run_small_inversion(qtbot, window, view, store_fields="none")
+    assert not results.predictive_note.isHidden()
+    assert "No temperature fields were stored" in results.predictive_note.text()
+    assert all(found == [] for found in predictive_collections(results))
+    legend = [text.get_text() for text in results.sensors.figure.axes[0].get_legend().get_texts()]
+    assert "Credible interval" in legend and any("σT (90 %)" in label for label in legend)
+
+
+def chain_lines(results, row=0):
+    """{chaîne: (abscisses, ordonnées)} des traces du graphe `row` de la vue Chaînes."""
+    ax = results.traces.figure.axes[row]
+    return {int(line.get_gid().removeprefix("chain-")): line.get_data() for line in ax.lines if (line.get_gid() or "").startswith("chain-")}
+
+
+def test_chains_view_selects_chains_thinning_and_iterations(qtbot, window):
+    from molonaviz2.questions import chain_data
+
+    view = open_point(qtbot, window)
+    results = run_small_inversion(qtbot, window, view, nb_iter=21, thin=1)
+    results.tabs.setCurrentIndex(results.parameters_index)
+    results.parameter_views.setCurrentIndex(results.chains_index)
+    assert len(results.traces.figure.axes) == 5  # 4 paramètres et l'énergie
+    from molonaviz2.ui.dialogs.notice import key_for
+
+    assert {key_for(w) for w in (results.chain_list, results.display_thin, results.iteration_from, results.iteration_to)} == {"results.chains"}
+    assert key_for(results.sensors.canvas) == "results.predictive_band" and key_for(results.predictive_note) == "results.predictive_band"
+    assert results.chain_list.count() == 7 and results.checked_chains() == list(range(7))
+    full = chain_data(results.inversion).data
+    for i in range(7):
+        text = results.chain_list.item(i).text()
+        assert text.startswith(f"Chain {i} — acceptance {full['acceptance'].value[i] * 100:.0f} %")
+        assert f"{int(full['resets'].value[i])} reset(s)" in text
+    lines = chain_lines(results)
+    assert sorted(lines) == list(range(7)) and all(len(x) == 21 for x, _ in lines.values())
+    np.testing.assert_array_equal(lines[3][1], full["samples.neg_log10_k"].value[:, 3, 0])
+    np.testing.assert_array_equal(chain_lines(results, row=4)[3][1], full["energy"].value[:, 3])
+    assert results.chain_count.text().startswith("147 samples shown")  # 7 × 21
+
+    results.chain_list.item(2).setCheckState(QtCore.Qt.CheckState.Unchecked)  # décocher une chaîne retire sa trace
+    for row in range(5):
+        assert 2 not in chain_lines(results, row) and len(chain_lines(results, row)) == 6
+    assert results.chain_count.text().startswith("126 samples shown")
+
+    results.display_thin.setValue(2)  # une itération gardée sur 2 : ⌊21 / 2⌋ = 10 points, itérations 2, 4…, 20
+    x, _ = chain_lines(results)[0]
+    np.testing.assert_array_equal(x, np.arange(2, 21, 2))
+    assert results.chain_count.text().startswith("60 samples shown")  # 6 × 10
+
+    results.iteration_from.setValue(5)
+    results.iteration_to.setValue(12)
+    x, y = chain_lines(results)[0]
+    np.testing.assert_array_equal(x, [6, 8, 10, 12])
+    np.testing.assert_array_equal(y, results.inversion.samples[[5, 7, 9, 11], 0, 0, 0])

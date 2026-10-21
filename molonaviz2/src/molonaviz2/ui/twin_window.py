@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from ..errors import Issue
 from ..i18n import t
 from ..twin.config import TwinConfigError, config_path
 from ..twin.results import load_results
@@ -16,9 +17,22 @@ from ..twin.run import TwinStatus, run_twin, twin_status
 from ..workers.tasks import Task, TaskManager
 from .dialogs.notice import attach
 from .errors import error_text
-from .plots.maps import FigurePanel, _date_axis, depth_time_map, robust_ylim
+from .plots.maps import (
+    FigurePanel,
+    _date_axis,
+    depth_time_map,
+    predictive_band,
+    robust_ylim,
+    sensor_comparison,
+)
 from .plots.style import RIVER_COLOR, THERMOMETER_COLORS
-from .units import level_label, measurement_level, temperature_unit
+from .predictive import try_predictive_at_sensors
+from .units import (
+    level_label,
+    measurement_interval,
+    measurement_level,
+    temperature_unit,
+)
 from .widgets import format_number, heading, hint
 
 INFILTRATION_COLOR = "#0072b2"
@@ -106,6 +120,23 @@ class TwinWindow(QtWidgets.QMainWindow):
         row.addStretch()
         residuals_layout.addLayout(row)
         residuals_layout.addWidget(self.residuals, 1)
+        self.sensors = FigurePanel(height=4.5)
+        self.predictive = None  # PredictiveBand dessinée (twin mcmc avec champs stockés)
+        self.predictive_note = hint("")  # bande prédictive indisponible : résultat 1.x, ou mcmc sans champs
+        self.predictive_note.hide()
+        attach(self.predictive_note, "results.predictive_band")
+        self.sensors.setProperty("notice_key", "results.predictive_band")  # Maj+F1 sur le graphe, sans infobulle qui le masque
+        sensors_page = QtWidgets.QWidget()
+        sensors_layout = QtWidgets.QVBoxLayout(sensors_page)
+        row = QtWidgets.QHBoxLayout()
+        row.addWidget(QtWidgets.QLabel(t("Measurement interval")))
+        sensors_level = measurement_level.combo()
+        attach(sensors_level, "results.measurement_level")
+        row.addWidget(sensors_level)
+        row.addStretch()
+        sensors_layout.addLayout(row)
+        sensors_layout.addWidget(self.predictive_note)
+        sensors_layout.addWidget(self.sensors, 1)
         self.metadata = QtWidgets.QPlainTextEdit()
         self.metadata.setReadOnly(True)
         self.metadata.setFont(QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.SystemFont.FixedFont))
@@ -116,6 +147,7 @@ class TwinWindow(QtWidgets.QMainWindow):
         flux_layout.addWidget(self.flux, 1)
         self.tabs.addTab(self.temperature, t("Temperature θ(z, t)"))
         self.tabs.addTab(flux_page, t("Water flux q(t)"))
+        self.sensors_index = self.tabs.addTab(sensors_page, t("Sensors t₁–t₃"))
         self.tabs.addTab(residuals_page, t("Residuals t₁–t₃"))
         self.tabs.addTab(self.metadata, t("Metadata"))
         self.no_results = hint(t("No results yet: run the twin."))
@@ -281,14 +313,16 @@ class TwinWindow(QtWidgets.QMainWindow):
             + ("" if low_col is None else " " + t("Grey band: credible interval (mcmc)."))
         )
 
-        figure = self.residuals.figure
-        figure.clear()
-        axes = figure.subplots(3, 1, sharex=True)
         res_dates = pd.to_datetime(results.residuals["date"]).to_numpy()
         rmse = meta.get("rmse_celsius", {})
         sigma = meta.get("config", {}).get("sensors", {}).get("sigma_temperature")
         if sigma is None and self.status is not None:
             sigma = self.status.config.sigma_temperature  # mode direct : σT n'est pas dans la config canonique
+        self._draw_sensors(res_dates, sigma, rmse)
+
+        figure = self.residuals.figure
+        figure.clear()
+        axes = figure.subplots(3, 1, sharex=True)
         for i, ax in enumerate(axes):
             values = temperature_unit.convert_difference(results.residuals[f"t{i + 1}_residual"].to_numpy(float))
             ax.plot(res_dates, values, color=THERMOMETER_COLORS[i], lw=0.9)
@@ -306,6 +340,37 @@ class TwinWindow(QtWidgets.QMainWindow):
             _date_axis(ax)
         self.residuals.draw()
         self.metadata.setPlainText(json.dumps(meta, indent=2, ensure_ascii=False))
+
+    def _draw_sensors(self, dates, sigma, rmse: dict) -> None:
+        """Mesures et simulation aux capteurs, intervalle de mesure et, pour un twin mcmc dont les champs
+        existent, bande prédictive et couverture calculées par questions."""
+        results = self.results
+        observed = np.stack([results.residuals[f"t{i + 1}_measured"].to_numpy(float) for i in range(3)], axis=1)
+        simulated = np.stack([results.residuals[f"t{i + 1}_simulated"].to_numpy(float) for i in range(3)], axis=1)
+        level = measurement_level.level
+        figure = self.sensors.figure
+        figure.clear()
+        axes = list(figure.subplots(3, 1, sharex=True))
+        measured_band = None
+        if sigma:
+            low, high = measurement_interval(observed, sigma, level)
+            measured_band = (temperature_unit.convert(low), temperature_unit.convert(high))
+        sensor_comparison(axes, dates, temperature_unit.convert(observed), temperature_unit.convert(simulated), unit=temperature_unit.unit,
+                          rmse=temperature_unit.convert_difference(np.array([rmse.get(f"t{i + 1}", np.nan) for i in range(3)], float)),
+                          measured_band=measured_band,
+                          measured_label=t("Measured ± {z} σT ({level})").format(z=format_number(round(measurement_level.z, 3)),
+                                                                                 level=level_label(level)))
+        self.predictive, note = None, None
+        if not results.results_format.startswith("2."):
+            note = Issue(None, "W_FIELD_UNAVAILABLE")
+        elif self.status is not None and self.status.config.mode == "mcmc" and sigma:
+            self.predictive, note = try_predictive_at_sensors(results, dates, observed, float(sigma), level)
+        if self.predictive is not None:
+            predictive_band(axes, self.predictive.times, temperature_unit.convert(self.predictive.low),
+                            temperature_unit.convert(self.predictive.high), self.predictive.label())
+        self.predictive_note.setText("" if note is None else t("Predictive band unavailable: {reason}").format(reason=error_text(note)))
+        self.predictive_note.setVisible(note is not None)
+        self.sensors.draw()
 
     def closeEvent(self, event) -> None:  # API Qt
         if self._task is not None:

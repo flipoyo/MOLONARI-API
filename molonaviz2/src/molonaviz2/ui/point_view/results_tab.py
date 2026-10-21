@@ -6,22 +6,28 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from PySide6 import QtCore, QtWidgets
+from matplotlib.colors import to_hex
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from ...domain.compute import ForwardConfig, InversionConfig
 from ...engine import api
 from ...engine.results import ForwardResult, InversionResult
 from ...i18n import t
+from ...questions import chain_data
 from ...storage.project import ComputationInfo
 from ..dialogs.notice import attach
+from ..errors import error_text
 from ..plots import posterior
 from ..plots.maps import (
     FigurePanel,
     depth_time_map,
+    predictive_band,
     profiles,
     sensor_comparison,
     time_series_with_band,
 )
+from ..plots.style import CHAIN_COLORMAP
+from ..predictive import try_predictive_at_sensors
 from ..units import (
     level_label,
     measurement_interval,
@@ -47,6 +53,7 @@ class ResultsTab(QtWidgets.QWidget):
         self._infos: list[ComputationInfo] = []
         self.forward: ForwardResult | None = None
         self.inversion: InversionResult | None = None
+        self.predictive = None  # PredictiveBand dessinée aux capteurs (inversion avec champs stockés)
         self.info: ComputationInfo | None = None
 
         self.selector = QtWidgets.QComboBox()
@@ -85,6 +92,10 @@ class ResultsTab(QtWidgets.QWidget):
         self.measurement_level = measurement_level.combo()
         attach(self.measurement_level, "results.measurement_level")
         self.sigma_source = hint("")
+        self.predictive_note = hint("")  # bande prédictive indisponible (pas de champs stockés)
+        self.predictive_note.hide()
+        attach(self.predictive_note, "results.predictive_band")
+        self.sensors.setProperty("notice_key", "results.predictive_band")  # Maj+F1 sur le graphe, sans infobulle qui le masque
         sensors_page = QtWidgets.QWidget()
         sensors_layout = QtWidgets.QVBoxLayout(sensors_page)
         sensors_layout.setContentsMargins(0, 0, 0, 0)
@@ -93,6 +104,7 @@ class ResultsTab(QtWidgets.QWidget):
         row.addWidget(self.measurement_level)
         row.addWidget(self.sigma_source, 1)
         sensors_layout.addLayout(row)
+        sensors_layout.addWidget(self.predictive_note)
         sensors_layout.addWidget(self.sensors, 1)
         temps = QtWidgets.QSplitter(QtCore.Qt.Orientation.Vertical)
         temps.addWidget(self.temperature_map)
@@ -152,7 +164,21 @@ class ResultsTab(QtWidgets.QWidget):
         self.bins.setValue(40)
         self.bins.valueChanged.connect(self._draw_parameters)
         self.histograms = FigurePanel(height=3.5)
-        self.traces = FigurePanel(height=4)
+        # Chaînes : tout passe par questions.chain_data
+        self.chain_list = QtWidgets.QListWidget()
+        self.chain_list.setWordWrap(True)  # « Chaîne n — acceptation … · … réinitialisation(s) » en entier
+        self.chain_list.itemChanged.connect(lambda _: self._draw_chains())
+        self.display_thin = QtWidgets.QSpinBox()
+        self.display_thin.setMinimum(1)
+        self.display_thin.valueChanged.connect(self._draw_chains)
+        self.iteration_from = QtWidgets.QSpinBox()
+        self.iteration_to = QtWidgets.QSpinBox()
+        for box in (self.iteration_from, self.iteration_to):
+            box.valueChanged.connect(self._draw_chains)
+        self.chain_count = hint("")
+        for widget in (self.chain_list, self.display_thin, self.iteration_from, self.iteration_to):
+            attach(widget, "results.chains")
+        self.traces = FigurePanel(height=5)
         parameters_page = QtWidgets.QWidget()
         parameters_layout = QtWidgets.QVBoxLayout(parameters_page)
         parameters_layout.addWidget(hint(t("Best: lowest-energy parameters · HDI 90 %: highest density interval · ESS: effective sample size · R-hat: convergence (≤ 1.01 is good)")))
@@ -165,10 +191,24 @@ class ResultsTab(QtWidgets.QWidget):
         row.addWidget(self.bins)
         row.addStretch()
         parameters_layout.addLayout(row)
-        split = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
-        split.addWidget(self.histograms)
-        split.addWidget(self.traces)
-        parameters_layout.addWidget(split, 1)
+        chain_controls = QtWidgets.QWidget()
+        controls = QtWidgets.QFormLayout(chain_controls)
+        controls.setContentsMargins(0, 0, 0, 0)
+        controls.addRow(self.chain_list)
+        controls.addRow(t("Display thinning"), self.display_thin)
+        controls.addRow(t("From iteration"), self.iteration_from)
+        controls.addRow(t("To iteration"), self.iteration_to)
+        controls.addRow(self.chain_count)
+        chain_controls.setMaximumWidth(420)
+        chains_page = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
+        chains_page.addWidget(chain_controls)
+        chains_page.addWidget(self.traces)
+        chains_page.setStretchFactor(1, 1)
+        chains_page.setSizes([380, 900])
+        self.parameter_views = QtWidgets.QTabWidget()
+        self.parameter_views.addTab(self.histograms, t("Histograms"))
+        self.chains_index = self.parameter_views.addTab(chains_page, t("Chains"))
+        parameters_layout.addWidget(self.parameter_views, 1)
         self.parameters_index = self.tabs.addTab(parameters_page, t("Parameters"))
 
         self.empty = hint(t("No computation yet for this point. Run the direct model or an inversion first."))
@@ -261,6 +301,7 @@ class ResultsTab(QtWidgets.QWidget):
             }
             self.summary_model.set_frame(table.reset_index(names="parameter"))
             self.summary_view.resizeColumnsToContents()
+            self._fill_chain_controls()
         self._draw_all()
 
     def _layer_names(self) -> list[str]:
@@ -329,6 +370,13 @@ class ResultsTab(QtWidgets.QWidget):
                 ax.fill_between(pd.to_datetime(band_times).to_numpy(), band[0][:, i], band[1][:, i], color="#444444", alpha=0.18, lw=0,
                                 label=t("Credible interval") if i == 0 else None)
             axes[0].legend(loc="upper right", fontsize=8)
+        self.predictive, error = (None, None) if self.inversion is None else try_predictive_at_sensors(
+            self.inversion, result.times, result.observed, sigma, level)
+        if self.predictive is not None:
+            predictive_band(list(axes), self.predictive.times, temperature_unit.convert(self.predictive.low),
+                            temperature_unit.convert(self.predictive.high), self.predictive.label())
+        self.predictive_note.setText("" if error is None else t("Predictive band unavailable: {reason}").format(reason=error_text(error)))
+        self.predictive_note.setVisible(error is not None)
         self.sensors.draw()
 
     def _draw_profile(self) -> None:
@@ -404,8 +452,50 @@ class ResultsTab(QtWidgets.QWidget):
         layer = max(self.layer_choice.currentIndex(), 0)
         posterior.histograms(self.histograms.figure, self.inversion, layer, self.bins.value())
         self.histograms.draw()
-        posterior.traces(self.traces.figure, self.inversion, layer)
+        self._draw_chains()
+
+    def _fill_chain_controls(self) -> None:
+        """Liste des chaînes (acceptation, réinitialisations), thin d'affichage et plage d'itérations du calcul choisi."""
+        everything = chain_data(self.inversion).data
+        iterations = everything["iteration"].value
+        widgets = (self.chain_list, self.display_thin, self.iteration_from, self.iteration_to)
+        for widget in widgets:
+            widget.blockSignals(True)
+        self.chain_list.clear()
+        for chain, acceptance, resets in zip(everything["chain"].value, everything["acceptance"].value, everything["resets"].value):
+            item = QtWidgets.QListWidgetItem(t("Chain {n} — acceptance {acceptance} · {resets} reset(s)").format(
+                n=int(chain), acceptance=f"{float(acceptance) * 100:.0f} %", resets=int(resets)))
+            item.setData(QtCore.Qt.ItemDataRole.UserRole, int(chain))
+            item.setFlags(item.flags() | QtCore.Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(QtCore.Qt.CheckState.Checked)
+            color = QtGui.QPixmap(12, 12)
+            color.fill(QtGui.QColor(to_hex(CHAIN_COLORMAP(int(chain) % 10))))
+            item.setIcon(QtGui.QIcon(color))
+            self.chain_list.addItem(item)
+        self.display_thin.setRange(1, max(len(iterations), 1))
+        self.display_thin.setValue(1)
+        first, last = (int(iterations[0]), int(iterations[-1])) if len(iterations) else (0, 0)
+        step = int(iterations[1] - iterations[0]) if len(iterations) > 1 else 1
+        for box, value in ((self.iteration_from, first), (self.iteration_to, last)):
+            box.setRange(first, last)
+            box.setSingleStep(step)
+            box.setValue(value)
+        for widget in widgets:
+            widget.blockSignals(False)
+
+    def checked_chains(self) -> list[int]:
+        items = (self.chain_list.item(i) for i in range(self.chain_list.count()))
+        return [item.data(QtCore.Qt.ItemDataRole.UserRole) for item in items if item.checkState() == QtCore.Qt.CheckState.Checked]
+
+    def _draw_chains(self) -> None:
+        if self.inversion is None:
+            return
+        answer = chain_data(self.inversion, chains=self.checked_chains(), thin=self.display_thin.value(),
+                            iterations=(self.iteration_from.value(), self.iteration_to.value()))
+        posterior.chain_traces(self.traces.figure, answer, max(self.layer_choice.currentIndex(), 0))
         self.traces.draw()
+        self.chain_count.setText(t("{count} samples shown ({chains} chains × {iterations} iterations)").format(
+            count=answer.data["count"].value, chains=len(answer.data["chain"].value), iterations=len(answer.data["iteration"].value)))
 
     # Actions --------------------------------------------------------------------------
     def _reuse(self) -> None:

@@ -20,6 +20,7 @@ from PySide6 import QtWidgets
 from ...i18n import t
 from .style import (
     FLUX_CMAP,
+    PREDICTIVE_COLOR,
     SIMULATED_COLOR,
     TEMPERATURE_CMAP,
     THERMOMETER_COLORS,
@@ -122,6 +123,18 @@ def sensor_comparison(ax_list, times, observed, simulated, band=None, unit="°C"
         ax.set_title(title, fontsize=9, loc="left")
         ax.set_ylabel(unit)
         _date_axis(ax)
+    ax_list[0].legend(loc="upper right", fontsize=8)
+
+
+def predictive_band(ax_list, times, low, high, label: str) -> None:
+    """Bande prédictive (bas, haut) de forme (T′, 3) aux 3 capteurs, en contour pour laisser voir les autres bandes.
+
+    La collection porte le gid « predictive », et la légende du premier graphe donne `label`."""
+    times = pd.to_datetime(times).to_numpy()
+    for i, ax in enumerate(ax_list):
+        band = ax.fill_between(times, low[:, i], high[:, i], facecolor=PREDICTIVE_COLOR, alpha=0.12, edgecolor=PREDICTIVE_COLOR,
+                               lw=0.7, label=label if i == 0 else None)
+        band.set_gid("predictive")
     ax_list[0].legend(loc="upper right", fontsize=8)
 
 

@@ -258,8 +258,22 @@ ENTRIES: tuple[Entry, ...] = (
     Entry("results.measurement_level", RESULTS, N_("Measurement interval"),
           N_("Level of the band measurement ± z·σT drawn around the measured temperatures."),
           N_("1σ (68 %): z = 1; 90 %: z = 1.645; 95 %: z = 1.960. σT is that of the inversion, or the thermometer uncertainty for a "
-             "direct model. The residual lines of a twin use the same level."),
+             "direct model. The residual lines of a twin and the predictive band use the same level."),
           default=lambda: "90 %"),
+    Entry("results.predictive_band", RESULTS, N_("Predictive band"),
+          N_("Band where a new measurement should fall: the temperatures of the stored fields, plus a measurement noise N(0, σT²)."),
+          N_("The credible band only reflects the uncertainty of the parameters; the predictive band adds the measurement noise, so "
+             "it is the one the measurements should fill. Its level is that of the measurement interval, and the legend gives the "
+             "share of measurements inside it (coverage) and their number. A coverage close to the level means that the model and σT "
+             "are consistent with the data. The noise is drawn with a fixed seed, so the band does not change from one display to the "
+             "next. It needs the fields stored at the sensors or in full (Fields stored)."),
+          default=lambda: "90 %"),
+    Entry("results.chains", RESULTS, N_("Chains"),
+          N_("Traces of the parameters and of the energy, chain by chain, against the computed iteration."),
+          N_("Untick a chain to hide its traces. The display thinning keeps one kept iteration out of n, on top of the thinning of "
+             "the computation; the iteration range keeps the computed iterations between its two bounds. Each chain shows its "
+             "acceptance rate over the kept iterations and the number of times it was reset during the burn-in (outlier chain). "
+             "Chains that wander apart, or a high R-hat, mean that the inversion has not converged.")),
     # Twins -----------------------------------------------------------------------------------
     Entry("twin.mode", TWINS, "mode",
           N_("direct: the soil parameters are fixed in the layers. mcmc: they are estimated by DREAM within the prior ranges "
