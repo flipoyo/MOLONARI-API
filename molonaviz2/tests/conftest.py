@@ -48,8 +48,8 @@ def pyheatmy_float64():
     """
     import types
 
-    import pyheatmy.core as core
     import pyheatmy.linear_system as ls
+    from pyheatmy import core
 
     def solver(a, b, c, d):
         n = len(d)
