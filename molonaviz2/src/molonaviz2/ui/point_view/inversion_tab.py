@@ -30,7 +30,7 @@ PHASE_LABELS = {
 
 
 def _duration(seconds: float) -> str:
-    seconds = int(round(seconds))
+    seconds = round(seconds)
     if seconds < 60:
         return f"{seconds} s"
     minutes, seconds = divmod(seconds, 60)
