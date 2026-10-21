@@ -30,6 +30,8 @@ Le projet utilise `../../pyheatmy` (dépôt MOLONARI-computo, monté par cgs à 
 6. **Onglet Modèle direct.** Définissez les couches, puis lancez le calcul (F5).
 7. **Onglet Inversion.** Réglez les bornes a priori, puis lancez DREAM (F5). La convergence se suit en direct, et Échap annule.
 8. **Onglet Résultats.** On y trouve les cartes de température et de flux, les profils, les distributions a posteriori et le tableau de diagnostic (ArviZ). Exports possibles : CSV, NetCDF, figures en PNG, SVG ou PDF.
+   - Après une inversion, le graphe des capteurs montre la bande prédictive et la part des mesures qu'elle couvre.
+   - **Paramètres › Chaînes** trace chaque chaîne, avec le choix des chaînes, l'éclaircissement d'affichage et la plage d'itérations.
 
 Une ancienne base Molonaviz (`Molonari.sqlite`) se convertit avec **Fichier › Importer une base Molonaviz** : laboratoires, études, points, mesures brutes et nettoyées. Les anciens résultats de calcul ne sont pas repris ; il faut relancer les modèles.
 
@@ -86,7 +88,7 @@ Le mode `direct` fixe les paramètres du sol. Le mode `mcmc` les estime par inve
 
 **Dans l'application**
 - L'écran d'accueil et **Fichier › Twins** listent les twins du dossier choisi, avec leur état : pas encore exécuté, calculé, doublon, modifié (figé) ou invalide.
-- Un double-clic ouvre la fenêtre du twin : config, identifiant, Exécuter (F5), frise θ(z, t), flux q(t), résidus et métadonnées.
+- Un double-clic ouvre la fenêtre du twin : config, identifiant, Exécuter (F5), frise θ(z, t), flux q(t), capteurs t₁–t₃, résidus et métadonnées. Pour un twin mcmc, l'onglet des capteurs montre la bande prédictive et sa couverture.
 - **Créer un twin…**, dans l'onglet Résultats d'un point, fige un calcul de l'application en twin.
 
 **En ligne de commande (démo)**
@@ -110,14 +112,14 @@ Il donne aussi l'environnement (Python, plateforme, processeur, appareil, jax, j
 
 La ligne de commande n'a pas besoin de Qt. Ses messages sont en français par défaut ; `MOLONAVIZ_LANG=en` les affiche en anglais.
 
-Les exemples fournis portent tous sur Point034. Leurs identifiants valent pour la version 0.5.0-alpha.2 publiée, sans suffixe local : ils changent avec la version du code, qui entre dans le `twin_id`.
+Les exemples fournis portent tous sur Point034. Leurs identifiants valent pour la version 0.5.0 publiée, sans suffixe local : ils changent avec la version du code, qui entre dans le `twin_id`.
 
-| Twin | Mode | `twin_id` (0.5.0-alpha.2) | Contenu |
+| Twin | Mode | `twin_id` (0.5.0) | Contenu |
 |---|---|---|---|
-| `twin_01` | direct | `31c13214a9932979` | monocouche, −log₁₀ k = 12 |
-| `twin_02` | direct | `31c13214a9932979` | copie renommée de `twin_01`, pour montrer la détection de doublon |
-| `twin_03` | mcmc | `8177890967a15401` | inversion courte (8 chaînes, 300 itérations, graine 1) |
-| `twin_04` | mcmc | `9b10240b767a1f0c` | créé depuis l'application, à partir d'une inversion |
+| `twin_01` | direct | `136ab511459b7996` | monocouche, −log₁₀ k = 12 |
+| `twin_02` | direct | `136ab511459b7996` | copie renommée de `twin_01`, pour montrer la détection de doublon |
+| `twin_03` | mcmc | `065d48abf5224659` | inversion courte (8 chaînes, 300 itérations, graine 1) |
+| `twin_04` | mcmc | `53462d6e7119aa9c` | créé depuis l'application, à partir d'une inversion |
 
 Pour réinitialiser la démo : fermer l'application, puis `rm examples/twins/registry.csv; rm -rf examples/results`.
 

@@ -12,6 +12,31 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions : [S
 - Tags : `molonaviz2-vX.Y.Z`, posés sur `CGS-MOLO` après la fusion. La CI (`molonaviz2-version`) vérifie que le tag correspond à `pyproject.toml`.
 - La version entre dans `engine_version()`, donc dans chaque `twin_id`. Une nouvelle version donne de nouveaux identifiants, et un twin déjà calculé passe à l'état « modifié » : il faut créer un nouveau twin pour utiliser le nouveau code.
 
+## [0.5.0] - 2026-10-21
+
+Bande prédictive, couverture et vue Chaînes dans l'interface (#28). Clôt le jalon 0.5 et rassemble les pré-versions 0.5.0-alpha.1 (#26) et 0.5.0-alpha.2 (#27) ci-dessous.
+
+### Ajouté
+- **Résultats › Températures** : bande prédictive aux 3 capteurs (#28).
+  - Son niveau est celui de l'intervalle de mesure, et son σ celui de l'inversion.
+  - Sa légende donne la couverture des mesures, par exemple « Prédictive 90 % — 91 % des mesures (n = 1800) ».
+  - Les valeurs viennent seulement de `questions` (`sensor_samples`, `predictive_band`, `observed_at`, `coverage`), avec une graine fixe (`ui/predictive.py`).
+  - Sans champs stockés (`store_fields: none`, ou calcul antérieur à 0.4.0), une mention l'explique ; la bande crédible et l'intervalle de mesure restent affichés.
+- **Résultats › Paramètres › Chaînes** : traces des paramètres et de l'énergie en fonction de l'itération calculée, avec le choix des chaînes, l'éclaircissement d'affichage, la plage d'itérations, l'acceptation et les réinitialisations par chaîne, et le nombre d'échantillons affichés. Tout passe par `questions.chain_data` (#28).
+- **Fenêtre d'un twin** : onglet « Capteurs t₁–t₃ », avec les mesures, la simulation, l'intervalle de mesure et, pour un twin mcmc dont les champs existent, la bande prédictive et sa couverture. Sinon, une mention traduite : `W_FIELD_UNAVAILABLE` (résultat 1.x) ou `E_QUESTION_NO_FIELDS` (mcmc sans champs) (#28).
+- Notice : fiches « Bande prédictive » et « Chaînes » (#28).
+
+### Modifié
+- Résultats › Paramètres : les histogrammes et les chaînes sont deux vues d'un même onglet. Les anciennes traces, dont l'abscisse ignorait le `thin` du calcul, sont remplacées par la vue Chaînes (#28).
+
+### Écarts au plan
+- La bande prédictive est dessinée en contour léger (violet), pour laisser voir l'intervalle de mesure et la bande crédible.
+- La graine de la bande est fixe (`PREDICTIVE_SEED = 0`) : la bande ne change pas d'un affichage à l'autre, et les tests la recalculent à l'identique.
+- Les chaînes sont numérotées à partir de 0, comme dans `posterior.npz` et `chain_data`.
+
+### Identifiants de référence (0.5.0)
+- `twin_01` et `twin_02` : `136ab511459b7996` ; `twin_03` : `065d48abf5224659` ; `twin_04` : `53462d6e7119aa9c`.
+
 ## [0.5.0-alpha.2] - 2026-10-21
 
 Cœur des questions : volumes, intervalles, bande prédictive et données par chaîne (#27).
