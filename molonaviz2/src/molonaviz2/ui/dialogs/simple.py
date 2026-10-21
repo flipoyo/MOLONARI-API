@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from itertools import pairwise
+
 from PySide6 import QtCore, QtWidgets
 
 from ... import __version__
@@ -129,7 +131,7 @@ class AddSensorDialog(QtWidgets.QDialog):
             return PressureSensor(self.ps_name.text().strip(), self.ps_logger.text().strip(), self.ps_date.dateTime().toPython(),
                                   values[0], values[1], values[2], values[3], self.ps_thermo.currentText())
         depths = [f.value() for f in self.sh_depths]
-        if not self.sh_name.text().strip() or None in depths or any(b <= a for a, b in zip(depths, depths[1:])) or depths[0] <= 0:
+        if not self.sh_name.text().strip() or None in depths or any(b <= a for a, b in pairwise(depths)) or depths[0] <= 0:
             return None
         return Shaft(self.sh_name.text().strip(), self.sh_logger.text().strip(), self.sh_thermo.currentText(), tuple(depths))
 

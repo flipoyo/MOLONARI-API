@@ -14,6 +14,7 @@ from __future__ import annotations
 import ast
 import csv
 from dataclasses import dataclass, field
+from itertools import pairwise
 from pathlib import Path
 
 from ..domain.models import Lab, PressureSensor, Shaft, Thermometer
@@ -127,7 +128,7 @@ def parse_shaft(path: Path) -> Shaft:
         depths = tuple(float(d) for d in ast.literal_eval(text))
     except (ValueError, SyntaxError, TypeError):
         raise _InvalidFile(Issue(None, "E_SHAFT_DEPTHS_FORMAT"), 4) from None
-    if len(depths) != 4 or any(b <= a for a, b in zip(depths, depths[1:])) or depths[0] <= 0:
+    if len(depths) != 4 or any(b <= a for a, b in pairwise(depths)) or depths[0] <= 0:
         raise _InvalidFile(Issue(None, "E_SHAFT_DEPTHS_ORDER"), 4)
     return Shaft(name=_text(rows, 0), datalogger=rows[1][1], thermometer=_text(rows, 2), depths=depths)  # type: ignore[arg-type]
 

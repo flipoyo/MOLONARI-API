@@ -37,6 +37,7 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
+from itertools import pairwise
 from pathlib import Path
 
 import pandas as pd
@@ -280,7 +281,7 @@ def load_twin(path: str | Path, check_data: bool = True) -> TwinConfig:
     depths = sensors.get("depths")
     if "depths" in sensors:
         values = [check.number(d, "sensors.depths", positive=True) for d in depths] if isinstance(depths, list) else []
-        if len(values) != 4 or None in values or any(b <= a for a, b in zip(values, values[1:])):
+        if len(values) != 4 or None in values or any(b <= a for a, b in pairwise(values)):
             check.add("sensors.depths", "E_TWIN_SENSOR_DEPTHS")
             depths = None
         else:
