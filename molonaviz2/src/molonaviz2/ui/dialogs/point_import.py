@@ -18,6 +18,7 @@ from ...errors import UserError
 from ...i18n import t
 from ...io.lab_import import read_text
 from ...io.point_import import ParsedMeasures, find_point_files, read_point_info, read_pressure_file, read_temperature_file
+from ..errors import error_text
 from ..widgets import NumberField, hint, to_qdatetime
 
 MAX_DROPPED_SHOWN = 6
@@ -180,7 +181,7 @@ class PointImportDialog(QtWidgets.QDialog):
         try:
             info = read_point_info(path)
         except (UserError, OSError) as exc:
-            self.info_warnings.setText(str(exc))
+            self.info_warnings.setText(error_text(exc))
             return
         notes = list(info.warnings)
         if info.name:
@@ -237,7 +238,7 @@ class PointImportDialog(QtWidgets.QDialog):
             try:
                 parsed = reader(row.path)
             except UserError as exc:
-                error = str(exc)
+                error = error_text(exc)
             except OSError as exc:
                 error = str(exc)
         target.setText(self._describe(parsed, error, title))

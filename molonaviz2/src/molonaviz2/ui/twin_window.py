@@ -15,6 +15,7 @@ from ..twin.results import load_results
 from ..twin.run import TwinStatus, run_twin, twin_status
 from ..workers.tasks import Task, TaskManager
 from .dialogs.notice import attach
+from .errors import error_text
 from .plots.maps import FigurePanel, _date_axis, depth_time_map, robust_ylim
 from .plots.style import RIVER_COLOR, THERMOMETER_COLORS
 from .units import level_label, measurement_level, temperature_unit
@@ -157,7 +158,7 @@ class TwinWindow(QtWidgets.QMainWindow):
             self.title.setText(folder)
             self.identity.setText("")
             self.state.setText(t("Invalid configuration: fix twin.yaml, then click Reload."))
-            self.issues.setText("\n".join(f"• {issue}" for issue in exc.issues))
+            self.issues.setText("\n".join(f"• {error_text(issue)}" for issue in exc.issues))
         else:
             config = self.status.config
             self.setWindowTitle(f"{config.name} — Molonaviz")

@@ -10,7 +10,7 @@ from ...errors import UserError
 from ...i18n import N_, t
 from ...processing.cleanup import VARIABLES, CleanupResult, CleanupSettings, clean, read_cleaned_csv, write_cleaned_csv
 from ..dialogs.notice import attach
-from ..errors import report_exception
+from ..errors import error_text, report_exception
 from ..plots.series import RegionSelector, TimeSeriesPlot
 from ..plots.style import PRESSURE_COLOR, REJECTED_COLOR, RIVER_COLOR, THERMOMETER_COLORS
 from ..units import temperature_unit
@@ -191,7 +191,7 @@ class CleanupTab(QtWidgets.QWidget):
             self.result = clean(self._raw_t, self._raw_p, self.context.sensors().pressure, self._settings())
         except UserError as exc:
             self.result = None
-            self.summary.setText(f"<span style='color:#c0392b'>{exc}</span>")
+            self.summary.setText(f"<span style='color:#c0392b'>{error_text(exc)}</span>")
             self.apply_button.setEnabled(False)
             self.plot.reset()
             return
