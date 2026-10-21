@@ -211,3 +211,51 @@ def test_layers_of_older_projects_with_lateral_exchange_are_read():
     stored = InversionConfig([LayerSpec("a", 0.4)]).to_dict()
     stored["layers"][0].update(q_s=0.0, t_lateral=None)
     assert InversionConfig.from_dict(stored).layers == [LayerSpec("a", 0.4)]
+
+
+def small_inversion_result():
+    from molonaviz2.engine.results import ForwardResult, InversionResult, QuantileResult
+
+    rng = np.random.default_rng(0)
+    times = np.array(["2016-06-27T12:00", "2016-06-27T12:15"], "datetime64[s]")
+    best = ForwardResult(
+        depths=np.linspace(0.05, 0.35, 4), times=times, temperature=rng.normal(size=(4, 2)), water_flux=rng.normal(size=(4, 2)),
+        advective_flux=rng.normal(size=(4, 2)), conductive_flux=rng.normal(size=(4, 2)), sensor_index=np.array([0, 1, 2]),
+        observed=rng.normal(size=(2, 3)), rmse=rng.normal(size=4),
+    )
+    quantiles = [QuantileResult(q, rng.normal(size=(4, 2)), rng.normal(size=(4, 2)), rng.normal(size=4)) for q in (0.05, 0.5, 0.95)]
+    return InversionResult(
+        best=best, best_parameters=rng.normal(size=(1, 4)), samples=rng.normal(size=(5, 3, 1, 4)), energies=rng.normal(size=(5, 3)),
+        acceptance=rng.uniform(size=3), burn_in_iterations=20, burn_in_converged=True, rhat=rng.normal(size=(1, 4)), quantiles=quantiles,
+        field_depths=best.depths, field_times=times, thin=2, field_chain=np.tile(np.arange(3), 2),
+        field_iteration=np.repeat(np.array([4, 8]), 3), resets=np.array([0, 1, 0]),
+        sensor_temperature=rng.normal(size=(6, 3, 2)), field_temperature=rng.normal(size=(6, 4, 2)).astype(np.float32),
+        field_water_flux=rng.normal(size=(6, 4, 2)).astype(np.float32),
+    )
+
+
+def test_inversion_result_round_trip_through_a_project(filled):
+    from molonaviz2.engine.results import OPTIONAL_ARRAYS, InversionResult
+
+    project = filled[0]
+    result = small_inversion_result()
+    cid = project.add_computation("Etude", "Point034", "inversion", {}, result.to_arrays(), 1.0, "engine", "CPU")
+    loaded = InversionResult.from_arrays(project.load_result(cid))
+    assert loaded.thin == 2
+    for name in ("samples", "energies", "acceptance", *OPTIONAL_ARRAYS):
+        expected, actual = getattr(result, name), getattr(loaded, name)
+        assert actual.dtype == expected.dtype and actual.shape == expected.shape, name
+        np.testing.assert_array_equal(actual, expected)
+
+
+def test_inversion_result_of_0_3_0_is_read_without_the_new_arrays(filled):
+    from molonaviz2.engine.results import OPTIONAL_ARRAYS, InversionResult
+
+    project = filled[0]
+    arrays = small_inversion_result().to_arrays()
+    for name in ("thin", *OPTIONAL_ARRAYS):
+        del arrays[name]
+    cid = project.add_computation("Etude", "Point034", "inversion", {}, arrays, 1.0, "engine", "CPU")
+    loaded = InversionResult.from_arrays(project.load_result(cid))
+    assert loaded.thin == 1 and all(getattr(loaded, name) is None for name in OPTIONAL_ARRAYS)
+    np.testing.assert_array_equal(loaded.samples, arrays["samples"])

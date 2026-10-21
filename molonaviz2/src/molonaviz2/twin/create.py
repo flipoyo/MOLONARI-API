@@ -9,7 +9,7 @@ import pandas as pd
 from ..domain.compute import INVERTED_PARAMETERS, ForwardConfig, InversionConfig
 from ..errors import UserError
 from ..processing.cleanup import write_cleaned_csv
-from .config import SCHEMA, write_twin_yaml
+from .config import MCMC_DEFAULTS_1_1, SCHEMA_WRITTEN, write_twin_yaml
 from .run import next_twin_folder
 
 MEASUREMENTS_NAME = "measurements.csv"
@@ -24,7 +24,7 @@ def twin_document(name: str, point: str, description: str, depths, offset: float
                   config: ForwardConfig | InversionConfig) -> dict:
     mode = "mcmc" if isinstance(config, InversionConfig) else "direct"
     document = {
-        "schema": SCHEMA,
+        "schema": SCHEMA_WRITTEN,
         "name": name,
         "point": point,
         "description": description,
@@ -51,7 +51,10 @@ def twin_document(name: str, point: str, description: str, depths, offset: float
             **{k: getattr(config, k) for k in ("nb_chains", "nb_iter", "burn_in_max", "delta", "n_cr")},
             **{k: _number(getattr(config, k)) for k in ("c", "c_star", "gr_threshold")},
             "quantiles": [_number(q) for q in config.quantiles],
-            **{k: getattr(config, k) for k in ("n_field_samples", "space_step", "time_step")},
+            # n_field_samples et fields_per_chain s'excluent ; les clés 1.1.0 ne sont écrites que hors de leur défaut.
+            **({} if config.fields_per_chain is not None else {"n_field_samples": config.n_field_samples}),
+            **{k: getattr(config, k) for k in ("space_step", "time_step")},
+            **{k: getattr(config, k) for k, default in MCMC_DEFAULTS_1_1.items() if getattr(config, k) != default},
         }
         document["seed"] = config.seed
     return document

@@ -90,9 +90,15 @@ SETTING_LIMITS: dict[str, tuple[float | None, float | None]] = {
     "c_star": (1e-15, None),
     "gr_threshold": (1.0001, None),
     "n_field_samples": (2, 5000),
+    "thin": (1, 1_000_000),
+    "fields_per_chain": (1, 5000),
     "space_step": (1, None),
     "time_step": (1, None),
 }
+
+
+# Ce que l'inversion garde des champs échantillonnés, en plus des quantiles.
+STORE_FIELDS = ("none", "sensors", "full")
 
 
 def setting_limits(name: str) -> dict[str, float | None]:
@@ -151,7 +157,7 @@ class InversionConfig:
     nb_cells: int = 100
     sigma_t: float = 0.1  # incertitude des mesures de température (°C), fixe la vraisemblance
     nb_chains: int = 10
-    nb_iter: int = 1000  # itérations conservées après le burn-in
+    nb_iter: int = 1000  # itérations calculées après le burn-in
     burn_in_max: int = 1000  # le burn-in s'arrête plus tôt si Gelman-Rubin < seuil
     delta: int = 3  # nombre de paires de chaînes utilisées pour la proposition
     n_cr: int = 3  # nombre de valeurs de crossover
@@ -162,6 +168,9 @@ class InversionConfig:
     n_field_samples: int = 200  # nombre total de champs (T, q) conservés pour les quantiles
     space_step: int = 1  # sous-échantillonnage spatial des champs conservés
     time_step: int = 1  # sous-échantillonnage temporel des champs conservés
+    thin: int = 1  # on garde les itérations multiples de thin (paramètres, énergies, acceptation, champs)
+    fields_per_chain: int | None = None  # champs par chaîne ; remplace n_field_samples s'il est donné
+    store_fields: str = "sensors"  # champs gardés en plus des quantiles : voir STORE_FIELDS
     seed: int = 0
 
     def __post_init__(self):
@@ -210,6 +219,14 @@ class InversionConfig:
             issues.append(Issue("n_field_samples", "E_MCMC_FIELD_SAMPLES"))
         if self.space_step < 1 or self.time_step < 1:
             issues.append(Issue("space_step", "E_MCMC_SUBSAMPLING"))
+        if not 1 <= self.thin <= max(self.nb_iter, 1):
+            issues.append(Issue("thin", "E_MCMC_THIN", n=self.nb_iter))
+        elif self.fields_per_chain is not None:
+            high = min(self.nb_iter // self.thin, SETTING_LIMITS["fields_per_chain"][1])
+            if not 1 <= self.fields_per_chain <= high:
+                issues.append(Issue("fields_per_chain", "E_MCMC_FIELDS_PER_CHAIN", n=high))
+        if self.store_fields not in STORE_FIELDS:
+            issues.append(Issue("store_fields", "E_MCMC_STORE_FIELDS"))
         return issues
 
     def to_dict(self) -> dict:

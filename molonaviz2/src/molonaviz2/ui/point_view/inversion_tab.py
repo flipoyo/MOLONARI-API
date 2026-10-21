@@ -21,6 +21,9 @@ from ..widgets import NumberField, format_number, heading, hint
 from .context import PointContext
 from .layers import LayersTable
 
+# Choix de « Champs stockés » : libellé et valeur de InversionConfig.store_fields.
+STORE_FIELDS_CHOICES = ((N_("No fields"), "none"), (N_("At the sensors"), "sensors"), (N_("Full fields"), "full"))
+
 PHASE_LABELS = {
     "compile": N_("Compiling the model…"),
     "burn_in": N_("Burn-in"),
@@ -96,6 +99,11 @@ class InversionTab(QtWidgets.QWidget):
         self.n_field_samples = NumberField(defaults.n_field_samples, t("fields"), integer=True, **setting_limits("n_field_samples"))
         self.space_step = NumberField(defaults.space_step, "", integer=True, **setting_limits("space_step"))
         self.time_step = NumberField(defaults.time_step, "", integer=True, **setting_limits("time_step"))
+        self.thin = NumberField(defaults.thin, "", integer=True, **setting_limits("thin"))
+        self.store_fields = QtWidgets.QComboBox()
+        for label, value in STORE_FIELDS_CHOICES:
+            self.store_fields.addItem(t(label), value)
+        self.store_fields.setCurrentIndex(self.store_fields.findData(defaults.store_fields))
         advanced_form = QtWidgets.QFormLayout()
         advanced_form.addRow(t("Discretisation"), self.nb_cells)
         advanced_form.addRow(t("Pairs of chains per jump (δ)"), self.delta)
@@ -106,6 +114,8 @@ class InversionTab(QtWidgets.QWidget):
         advanced_form.addRow(t("Fields kept for quantiles"), self.n_field_samples)
         advanced_form.addRow(t("Spatial sub-sampling step"), self.space_step)
         advanced_form.addRow(t("Temporal sub-sampling step"), self.time_step)
+        advanced_form.addRow(t("Thinning step (thin)"), self.thin)
+        advanced_form.addRow(t("Fields stored"), self.store_fields)
         advanced_body = QtWidgets.QWidget()
         advanced_body.setLayout(advanced_form)
         advanced_layout = QtWidgets.QVBoxLayout(self.advanced)
@@ -151,7 +161,8 @@ class InversionTab(QtWidgets.QWidget):
                             (self.nb_cells, "numerics.nb_cells"), (self.delta, "inversion.delta"), (self.n_cr, "inversion.n_cr"),
                             (self.c, "inversion.c"), (self.c_star, "inversion.c_star"), (self.gr_threshold, "inversion.gr_threshold"),
                             (self.n_field_samples, "inversion.n_field_samples"), (self.space_step, "inversion.space_step"),
-                            (self.time_step, "inversion.time_step"), (per_chain_box, "inversion.per_chain")):
+                            (self.time_step, "inversion.time_step"), (self.thin, "inversion.thin"),
+                            (self.store_fields, "inversion.store_fields"), (per_chain_box, "inversion.per_chain")):
             attach(widget, key)
         side.addWidget(self.issues)
         side.addLayout(run_row)
@@ -191,6 +202,7 @@ class InversionTab(QtWidgets.QWidget):
         for field in self._fields():
             field.valueChanged.connect(self._validate)
         self.quantiles.textChanged.connect(self._validate)
+        self.store_fields.currentIndexChanged.connect(self._validate)
         self.layers.edited.connect(self._validate)
         tasks.task_started.connect(lambda _: self._validate())
         tasks.task_finished.connect(lambda _: self._validate())
@@ -201,7 +213,7 @@ class InversionTab(QtWidgets.QWidget):
 
     def _fields(self) -> list[NumberField]:
         return [self.sigma_t, self.nb_chains, self.nb_iter, self.burn_in_max, self.seed, self.nb_cells, self.delta, self.n_cr,
-                self.c, self.c_star, self.gr_threshold, self.n_field_samples, self.space_step, self.time_step]
+                self.c, self.c_star, self.gr_threshold, self.n_field_samples, self.space_step, self.time_step, self.thin]
 
     # Configuration --------------------------------------------------------------------
     def _load_defaults(self) -> None:
@@ -225,16 +237,18 @@ class InversionTab(QtWidgets.QWidget):
         layers = self.layers.layers(strict=False)
         self.layers.set_layers(layers, [default_priors() for _ in layers])
         for name in ("nb_chains", "nb_iter", "burn_in_max", "nb_cells", "delta", "n_cr", "c", "c_star", "gr_threshold",
-                     "n_field_samples", "space_step", "time_step", "seed"):
+                     "n_field_samples", "space_step", "time_step", "thin", "seed"):
             getattr(self, name).set_value(getattr(defaults, name))
+        self.store_fields.setCurrentIndex(self.store_fields.findData(defaults.store_fields))
         self.sigma_t.set_value(self.context.default_sigma_t())
         self.quantiles.setText(", ".join(f"{q:g}" for q in defaults.quantiles))
 
     def load_config(self, config: InversionConfig) -> None:
         self.layers.set_layers(config.layers, config.priors)
         for name in ("sigma_t", "nb_chains", "nb_iter", "burn_in_max", "nb_cells", "delta", "n_cr", "c", "c_star",
-                     "gr_threshold", "n_field_samples", "space_step", "time_step", "seed"):
+                     "gr_threshold", "n_field_samples", "space_step", "time_step", "thin", "seed"):
             getattr(self, name).set_value(getattr(config, name))
+        self.store_fields.setCurrentIndex(self.store_fields.findData(config.store_fields))
         self.quantiles.setText(", ".join(f"{q:g}" for q in config.quantiles))
         self._validate()
 
@@ -265,6 +279,8 @@ class InversionTab(QtWidgets.QWidget):
             n_field_samples=int(self.n_field_samples.value()),
             space_step=int(self.space_step.value()),
             time_step=int(self.time_step.value()),
+            thin=int(self.thin.value()),
+            store_fields=self.store_fields.currentData(),
             seed=int(self.seed.value()),
         )
 
@@ -289,16 +305,32 @@ class InversionTab(QtWidgets.QWidget):
         lines = [
             t("Burn-in: up to {n} iterations per chain (stops early once R-hat < {threshold}).").format(
                 n=layout.burn_in_max, threshold=format_number(self.gr_threshold.value())),
-            t("Kept: {n} iterations per chain, {total} parameter sets in all.").format(n=layout.nb_iter, total=layout.parameter_sets),
-            t("Fields (T, q): {k} per chain, one every {m} iterations, {total} in all.").format(
-                k=layout.fields_per_chain, m=layout.interval, total=layout.fields_total),
         ]
+        if layout.thin == 1:
+            lines += [
+                t("Kept: {n} iterations per chain, {total} parameter sets in all.").format(n=layout.kept, total=layout.parameter_sets),
+                t("Fields (T, q): {k} per chain, one every {m} iterations, {total} in all.").format(
+                    k=layout.fields_per_chain, m=layout.interval, total=layout.fields_total),
+            ]
+        else:
+            lines += [
+                t("Kept: {n} iterations per chain out of {computed} computed (one in {thin}), {total} parameter sets in all.").format(
+                    n=layout.kept, computed=layout.nb_iter, thin=layout.thin, total=layout.parameter_sets),
+                t("Fields (T, q): {k} per chain, one every {m} kept iterations, {total} in all.").format(
+                    k=layout.fields_per_chain, m=layout.interval, total=layout.fields_total),
+            ]
         if layout.fields_total != layout.fields_requested:
             lines[-1] += " " + t("({requested} requested, rounded to a whole number per chain.)").format(requested=layout.fields_requested)
         if layout.field_times is not None:
             lines.append(t("Field grid: {cells} cells × {times} dates, {kept_cells} × {kept_times} after sub-sampling, about {size} MB.").format(
                 cells=layout.nb_cells, times=layout.nb_times, kept_cells=layout.field_cells, kept_times=layout.field_times,
                 size=format_number(round(layout.field_bytes / 1e6, 1))))
+            stored = self.store_fields.currentData()
+            if stored == "none":
+                lines.append(t("Fields stored in the result: none."))
+            else:
+                lines.append(t("Fields stored in the result: {kind}, about {size} MB.").format(
+                    kind=self.store_fields.currentText(), size=format_number(round(layout.stored_bytes(stored) / 1e6, 1))))
         lines.append(t("Direct-model evaluations: at most {n}.").format(n=layout.max_evaluations))
         self.per_chain.setText("<br>".join(html.escape(line) for line in lines))  # « R-hat < seuil » n'est pas une balise
 

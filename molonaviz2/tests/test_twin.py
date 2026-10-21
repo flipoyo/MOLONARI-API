@@ -4,6 +4,7 @@ import json
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -59,7 +60,7 @@ def test_created_twin_is_valid_and_human_readable(twins, point034):
     folder = make_twin(twins, point034)
     assert folder.name == "twin_01"
     text = (folder / "twin.yaml").read_text()
-    assert "schema: molonaviz-twin/1" in text and "depths: [0.1, 0.2, 0.3, 0.4]" in text
+    assert "schema: molonari-twin/1.1.0" in text and "depths: [0.1, 0.2, 0.3, 0.4]" in text
     config = load_twin(folder)
     assert (config.name, config.mode, config.point) == ("twin_01", "direct", "Point034")
     assert config.layers[0].neg_log10_k == 12 and config.column_depth == 0.4
@@ -104,6 +105,68 @@ def test_yaml_syntax_error_is_reported(twins):
     (folder / "twin.yaml").write_text("name: [unterminated\n")
     with pytest.raises(TwinConfigError, match="YAML"):
         load_twin(folder)
+
+
+# Schéma ------------------------------------------------------------------------------------
+
+EXAMPLES = Path(__file__).resolve().parents[1] / "examples" / "twins"
+EXAMPLE_IDS_V1 = {"twin_01": "aac866e95333d10f", "twin_02": "aac866e95333d10f", "twin_03": "864cad617b96bb5d", "twin_04": "d20973170dbd571a"}
+
+
+def copy_of_twin_03(twins, schema="molonari-twin/1.1.0", extra=""):
+    folder = twins / "twin_03"
+    shutil.copytree(EXAMPLES / "twin_03", folder)
+    edit(folder, "schema: molonaviz-twin/1", f"schema: {schema}")
+    if extra:
+        edit(folder, "  time_step: 1\n", f"  time_step: 1\n{extra}")
+    return folder
+
+
+@pytest.mark.parametrize("name", sorted(EXAMPLE_IDS_V1))
+def test_examples_keep_their_twin_id(name):
+    assert load_twin(EXAMPLES / name).twin_id("v1") == EXAMPLE_IDS_V1[name]
+
+
+@pytest.mark.parametrize("schema", ["molonari-twin/1.0.0", "molonari-twin/1.1.0"])
+def test_new_schema_names_are_read(twins, schema):
+    assert load_twin(copy_of_twin_03(twins, schema)).twin_id("v1") == EXAMPLE_IDS_V1["twin_03"]
+
+
+@pytest.mark.parametrize("schema, extra, key, code", [
+    ("molonari-twin/2.0.0", "", "schema", "E_TWIN_SCHEMA"),
+    ("molonaviz-twin/1", "  thin: 2\n", "mcmc.thin", "E_TWIN_UNKNOWN_KEY"),
+    ("molonari-twin/1.0.0", "  store_fields: full\n", "mcmc.store_fields", "E_TWIN_UNKNOWN_KEY"),
+    ("molonari-twin/1.1.0", "  fields_per_chain: 5\n", "mcmc.fields_per_chain", "E_MCMC_FIELDS_BOTH"),
+    ("molonari-twin/1.1.0", "  store_fields: tout\n", "mcmc.store_fields", "E_MCMC_STORE_FIELDS"),
+])
+def test_schema_and_keys_of_1_1_0_are_checked(twins, schema, extra, key, code):
+    with pytest.raises(TwinConfigError) as error:
+        load_twin(copy_of_twin_03(twins, schema, extra))
+    assert [(issue.field, issue.code) for issue in error.value.issues] == [(key, code)]
+
+
+def test_keys_of_1_1_0_are_read(twins):
+    folder = copy_of_twin_03(twins, extra="  thin: 2\n  store_fields: full\n")
+    edit(folder, "  n_field_samples: 40\n", "  fields_per_chain: 5\n")
+    mcmc = load_twin(folder).inversion_config()
+    assert (mcmc.thin, mcmc.fields_per_chain, mcmc.store_fields) == (2, 5, "full")
+
+
+def test_twin_id_ignores_keys_of_1_1_0_at_their_default(twins):
+    folder = copy_of_twin_03(twins, extra="  store_fields: sensors\n  thin: 1\n")
+    assert load_twin(folder).twin_id("v1") == EXAMPLE_IDS_V1["twin_03"]
+    edit(folder, "  thin: 1\n", "  thin: 2\n")
+    assert load_twin(folder).twin_id("v1") != EXAMPLE_IDS_V1["twin_03"]
+
+
+def test_created_mcmc_twin_declares_1_1_0_without_default_keys(twins, point034):
+    config = InversionConfig(layers=[LayerSpec("couche 1", 0.4)], nb_cells=20, nb_chains=7, nb_iter=10, burn_in_max=10, n_field_samples=7)
+    text = (make_twin(twins, point034, config) / "twin.yaml").read_text()
+    assert "schema: molonari-twin/1.1.0" in text and "n_field_samples: 7" in text
+    assert not any(key in text for key in ("thin", "fields_per_chain", "store_fields"))
+    config.thin, config.fields_per_chain, config.store_fields = 2, 3, "none"
+    mcmc = load_twin(make_twin(twins, point034, config)).inversion_config()
+    assert (mcmc.thin, mcmc.fields_per_chain, mcmc.store_fields, mcmc.n_field_samples) == (2, 3, "none", 200)
 
 
 # C2 : identifiant --------------------------------------------------------------------------

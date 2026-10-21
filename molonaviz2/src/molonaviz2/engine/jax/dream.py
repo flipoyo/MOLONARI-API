@@ -77,18 +77,24 @@ class SamplingLayout:
 
     nb_chains: int
     burn_in_max: int  # itérations de burn-in au plus, par chaîne
-    nb_iter: int  # itérations conservées après le burn-in, par chaîne
+    nb_iter: int  # itérations calculées après le burn-in, par chaîne
     fields_requested: int  # nombre total de champs (T, q) demandé
-    interval: int  # un champ par chaîne toutes les `interval` itérations conservées
+    interval: int  # un champ par chaîne toutes les `interval` itérations gardées
     fields_per_chain: int
     nb_cells: int
     field_cells: int  # cellules gardées après le pas spatial
     nb_times: int | None  # dates des mesures (None : inconnu)
     field_times: int | None  # dates gardées après le pas temporel
+    thin: int = 1  # on garde les itérations multiples de thin
+
+    @property
+    def kept(self) -> int:
+        """Itérations gardées par chaîne."""
+        return self.nb_iter // self.thin
 
     @property
     def parameter_sets(self) -> int:
-        return self.nb_chains * self.nb_iter
+        return self.nb_chains * self.kept
 
     @property
     def fields_total(self) -> int:
@@ -103,26 +109,48 @@ class SamplingLayout:
         """Mémoire des champs conservés : T et q en float32."""
         return None if self.field_times is None else 2 * 4 * self.fields_total * self.field_cells * self.field_times
 
+    def stored_bytes(self, store_fields: str) -> int | None:
+        """Mémoire des champs stockés dans le résultat : T aux capteurs en float64, ou T et q complets en float32."""
+        if self.field_times is None:
+            return None
+        if store_fields == "sensors":
+            return 8 * self.fields_total * 3 * self.field_times
+        if store_fields == "full":
+            return 2 * 4 * self.fields_total * self.field_cells * self.field_times
+        return 0
+
     def blocks(self) -> list[tuple[int, bool]]:
-        """Blocs d'itérations de l'échantillonnage : (longueur, champ conservé à la fin du bloc)."""
-        full, rest = divmod(self.nb_iter, self.interval)
-        return [(self.interval, True)] * full + ([(rest, False)] if rest else [])
+        """Blocs d'itérations calculées : (longueur, champ conservé à la fin du bloc).
+
+        Le champ m (1…F) est pris à l'itération calculée m·interval·thin, qui est gardée."""
+        step = self.interval * self.thin
+        rest = self.nb_iter - self.fields_per_chain * step
+        return [(step, True)] * self.fields_per_chain + ([(rest, False)] if rest else [])
 
 
 def sampling_layout(config: InversionConfig, nb_times: int | None = None) -> SamplingLayout:
-    per_chain = max(1, math.ceil(config.n_field_samples / config.nb_chains))
-    interval = max(1, config.nb_iter // per_chain)
+    kept = config.nb_iter // config.thin
+    if config.fields_per_chain is None:
+        per_chain = max(1, math.ceil(config.n_field_samples / config.nb_chains))
+        interval = max(1, kept // per_chain)
+        fields_per_chain = kept // interval
+        requested = config.n_field_samples
+    else:
+        interval = max(1, kept // config.fields_per_chain)
+        fields_per_chain = min(config.fields_per_chain, kept // interval)
+        requested = config.nb_chains * config.fields_per_chain
     return SamplingLayout(
         nb_chains=config.nb_chains,
         burn_in_max=config.burn_in_max,
         nb_iter=config.nb_iter,
-        fields_requested=config.n_field_samples,
+        fields_requested=requested,
         interval=interval,
-        fields_per_chain=config.nb_iter // interval,
+        fields_per_chain=fields_per_chain,
         nb_cells=config.nb_cells,
         field_cells=math.ceil(config.nb_cells / config.space_step),
         nb_times=nb_times,
         field_times=None if nb_times is None else math.ceil(nb_times / config.time_step),
+        thin=config.thin,
     )
 
 
@@ -289,6 +317,7 @@ class DreamSampler:
         history: list[np.ndarray] = [np.asarray(x0)]
         energy_history: list[np.ndarray] = [np.asarray(e0)]
         burn_in, converged, rhat_max = 0, False, float("nan")
+        resets = np.zeros(n_chain, np.int64)  # réinitialisations de chaque chaîne
         while burn_in < cfg.burn_in_max:
             length = min(BURN_IN_BLOCK, cfg.burn_in_max - burn_in)
             carry, (xs, es, acc) = self._block(length, True)(carry)
@@ -301,6 +330,7 @@ class DreamSampler:
                 carry, reset = _reset_outlier_chains(
                     carry, np.stack(energy_history[len(energy_history) // 2 :]), margin=float(self.nb_layers * N_PARAM)
                 )
+            resets += reset
             if reset.any():
                 # Les chaînes replacées repartent d'un nouvel état : on oublie leur passé pour R-hat.
                 history = history[-1:]
@@ -316,22 +346,27 @@ class DreamSampler:
                 break
         del history
 
-        # Échantillonnage : paramètres à chaque itération, un champ (T, q) par chaîne à la fin de chaque bloc complet.
+        # Échantillonnage : paramètres des itérations gardées (multiples de thin, comptées à partir de 1),
+        # un champ (T, q) par chaîne à la fin de chaque bloc complet.
+        layout = sampling_layout(cfg)
         sl_space = slice(None, None, cfg.space_step)
         sl_time = slice(None, None, cfg.time_step)
         samples, energies, accepted = [], [], []
-        field_temp, field_flux = [], []
+        field_temp, field_flux, sensor_temp = [], [], []
         done = 0
-        for length, keep_field in sampling_layout(cfg).blocks():
+        for length, keep_field in layout.blocks():
             carry, (xs, es, acc) = self._block(length, False)(carry)
+            kept = (done + np.arange(1, length + 1)) % cfg.thin == 0
             done += length
-            samples.append(np.asarray(xs))
-            energies.append(np.asarray(es))
-            accepted.append(np.asarray(acc))
+            samples.append(np.asarray(xs)[kept])
+            energies.append(np.asarray(es)[kept])
+            accepted.append(np.asarray(acc)[kept])
             track_best(xs, es)
             if keep_field:
                 field_temp.append(np.asarray(carry[3][:, sl_space, sl_time], np.float32))
                 field_flux.append(np.asarray(carry[4][:, sl_space, sl_time], np.float32))
+                if cfg.store_fields == "sensors":
+                    sensor_temp.append(np.asarray(carry[3][:, self.geom.sensor_index, sl_time], np.float64) - 273.15)
             report("sampling", done, cfg.nb_iter, float(np.mean(acc)), carry[2], rhat_max)
 
         report("finalize", 0, 1, float("nan"), carry[2], rhat_max)
@@ -357,6 +392,11 @@ class DreamSampler:
             total = np.sqrt(np.nansum(per_sensor**2) / len(per_sensor))
             quantiles.append(QuantileResult(float(q), temp_q - 273.15, flux_q, np.append(per_sensor, total)))
 
+        # Provenance : le champ m·N + j vient de la chaîne j, à l'itération calculée (m + 1)·interval·thin.
+        fields_per_chain = layout.fields_per_chain
+        field_chain = np.tile(np.arange(n_chain), fields_per_chain)
+        field_iteration = np.repeat(layout.interval * cfg.thin * np.arange(1, fields_per_chain + 1), n_chain)
+        full = cfg.store_fields == "full"
         return InversionResult(
             best=best,
             best_parameters=best_x,
@@ -369,6 +409,13 @@ class DreamSampler:
             quantiles=quantiles,
             field_depths=field_depths,
             field_times=field_times,
+            thin=cfg.thin,
+            field_chain=field_chain,
+            field_iteration=field_iteration,
+            resets=resets,
+            sensor_temperature=np.concatenate(sensor_temp) if sensor_temp else None,
+            field_temperature=(temps - 273.15).astype(np.float32) if full else None,
+            field_water_flux=fluxes if full else None,
         )
 
 

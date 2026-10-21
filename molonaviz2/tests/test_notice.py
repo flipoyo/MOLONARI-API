@@ -39,7 +39,9 @@ def test_limits_and_defaults_come_from_the_domain(name):
     key = "numerics.nb_cells" if name == "nb_cells" else f"inversion.{name}"
     entry = BY_KEY[key]
     assert entry.limits() == limits_text(*SETTING_LIMITS[name])
-    if name != "sigma_t":  # σT par défaut : celui du thermomètre
+    if name == "fields_per_chain":  # pas de valeur par défaut : n_field_samples sert
+        assert InversionConfig(layers=[]).fields_per_chain is None and entry.default()
+    elif name != "sigma_t":  # σT par défaut : celui du thermomètre
         default = ForwardConfig(layers=[]).nb_cells if name == "nb_cells" else getattr(InversionConfig(layers=[]), name)
         assert entry.default() == number(default)
 

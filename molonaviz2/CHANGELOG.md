@@ -12,6 +12,32 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions : [S
 - Tags : `molonaviz2-vX.Y.Z`, posés sur `CGS-MOLO` après la fusion. La CI (`molonaviz2-version`) vérifie que le tag correspond à `pyproject.toml`.
 - La version entre dans `engine_version()`, donc dans chaque `twin_id`. Une nouvelle version donne de nouveaux identifiants, et un twin déjà calculé passe à l'état « modifié » : il faut créer un nouveau twin pour utiliser le nouveau code.
 
+## [0.4.0-alpha.1] - 2026-10-21
+
+Chaînes DREAM, éclaircissement, champs par chaîne, `store_fields` et schéma de twin 1.1.0 (#24) : l'inversion garde de quoi alimenter les lots suivants (résultats de twin 2.0.0, bande prédictive, vue des chaînes). Avec les réglages par défaut, les résultats sont identiques à ceux de 0.3.1, octet pour octet.
+
+### Ajouté
+- Réglage `thin` (pas d'éclaircissement) : toutes les itérations sont calculées, mais seules les itérations multiples de `thin`, comptées après le burn-in à partir de 1, sont gardées (paramètres, énergies, acceptation, champs). À graine égale, `thin = k` donne exactement un sous-ensemble du résultat de `thin = 1` (#24).
+- Réglage `fields_per_chain` : nombre de champs par chaîne, à la place de `n_field_samples`. Clé de twin seulement : l'onglet Inversion garde `n_field_samples` (#24).
+- Réglage `store_fields` : ce que l'inversion garde des champs échantillonnés en plus des quantiles. `none` ; `sensors` (par défaut) : la température aux 3 capteurs ; `full` : température et flux d'eau sur la grille sous-échantillonnée (#24).
+- `InversionResult` : `thin`, provenance de chaque champ (`field_chain`, `field_iteration`), réinitialisations de chaque chaîne pendant le burn-in (`resets`), et champs stockés (`sensor_temperature`, `field_temperature`, `field_water_flux`). Les calculs `.molo` enregistrés avant se relisent sans ces tableaux (#24).
+- Schéma de twin `molonari-twin/1.1.0`, écrit par les nouveaux twins. Sont lus `molonaviz-twin/1` (= 1.0.0), `molonari-twin/1.0.0` et `molonari-twin/1.1.0` ; les clés `mcmc.thin`, `mcmc.fields_per_chain` et `mcmc.store_fields` ne sont admises qu'en 1.1.0 (#24).
+- Codes `E_MCMC_THIN`, `E_MCMC_FIELDS_PER_CHAIN`, `E_MCMC_STORE_FIELDS` et `E_MCMC_FIELDS_BOTH` (#24).
+- Onglet Inversion : réglages avancés « Pas d'éclaircissement (thin) » et « Champs stockés » ; l'encadré « Par chaîne » montre les itérations gardées sur les itérations calculées et la mémoire des champs stockés. Notice : fiches `thin`, `fields_per_chain` et `store_fields` (#24).
+
+### Modifié
+- Un twin créé depuis l'application déclare `molonari-twin/1.1.0` (il n'est pas lisible par 0.3.x). La forme canonique garde `molonaviz-twin/1` et n'inclut les nouvelles clés que si elles s'écartent de leur défaut : les `twin_id("v1")` existants ne changent pas (#24).
+
+### Écarts au plan
+- `field_iteration` compte les itérations calculées, pas les itérations gardées : l'indice dans `samples` est `field_iteration // thin − 1` (la formule `field_iteration − 1` du plan n'est juste que pour `thin = 1`).
+- `sensor_temperature` est en float64 : la vérification à 1e-12 près est impossible en float32.
+- Cette vérification se fait en écart relatif (1e-12) : JAX en `vmap` et le modèle direct seul ne fusionnent pas les opérations de la même façon.
+- Les clés 1.1.0 sont refusées dans un twin 1.0.0, sinon la version du schéma ne servirait à rien.
+- Codes ajoutés au plan : `E_MCMC_THIN` et `E_MCMC_FIELDS_PER_CHAIN`, pour valider ces réglages comme les autres.
+
+### Identifiants de référence (0.4.0-alpha.1)
+- `twin_01` et `twin_02` : `6d3dc56c5b0c5598` ; `twin_03` : `71dc5343e5b8118d` ; `twin_04` : `a42e9c298aa44a94`.
+
 ## [0.3.1] - 2026-10-21
 
 Avertissements ruff existants (#29) : les 37 avertissements de `ruff check` (ruff 0.17.1, règles par défaut) sont corrigés, règle par règle. Aucun comportement ne change : résultats, textes affichés et tests identiques.

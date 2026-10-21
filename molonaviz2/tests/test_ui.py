@@ -317,6 +317,37 @@ def test_per_chain_box_follows_the_settings(qtbot, window):
     assert "Fix the highlighted settings" in tab.per_chain.text()
 
 
+def test_per_chain_box_shows_thinning_and_stored_fields(qtbot, window):
+    from molonaviz2.ui.dialogs.notice import key_for
+
+    view = open_point(qtbot, window)
+    tab = view.inversion_tab
+    assert key_for(tab.thin.edit) == "inversion.thin" and key_for(tab.store_fields) == "inversion.store_fields"
+    view.cleanup_tab.apply()
+    tab.advanced.setChecked(True)
+    tab.nb_iter.set_value(1000)
+    tab.thin.set_value(4)
+    text = html.unescape(tab.per_chain.text())
+    assert "250 iterations per chain out of 1000 computed (one in 4)" in text and "kept iterations" in text
+
+    def stored_line():
+        return next(line for line in html.unescape(tab.per_chain.text()).split("<br>") if line.startswith("Fields stored"))
+
+    assert tab.store_fields.currentData() == "sensors" and stored_line().startswith("Fields stored in the result: At the sensors, about")
+    sensors = stored_line()
+    tab.store_fields.setCurrentIndex(tab.store_fields.findData("full"))
+    assert stored_line() != sensors and stored_line().startswith("Fields stored in the result: Full fields, about")
+    tab.store_fields.setCurrentIndex(tab.store_fields.findData("none"))
+    assert stored_line() == "Fields stored in the result: none."
+
+    config = tab.config()
+    assert (config.thin, config.store_fields, config.fields_per_chain) == (4, "none", None)
+    tab.restore_defaults()
+    assert (tab.config().thin, tab.config().store_fields) == (1, "sensors")
+    tab.load_config(config)
+    assert (tab.config().thin, tab.config().store_fields) == (4, "none")
+
+
 def test_every_setting_is_linked_to_the_parameter_guide(qtbot, window, monkeypatch):
     from molonaviz2.domain.compute import SETTING_LIMITS
     from molonaviz2.notice import BY_KEY

@@ -46,6 +46,7 @@ import yaml
 from ..domain.compute import (
     DEFAULT_PRIORS,
     INVERTED_PARAMETERS,
+    STORE_FIELDS,
     ForwardConfig,
     InversionConfig,
     LayerSpec,
@@ -54,7 +55,10 @@ from ..domain.compute import (
 from ..engine.column import ColumnInputs
 from ..errors import Issue, UserError
 
-SCHEMA = "molonaviz-twin/1"
+# Schémas lus, avec leur version. molonaviz-twin/1 est l'ancien nom de 1.0.0.
+SCHEMAS = {"molonaviz-twin/1": (1, 0, 0), "molonari-twin/1.0.0": (1, 0, 0), "molonari-twin/1.1.0": (1, 1, 0)}
+SCHEMA_WRITTEN = "molonari-twin/1.1.0"  # schéma des twins créés
+CANONICAL_SCHEMA = "molonaviz-twin/1"  # schéma de la forme canonique, quel que soit le schéma déclaré : le twin_id ne change pas
 CONFIG_NAME = "twin.yaml"
 MODES = ("direct", "mcmc")
 ID_LENGTH = 16
@@ -65,8 +69,11 @@ DATA_KEYS = {"measurements", "start", "end"}
 SENSOR_KEYS = {"depths", "offset", "sigma_temperature", "sigma_pressure"}
 LAYER_KEYS = {"name", "z_low", "neg_log10_k", "porosity", "lambda_s", "rhos_cs"}
 NUMERIC_KEYS = {"nb_cells", "initial_condition", "column_depth"}
+MCMC_KEYS_1_1 = {"thin", "fields_per_chain", "store_fields"}  # clés admises à partir du schéma 1.1.0
 MCMC_KEYS = {"priors", "nb_chains", "nb_iter", "burn_in_max", "delta", "n_cr", "c", "c_star", "gr_threshold", "quantiles",
-             "n_field_samples", "space_step", "time_step"}
+             "n_field_samples", "space_step", "time_step"} | MCMC_KEYS_1_1
+# Valeurs par défaut des clés 1.1.0 : à ces valeurs, elles n'entrent ni dans la forme canonique ni dans un twin créé.
+MCMC_DEFAULTS_1_1 = {"thin": 1, "fields_per_chain": None, "store_fields": "sensors"}
 INITIAL_CONDITIONS = ("linear",)
 
 
@@ -145,7 +152,7 @@ class TwinConfig:
         }
         sensors = {"depths": [float(d) for d in self.depths], "offset": float(self.offset), "sigma_pressure": float(self.sigma_pressure)}
         canonical = {
-            "schema": SCHEMA,
+            "schema": CANONICAL_SCHEMA,
             "mode": self.mode,
             "data": data,
             "sensors": sensors,
@@ -167,6 +174,7 @@ class TwinConfig:
                                                          "space_step", "time_step")},
                 **{key: float(getattr(mcmc, key)) for key in ("c", "c_star", "gr_threshold")},
                 "quantiles": [float(q) for q in mcmc.quantiles],
+                **{key: getattr(mcmc, key) for key, default in MCMC_DEFAULTS_1_1.items() if getattr(mcmc, key) != default},
             }
             canonical["seed"] = int(self.seed)
         return canonical
@@ -257,8 +265,10 @@ def load_twin(path: str | Path, check_data: bool = True) -> TwinConfig:
     if check.issues and not doc:
         raise TwinConfigError(check.issues)
 
-    if doc.get("schema") not in (None, SCHEMA):
-        check.add("schema", "E_TWIN_SCHEMA", value=doc.get("schema"), expected=SCHEMA)
+    schema = doc.get("schema", "molonaviz-twin/1")
+    schema_version = SCHEMAS.get(schema) if isinstance(schema, str) else None
+    if schema_version is None:
+        check.add("schema", "E_TWIN_SCHEMA", value=doc.get("schema"), expected=", ".join(SCHEMAS))
     name = str(doc.get("name", "")).strip()
     if "name" in doc and not name:
         check.add("name", "E_TWIN_EMPTY")
@@ -328,7 +338,8 @@ def load_twin(path: str | Path, check_data: bool = True) -> TwinConfig:
     seed = check.number(doc.get("seed", 0), "seed", integer=True, minimum=0)
     mcmc = None
     if mode == "mcmc":
-        raw_mcmc = check.mapping(doc.get("mcmc", {}) or {}, "mcmc", MCMC_KEYS)
+        allowed = MCMC_KEYS if schema_version is not None and schema_version >= (1, 1, 0) else MCMC_KEYS - MCMC_KEYS_1_1
+        raw_mcmc = check.mapping(doc.get("mcmc", {}) or {}, "mcmc", allowed)
         priors = []
         raw_priors = raw_mcmc.get("priors")
         if raw_priors is None:
@@ -349,7 +360,10 @@ def load_twin(path: str | Path, check_data: bool = True) -> TwinConfig:
                     prior[param] = PriorRange(low if low is not None else 0.0, high if high is not None else 0.0)
                 priors.append(prior)
         settings = {}
-        for key in ("nb_chains", "nb_iter", "burn_in_max", "delta", "n_cr", "n_field_samples", "space_step", "time_step"):
+        if "n_field_samples" in raw_mcmc and "fields_per_chain" in raw_mcmc:
+            check.add("mcmc.fields_per_chain", "E_MCMC_FIELDS_BOTH")
+        for key in ("nb_chains", "nb_iter", "burn_in_max", "delta", "n_cr", "n_field_samples", "space_step", "time_step", "thin",
+                    "fields_per_chain"):
             if key in raw_mcmc:
                 value = check.number(raw_mcmc[key], f"mcmc.{key}", integer=True, positive=True)
                 if value is not None:
@@ -359,6 +373,11 @@ def load_twin(path: str | Path, check_data: bool = True) -> TwinConfig:
                 value = check.number(raw_mcmc[key], f"mcmc.{key}", positive=True)
                 if value is not None:
                     settings[key] = value
+        if "store_fields" in raw_mcmc:
+            if raw_mcmc["store_fields"] in STORE_FIELDS:
+                settings["store_fields"] = raw_mcmc["store_fields"]
+            else:
+                check.add("mcmc.store_fields", "E_MCMC_STORE_FIELDS")
         if "quantiles" in raw_mcmc:
             quantiles = raw_mcmc["quantiles"]
             if not isinstance(quantiles, list) or not quantiles:
