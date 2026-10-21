@@ -75,6 +75,10 @@ Les résultats sont au format 2.0.0 (`metadata.json["results_format"]`) :
 
 Trois règles s'appliquent :
 - **Identifiant.** `twin_id` est le SHA-256 de la config canonique, qui inclut l'empreinte du fichier de mesures et la version du code. Les libellés (nom, description, point, noms des couches) n'en font pas partie.
+  - Depuis un dépôt git, la version du code porte un suffixe local quand le code n'est pas exactement celui d'une version publiée :
+    - `+g<commit>` si le tag `molonaviz2-vX.Y.Z` est absent, ou si `molonaviz2/` en diffère ;
+    - `.dirty` en plus si `molonaviz2/` a des modifications non commitées.
+  - Sur une branche de travail, les `twin_id` diffèrent donc de ceux de la version publiée. L'exécutable n'a jamais de suffixe.
 - **Config figée.** Un twin modifié après son exécution est refusé. Pour changer un paramètre, on crée un nouveau twin.
 - **Doublons.** Une config identique relancée, sous le même nom ou sous un autre, renvoie au résultat existant, sans recalcul.
 
@@ -95,16 +99,25 @@ uv run molonaviz2 twin run      examples/twins/twin_02   # étape 6 : même conf
 uv run molonaviz2 twin list     examples/twins
 ```
 
+**Provenance et mode strict.** `metadata.json["provenance"]` enregistre, pour le dépôt du code et pour celui du twin :
+- l'URL distante, sans identifiants ;
+- le commit, les tags exacts, la branche ou un HEAD détaché ;
+- l'état propre ou modifié.
+
+Il donne aussi l'environnement (Python, plateforme, processeur, appareil, jax, jaxlib, numpy) et l'empreinte du `.gts` cgs le plus récent. Ce qui manque (hors dépôt, sans git, sans remote) vaut `null`, avec un avertissement. pyheatmy n'y figure pas : le moteur ne l'utilise pas.
+
+`twin run --strict` refuse de calculer avec une pré-version, un code non publié, un dépôt modifié, un twin sans tag ou une provenance illisible, et donne tous les motifs.
+
 La ligne de commande n'a pas besoin de Qt. Ses messages sont en français par défaut ; `MOLONAVIZ_LANG=en` les affiche en anglais.
 
-Les exemples fournis portent tous sur Point034. Leurs identifiants valent pour la version 0.4.0 : ils changent avec la version du code, qui entre dans le `twin_id`.
+Les exemples fournis portent tous sur Point034. Leurs identifiants valent pour la version 0.5.0-alpha.1 publiée, sans suffixe local : ils changent avec la version du code, qui entre dans le `twin_id`.
 
-| Twin | Mode | `twin_id` (0.4.0) | Contenu |
+| Twin | Mode | `twin_id` (0.5.0-alpha.1) | Contenu |
 |---|---|---|---|
-| `twin_01` | direct | `c126c779567c5bbb` | monocouche, −log₁₀ k = 12 |
-| `twin_02` | direct | `c126c779567c5bbb` | copie renommée de `twin_01`, pour montrer la détection de doublon |
-| `twin_03` | mcmc | `e97b626a80613ebb` | inversion courte (8 chaînes, 300 itérations, graine 1) |
-| `twin_04` | mcmc | `a2ab3b5bb10ec53f` | créé depuis l'application, à partir d'une inversion |
+| `twin_01` | direct | `e651e9b35210336c` | monocouche, −log₁₀ k = 12 |
+| `twin_02` | direct | `e651e9b35210336c` | copie renommée de `twin_01`, pour montrer la détection de doublon |
+| `twin_03` | mcmc | `e65140bfbf71d29c` | inversion courte (8 chaînes, 300 itérations, graine 1) |
+| `twin_04` | mcmc | `d8d2e8b837c9f8c6` | créé depuis l'application, à partir d'une inversion |
 
 Pour réinitialiser la démo : fermer l'application, puis `rm examples/twins/registry.csv; rm -rf examples/results`.
 
