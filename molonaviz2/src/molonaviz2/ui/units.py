@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 from PySide6 import QtCore, QtWidgets
-from scipy.stats import norm
+
+from ..questions import MEASUREMENT_LEVELS, measurement_interval, z_score  # noqa: F401  (réexportés)
 
 
 class TemperatureUnit(QtCore.QObject):
@@ -36,24 +37,9 @@ class TemperatureUnit(QtCore.QObject):
 temperature_unit = TemperatureUnit()
 
 
-# Intervalle de mesure ---------------------------------------------------------------------
-MEASUREMENT_LEVELS = (0.6827, 0.90, 0.95)  # 1σ, 90 %, 95 %
-
-
-def z_score(level: float) -> float:
-    """Demi-largeur, en σ, de l'intervalle centré qui contient `level` d'une loi normale (90 % → 1,645)."""
-    return float(norm.ppf(0.5 + level / 2))
-
-
+# Intervalle de mesure (calcul dans questions/intervals.py) ------------------------------------
 def level_label(level: float) -> str:
     return "1σ (68 %)" if abs(level - 0.6827) < 1e-4 else f"{level * 100:.0f} %"
-
-
-def measurement_interval(observed_celsius, sigma_celsius: float, level: float):
-    """Bornes (°C) de l'intervalle mesure ± z·σT, z venant du niveau."""
-    observed = np.asarray(observed_celsius, dtype=float)
-    half = z_score(level) * float(sigma_celsius)
-    return observed - half, observed + half
 
 
 class MeasurementLevel(QtCore.QObject):

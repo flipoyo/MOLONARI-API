@@ -110,14 +110,14 @@ Il donne aussi l'environnement (Python, plateforme, processeur, appareil, jax, j
 
 La ligne de commande n'a pas besoin de Qt. Ses messages sont en français par défaut ; `MOLONAVIZ_LANG=en` les affiche en anglais.
 
-Les exemples fournis portent tous sur Point034. Leurs identifiants valent pour la version 0.5.0-alpha.1 publiée, sans suffixe local : ils changent avec la version du code, qui entre dans le `twin_id`.
+Les exemples fournis portent tous sur Point034. Leurs identifiants valent pour la version 0.5.0-alpha.2 publiée, sans suffixe local : ils changent avec la version du code, qui entre dans le `twin_id`.
 
-| Twin | Mode | `twin_id` (0.5.0-alpha.1) | Contenu |
+| Twin | Mode | `twin_id` (0.5.0-alpha.2) | Contenu |
 |---|---|---|---|
-| `twin_01` | direct | `e651e9b35210336c` | monocouche, −log₁₀ k = 12 |
-| `twin_02` | direct | `e651e9b35210336c` | copie renommée de `twin_01`, pour montrer la détection de doublon |
-| `twin_03` | mcmc | `e65140bfbf71d29c` | inversion courte (8 chaînes, 300 itérations, graine 1) |
-| `twin_04` | mcmc | `d8d2e8b837c9f8c6` | créé depuis l'application, à partir d'une inversion |
+| `twin_01` | direct | `31c13214a9932979` | monocouche, −log₁₀ k = 12 |
+| `twin_02` | direct | `31c13214a9932979` | copie renommée de `twin_01`, pour montrer la détection de doublon |
+| `twin_03` | mcmc | `8177890967a15401` | inversion courte (8 chaînes, 300 itérations, graine 1) |
+| `twin_04` | mcmc | `9b10240b767a1f0c` | créé depuis l'application, à partir d'une inversion |
 
 Pour réinitialiser la démo : fermer l'application, puis `rm examples/twins/registry.csv; rm -rf examples/results`.
 
@@ -130,6 +130,20 @@ Le schéma complet de `twin.yaml`, avec toutes les clés acceptées, est documen
 - **Précision** : le calcul se fait toujours en float64. Le GPU n'est utilisé qu'avec CUDA sous Linux, car JAX n'offre pas le float64 sur Metal (Mac) ni de GPU natif sous Windows. La barre d'état indique l'appareil utilisé.
 - **Perméabilité** : elle se saisit en −log₁₀ k, avec k en m², comme dans Molonaviz.
 - **Échange latéral d'eau (q_s)** : pas pris en charge dans cette version. Les clés `q_s` et `t_lateral` sont refusées dans un `twin.yaml`, et ignorées à la relecture d'un ancien projet `.molo`.
+
+## Questions
+
+`molonaviz2.questions` calcule, sans Qt, les réponses que l'on tire d'un résultat. Chaque fonction renvoie une `Answer` : des `Quantity` (valeur, unité, intervalle éventuel), la question et ses paramètres, et des avertissements.
+
+| Fonction | Réponse |
+|---|---|
+| `exchanged_volume(times, q, area=None)` | infiltration (≥ 0), exfiltration (≤ 0) et bilan, en m³/m² (en m³ avec `area`) |
+| `sensor_intervals(observed, sigma, level)` | mesures avec l'intervalle ± z·σ |
+| `sensor_samples(result)` | échantillons de T aux 3 capteurs, et leurs dates |
+| `predictive_band(samples, sigma, level, seed)` | médiane et bande prédictive (échantillons bruités par N(0, σ²)) |
+| `coverage(observed, band)` | part des mesures dans la bande, et nombre de points |
+| `observed_at(times, observed, at_times)` | mesures aux dates des champs |
+| `chain_data(result, chains, thin, iterations)` | traces des paramètres et des énergies, acceptation et réinitialisations par chaîne |
 
 ## Tests
 
@@ -165,6 +179,7 @@ src/molonaviz2/
   processing/  nettoyage des mesures
   engine/      moteur JAX (modèle direct, DREAM), adaptateur pyheatmy pour les tests
   twin/        twins versionnés : twin.yaml, twin_id, registre, exécution, ligne de commande
+  questions/   réponses calculées à partir d'un résultat (volumes, bande prédictive, chaînes)
   workers/     calculs en arrière-plan (annulation, progression)
   ui/          interface PySide6 : fenêtre, explorateur, onglets d'un point, graphiques
   i18n/        traduction française (fr.json) ; `make strings` liste les chaînes non traduites

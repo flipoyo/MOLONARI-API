@@ -113,6 +113,16 @@ MESSAGES: dict[str, str] = {
     "E_COLUMN_SENSOR_DEPTHS": "The shaft must define 4 strictly increasing, positive sensor depths.",
     "E_COLUMN_TOO_FEW_TIMES": "At least 3 cleaned measurement times are required to run a model.",
     "E_MODEL_NON_FINITE": "The model produced non-finite values. Check the layer parameters and the measurements.",
+    # questions
+    "E_QUESTION_CHAINS": "Unknown chain {chain}: this computation has {n} chains, numbered from 0.",
+    "E_QUESTION_LEVEL": "The level must be strictly between 0 and 1 (got {level}).",
+    "E_QUESTION_NO_FIELDS": "No temperature fields were stored with this computation (store_fields: none).",
+    "E_QUESTION_NO_POSTERIOR": "These results have no posterior samples (direct mode, or results written before format 2.0.0).",
+    "E_QUESTION_SHAPES": "Incompatible shapes: expected {expected}, found {found}.",
+    "E_QUESTION_SIGMA": "The measurement uncertainty σ must be positive or zero (got {sigma}).",
+    "E_QUESTION_THIN": "The display thinning must be a whole number of at least 1 (got {thin}).",
+    "E_QUESTION_TIMES": "Times must be strictly increasing.",
+    "W_COVERAGE_NO_POINTS": "No measurement can be compared with the band: coverage is undefined.",
     # twin
     "E_NO_CLEANED_MEASURES": "No cleaned measurements yet: apply a cleaning first.",
     "E_STRICT_DIRTY": "The {target} repository has uncommitted changes.",
