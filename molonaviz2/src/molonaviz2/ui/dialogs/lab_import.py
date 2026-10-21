@@ -100,7 +100,7 @@ class LabImportDialog(QtWidgets.QDialog):
                 QtWidgets.QTreeWidgetItem(parent, [item.name, describe(item)])
             parent.setExpanded(True)
         for issue in self.result_import.issues:
-            self.issues.addItem(str(issue))
+            self.issues.addItem(error_text(issue))
         has_issues = bool(self.result_import.issues)
         self.issues_label.setVisible(has_issues)
         self.issues.setVisible(has_issues)

@@ -469,7 +469,7 @@ class MainWindow(QtWidgets.QMainWindow):
             labs=report.labs, studies=report.studies, points=report.points, cleaned=report.cleaned_points
         )
         text += "\n\n" + t("Previous computation results are not imported: run the models again.")
-        message(self, t("Import finished"), text, "\n".join(report.warnings))
+        message(self, t("Import finished"), text, "\n".join(error_text(warning) for warning in report.warnings))
 
     # Laboratoires, études, points -----------------------------------------------------
     def import_lab(self) -> None:

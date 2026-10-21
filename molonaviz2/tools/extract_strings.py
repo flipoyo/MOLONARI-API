@@ -37,14 +37,14 @@ def extract(source: Path = SOURCE) -> dict[str, list[str]]:
 
 
 def messages(source: Path = SOURCE) -> list[tuple[str, str]]:
-    """Modèles anglais du catalogue des codes (MESSAGES de errors.py), sauf ceux faits seulement de champs."""
+    """Modèles anglais du catalogue des codes (MESSAGES de errors.py), sauf ceux sans lettre hors de leurs champs."""
     path = source / "errors.py"
     for node in ast.parse(path.read_text(encoding="utf-8"), filename=str(path)).body:
         if isinstance(node, ast.AnnAssign | ast.Assign) and "MESSAGES" in ast.unparse(node.targets[0] if isinstance(node, ast.Assign) else node.target):
             return [
                 (value.value, f"errors.py:{value.lineno}")
                 for value in node.value.values
-                if isinstance(value, ast.Constant) and re.sub(r"\{[^}]*\}", "", value.value).strip()
+                if isinstance(value, ast.Constant) and re.search(r"[^\W\d_]", re.sub(r"\{[^}]*\}", "", value.value))
             ]
     return []
 

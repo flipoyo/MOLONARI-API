@@ -16,8 +16,7 @@ from pathlib import Path
 import pandas as pd
 
 from ..domain.models import Lab, PressureSensor, SamplingPoint, Shaft, Study, Thermometer
-from ..errors import UserError
-from ..i18n import t
+from ..errors import Issue, UserError
 from ..storage.project import Project
 from .lab_import import read_text
 
@@ -30,7 +29,7 @@ class LegacyReport:
     studies: int = 0
     points: int = 0
     cleaned_points: int = 0
-    warnings: list[str] = field(default_factory=list)
+    warnings: list[Issue] = field(default_factory=list)
 
 
 def _date(value) -> datetime | None:
@@ -54,12 +53,12 @@ def _find_file(stored: str | None, base: Path, subfolder: str) -> Path | None:
 def import_legacy_database(database: Path, project: Project) -> LegacyReport:
     database = Path(database)
     if not database.is_file():
-        raise UserError(t("File not found: {path}").format(path=database))
+        raise UserError("E_FILE_NOT_FOUND", path=database)
     con = sqlite3.connect(f"file:{database}?mode=ro", uri=True)
     try:
         tables = {row[0] for row in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         if not {"Labo", "Study", "SamplingPoint", "RawMeasuresTemp"} <= tables:
-            raise UserError(t("{name} is not a database from the previous Molonaviz.").format(name=database.name))
+            raise UserError("E_LEGACY_DATABASE_INVALID", name=database.name)
         return _import(con, database.parent, project)
     finally:
         con.close()
@@ -72,7 +71,7 @@ def _import(con: sqlite3.Connection, base: Path, project: Project) -> LegacyRepo
     existing_labs = set(project.lab_names())
     for lab_id, lab_name in lab_names.items():
         if lab_name in existing_labs:
-            report.warnings.append(t("Laboratory \"{name}\" already exists: kept as is.").format(name=lab_name))
+            report.warnings.append(Issue(None, "W_LEGACY_LAB_EXISTS", name=lab_name))
             continue
         lab = Lab(lab_name)
         for name, manu, ref, error in con.execute("SELECT Name, ManuName, ManuRef, Error FROM Thermometer WHERE Labo = ?", (lab_id,)):
@@ -93,7 +92,7 @@ def _import(con: sqlite3.Connection, base: Path, project: Project) -> LegacyRepo
     existing_studies = {s.name for s in project.studies()}
     for study_id, study_name, lab_id in con.execute("SELECT ID, Name, Labo FROM Study").fetchall():
         if study_name in existing_studies:
-            report.warnings.append(t("Study \"{name}\" already exists: skipped.").format(name=study_name))
+            report.warnings.append(Issue(None, "W_LEGACY_STUDY_EXISTS", name=study_name))
             continue
         project.add_study(Study(study_name, lab_names[lab_id]))
         report.studies += 1
@@ -105,9 +104,9 @@ def _import(con: sqlite3.Connection, base: Path, project: Project) -> LegacyRepo
             notice_file = _find_file(notice_path, base, "Notices")
             scheme_file = _find_file(scheme_path, base, "Schemes")
             if notice_path and notice_file is None:
-                report.warnings.append(t("{point}: notice not found ({path}).").format(point=name, path=notice_path))
+                report.warnings.append(Issue(None, "W_LEGACY_NOTICE_NOT_FOUND", point=name, path=notice_path))
             if scheme_path and scheme_file is None:
-                report.warnings.append(t("{point}: scheme not found ({path}).").format(point=name, path=scheme_path))
+                report.warnings.append(Issue(None, "W_LEGACY_SCHEME_NOT_FOUND", point=name, path=scheme_path))
             point = SamplingPoint(
                 name=name, study=study_name, pressure_sensor=psensor_names.get(psensor, ""), shaft=shaft_names.get(shaft, ""),
                 setup_date=_date(setup), measure_date=_date(last), river_bed=float(river_bed or 0.0), offset=float(offset or 0.0),
@@ -121,7 +120,7 @@ def _import(con: sqlite3.Connection, base: Path, project: Project) -> LegacyRepo
             try:
                 project.add_point(point, raw_t, raw_p)
             except UserError as exc:
-                report.warnings.append(f"{name} : {exc}")
+                report.warnings.append(Issue(None, "W_LEGACY_POINT_SKIPPED", point=name, error=exc))
                 continue
             report.points += 1
             cleaned = pd.read_sql_query(

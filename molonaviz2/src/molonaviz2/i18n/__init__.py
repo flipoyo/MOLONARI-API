@@ -54,14 +54,21 @@ def render(obj, tr) -> str:
     if hasattr(obj, "localized"):
         return obj.localized(tr)
     if isinstance(obj, UserError | Issue):
-        params = dict(obj.params)
-        if "issues" in params:
-            params["issues"] = "\n".join(render(issue, tr) for issue in params["issues"])
+        params = {key: _render_param(key, value, tr) for key, value in obj.params.items()}
         message = tr(message_template(obj.code)).format(**params)
         if isinstance(obj, Issue) and obj.prefixed and obj.field:
             return f"{obj.field}: {message}"
         return message
     return str(obj)
+
+
+def _render_param(key: str, value, tr):
+    """Une erreur ou un problème passé en paramètre d'un autre est rendu lui aussi."""
+    if key == "issues":
+        return "\n".join(render(issue, tr) for issue in value)
+    if isinstance(value, UserError | Issue) or hasattr(value, "localized"):
+        return render(value, tr)
+    return value
 
 
 def t(text: str) -> str:

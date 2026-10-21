@@ -22,8 +22,7 @@ import numpy as np
 import pandas as pd
 
 from ..domain.models import RAW_PRESSURE_COLUMNS, RAW_TEMPERATURE_COLUMNS
-from ..errors import UserError
-from ..i18n import t
+from ..errors import Issue, UserError
 from .dates import parse_date, parse_dates
 from .lab_import import read_key_values, read_text
 
@@ -48,7 +47,7 @@ class PointInfo:
     measure_date: datetime | None = None
     river_bed: float | None = None
     offset: float | None = None
-    warnings: list[str] = field(default_factory=list)
+    warnings: list[Issue] = field(default_factory=list)
 
 
 def read_point_info(path: Path) -> PointInfo:
@@ -67,7 +66,7 @@ def read_point_info(path: Path) -> PointInfo:
             else:
                 setattr(info, attribute, value.strip())
         except (UserError, ValueError):
-            info.warnings.append(t("Could not read \"{value}\" for {field}.").format(value=value, field=attribute))
+            info.warnings.append(Issue(None, "W_POINT_INFO_UNREADABLE", value=value, field=attribute))
     # Fichiers sans clés reconnues : les 3 premières lignes sont nom, capteur de pression, tige (Molonaviz).
     if info.name is None and len(rows) >= 3:
         info.name, info.pressure_sensor, info.shaft = (rows[i][1] or None for i in range(3))
@@ -79,7 +78,7 @@ class ParsedMeasures:
     frame: pd.DataFrame
     date_format: str
     total_rows: int
-    dropped: list[tuple[int, str]]  # (numéro de ligne dans le fichier, raison)
+    dropped: list[tuple[int, Issue]]  # (numéro de ligne dans le fichier, raison)
     columns_used: list[str]
     converted_units: list[str] = field(default_factory=list)  # ex. « °F → °C »
 
@@ -127,7 +126,7 @@ def _read_measures(path: Path, kind: str) -> ParsedMeasures:
     path = Path(path)
     rows, delimiter = _read_rows(path)
     if not rows:
-        raise UserError(t("The file {file} is empty.").format(file=path.name))
+        raise UserError("E_MEASURES_FILE_EMPTY", file=path.name)
 
     # Repérer l'en-tête : première ligne (parmi les 5 premières) suivie d'une ligne de données.
     header_index = None
@@ -138,7 +137,7 @@ def _read_measures(path: Path, kind: str) -> ParsedMeasures:
             header_index = i - 1 if i > 0 else None
             break
     else:
-        raise UserError(t("No dated measurement found at the start of {file}.").format(file=path.name))
+        raise UserError("E_MEASURES_NO_DATE", file=path.name)
     header = [c.strip() for c in rows[header_index]] if header_index is not None else []
     data_start = (header_index + 1) if header_index is not None else 0
 
@@ -173,39 +172,33 @@ def _read_measures(path: Path, kind: str) -> ParsedMeasures:
         if not row or not any(c.strip() for c in row):
             continue
         if len(row) <= max(columns):
-            dropped.append((line_number, t("missing columns")))
+            dropped.append((line_number, Issue(None, "W_ROW_MISSING_COLUMNS")))
             continue
         date = row[date_col].strip()
         cells = [row[c].strip() for c in columns]
         if not date:
-            dropped.append((line_number, t("no date")))
+            dropped.append((line_number, Issue(None, "W_ROW_NO_DATE")))
             continue
         if any(not c for c in cells):
-            dropped.append((line_number, t("empty values (logger event)")))
+            dropped.append((line_number, Issue(None, "W_ROW_EMPTY_VALUES")))
             continue
         try:
             numbers = [float(c.replace(",", ".") if decimal_comma else c) for c in cells]
         except ValueError:
             bad = next(c for c in cells if not _is_number(c, decimal_comma))
-            dropped.append((line_number, t("not a number: \"{value}\"").format(value=bad)))
+            dropped.append((line_number, Issue(None, "W_ROW_NOT_A_NUMBER", value=bad)))
             continue
         dates.append(date)
         values.append(numbers)
         lines.append(line_number)
 
     if len(dates) < 2:
-        raise UserError(t("Fewer than 2 valid measurements in {file}.").format(file=path.name))
+        raise UserError("E_MEASURES_TOO_FEW", file=path.name)
     parsed_dates, date_format, chronological = parse_dates(dates)
     if not chronological:
         backwards = int(np.flatnonzero(np.diff(parsed_dates.to_numpy().astype("datetime64[s]").astype(np.int64)) < 0)[0]) + 1
         raise UserError(
-            t(
-                "Dates in {file} are not in chronological order: line {line} ({value}) comes after line {previous_line} ({previous}). "
-                "The file was probably altered by a spreadsheet; export it again from the logger software."
-            ).format(
-                file=path.name, line=lines[backwards], value=dates[backwards],
-                previous_line=lines[backwards - 1], previous=dates[backwards - 1],
-            )
+            "E_MEASURES_NOT_CHRONOLOGICAL", file=path.name, line=lines[backwards], value=dates[backwards], previous_line=lines[backwards - 1], previous=dates[backwards - 1]
         )
     array = np.asarray(values, np.float64)
     converted = []
@@ -219,7 +212,7 @@ def _read_measures(path: Path, kind: str) -> ParsedMeasures:
     duplicated = frame["date"].duplicated()
     if duplicated.any():
         for idx in np.flatnonzero(duplicated.to_numpy()):
-            dropped.append((-1, t("duplicate date {date}").format(date=frame["date"].iloc[idx])))
+            dropped.append((-1, Issue(None, "W_ROW_DUPLICATE_DATE", date=frame["date"].iloc[idx])))
         frame = frame[~duplicated]
     frame = frame.reset_index(drop=True)
     used = [header[c] if header and c < len(header) else f"#{c + 1}" for c in [date_col, *columns]]

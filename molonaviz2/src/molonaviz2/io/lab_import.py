@@ -17,20 +17,26 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..domain.models import Lab, PressureSensor, Shaft, Thermometer
-from ..errors import UserError
-from ..i18n import t
+from ..errors import Issue, UserError
+from ..i18n import N_, render
 from .dates import parse_date
 
 
 @dataclass
 class ImportIssue:
+    """Fichier écarté à l'import : `message` est un `Issue` (ou le texte d'une erreur système)."""
+
     file: str
     message: str
     line: int | None = None
 
     def __str__(self) -> str:
-        where = f"{self.file}, " + t("line {n}").format(n=self.line) if self.line else self.file
-        return f"{where} : {self.message}"
+        return self.localized(lambda text: text)
+
+    def localized(self, tr) -> str:
+        """Texte traduit par `tr` (voir `i18n.render`)."""
+        where = f"{self.file}, " + tr(N_("line {n}")).format(n=self.line) if self.line else self.file
+        return f"{where} : {render(self.message, tr)}"
 
 
 @dataclass
@@ -62,8 +68,9 @@ def read_key_values(path: Path) -> list[tuple[str, str]]:
 
 
 class _InvalidFile(Exception):
-    def __init__(self, message: str, line: int | None = None):
-        super().__init__(message)
+    def __init__(self, issue: Issue, line: int | None = None):
+        super().__init__(issue)
+        self.issue = issue
         self.line = line
 
 
@@ -72,19 +79,19 @@ def _number(rows, index: int) -> float:
     try:
         return float(value.replace(",", "."))
     except ValueError:
-        raise _InvalidFile(t("\"{key}\" is not a number: \"{value}\".").format(key=key, value=value), index + 1) from None
+        raise _InvalidFile(Issue(None, "E_LAB_FILE_NOT_A_NUMBER", key=key, value=value), index + 1) from None
 
 
 def _text(rows, index: int) -> str:
     key, value = rows[index]
     if not value:
-        raise _InvalidFile(t("\"{key}\" is empty.").format(key=key), index + 1)
+        raise _InvalidFile(Issue(None, "E_LAB_FILE_EMPTY_VALUE", key=key), index + 1)
     return value
 
 
 def _expect_rows(rows, count: int) -> None:
     if len(rows) != count:
-        raise _InvalidFile(t("Expected {expected} lines, found {found}.").format(expected=count, found=len(rows)))
+        raise _InvalidFile(Issue(None, "E_LAB_FILE_LINE_COUNT", expected=count, found=len(rows)))
 
 
 def parse_thermometer(path: Path) -> Thermometer:
@@ -99,7 +106,7 @@ def parse_pressure_sensor(path: Path) -> PressureSensor:
     try:
         calibration = parse_date(rows[2][1])
     except UserError as exc:
-        raise _InvalidFile(str(exc), 3) from None
+        raise _InvalidFile(Issue.from_error(None, exc), 3) from None
     return PressureSensor(
         name=_text(rows, 0),
         datalogger=rows[1][1],
@@ -119,9 +126,9 @@ def parse_shaft(path: Path) -> Shaft:
     try:
         depths = tuple(float(d) for d in ast.literal_eval(text))
     except (ValueError, SyntaxError, TypeError):
-        raise _InvalidFile(t("Sensor depths must be a list of 4 numbers, e.g. [0.1, 0.2, 0.3, 0.4]."), 4) from None
+        raise _InvalidFile(Issue(None, "E_SHAFT_DEPTHS_FORMAT"), 4) from None
     if len(depths) != 4 or any(b <= a for a, b in zip(depths, depths[1:])) or depths[0] <= 0:
-        raise _InvalidFile(t("Sensor depths must be 4 strictly increasing positive values (m)."), 4)
+        raise _InvalidFile(Issue(None, "E_SHAFT_DEPTHS_ORDER"), 4)
     return Shaft(name=_text(rows, 0), datalogger=rows[1][1], thermometer=_text(rows, 2), depths=depths)  # type: ignore[arg-type]
 
 
@@ -135,10 +142,10 @@ SUBFOLDERS = {
 def import_lab_directory(directory: Path, name: str | None = None) -> LabImport:
     directory = Path(directory)
     if not directory.is_dir():
-        raise UserError(t("Folder not found: {path}").format(path=directory))
+        raise UserError("E_FOLDER_NOT_FOUND", path=directory)
     if not any((directory / sub).is_dir() for sub in SUBFOLDERS):
         raise UserError(
-            t("This folder does not look like a laboratory: it should contain temperature_sensors, pressure_sensors and/or shafts.")
+            "E_LAB_FOLDER_INVALID"
         )
     lab = Lab(name=(name or directory.name).strip())
     result = LabImport(lab)
@@ -149,13 +156,13 @@ def import_lab_directory(directory: Path, name: str | None = None) -> LabImport:
             try:
                 item = parser(path)
             except _InvalidFile as exc:
-                result.issues.append(ImportIssue(relative, str(exc), exc.line))
+                result.issues.append(ImportIssue(relative, exc.issue, exc.line))
                 continue
             except OSError as exc:
                 result.issues.append(ImportIssue(relative, str(exc)))
                 continue
             if item.name in names:
-                result.issues.append(ImportIssue(relative, t("Duplicate name \"{name}\": file ignored.").format(name=item.name)))
+                result.issues.append(ImportIssue(relative, Issue(None, "W_LAB_DUPLICATE_NAME", name=item.name)))
                 continue
             names.add(item.name)
             getattr(lab, attribute).append(item)
@@ -163,6 +170,6 @@ def import_lab_directory(directory: Path, name: str | None = None) -> LabImport:
     for sensor in [*lab.pressure_sensors, *lab.shafts]:
         if known and sensor.thermometer not in known:
             result.issues.append(
-                ImportIssue(sensor.name, t("Refers to thermometer \"{name}\", which is not in this laboratory.").format(name=sensor.thermometer))
+                ImportIssue(sensor.name, Issue(None, "W_LAB_UNKNOWN_THERMOMETER", name=sensor.thermometer))
             )
     return result

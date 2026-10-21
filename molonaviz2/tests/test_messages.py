@@ -21,7 +21,7 @@ CODE = re.compile(r"^[EW]_[A-Z0-9_]+$")
 # Position de l'argument « code » des constructeurs.
 CODE_ARGUMENT = {"UserError": 0, "Issue": 1}
 # Fonctions qui relaient un code reçu en paramètre (code non littéral admis) : fichier → noms.
-FORWARDERS = {"errors.py": {"__init__", "__new__", "_rebuild_error"}}
+FORWARDERS = {"errors.py": {"__init__", "__new__", "_rebuild_error", "from_error"}}
 
 
 def fields(template: str) -> set[str]:
@@ -62,8 +62,8 @@ def test_codes_are_well_formed():
 
 
 def test_every_template_has_its_french_translation():
-    # Un modèle fait seulement de champs ("{issues}") n'a rien à traduire.
-    missing = [t for t in MESSAGES.values() if re.sub(r"\{[^}]*\}", "", t).strip() and t not in CATALOG]
+    # Un modèle sans aucune lettre hors de ses champs ("{issues}", "{point} : {error}") n'a rien à traduire.
+    missing = [t for t in MESSAGES.values() if re.search(r"[^\W\d_]", re.sub(r"\{[^}]*\}", "", t)) and t not in CATALOG]
     assert not missing, missing
 
 
@@ -185,3 +185,21 @@ def test_render_delegates_to_objects_that_localize_themselves():
 
     assert render(Located(), french) == "ligne 3"
     assert render(ValueError("boom"), french) == "boom"
+
+
+def test_a_message_parameter_may_be_called_field(monkeypatch):
+    monkeypatch.setitem(MESSAGES, "W_TEST_FIELD", "Could not read {value} for {field}.")
+    issue = Issue(None, "W_TEST_FIELD", value="x", field="offset")
+    error = UserError("W_TEST_FIELD", None, value="x", field="offset")
+    assert issue == str(error) == "Could not read x for offset." and issue.field is None and error.field is None
+
+
+def test_issue_from_error_and_nested_errors_are_rendered(template, monkeypatch):
+    from molonaviz2.i18n import render
+
+    monkeypatch.setitem(MESSAGES, "W_TEST_SKIPPED", "{point} : {error}")
+    error = UserError(template, path="a.csv")
+    assert Issue.from_error("data", error) == "File not found: a.csv" and Issue.from_error("data", error).code == template
+    skipped = Issue(None, "W_TEST_SKIPPED", point="P1", error=error)
+    assert skipped == "P1 : File not found: a.csv"
+    assert render(skipped, french) == "P1 : Fichier introuvable : a.csv"

@@ -15,7 +15,6 @@ from datetime import datetime
 import pandas as pd
 
 from ..errors import UserError
-from ..i18n import t
 
 
 def _formats() -> list[str]:
@@ -70,7 +69,7 @@ def parse_dates(values: Sequence[str]) -> tuple[pd.Series, str, bool]:
     """
     series = pd.Series([normalize(v) for v in values], dtype="object")
     if series.empty:
-        raise UserError(t("No dates to read."))
+        raise UserError("E_DATES_EMPTY")
     shapes = series.map(_shape)
     groups = []
     for shape in dict.fromkeys(shapes):  # ordre d'apparition
@@ -78,7 +77,7 @@ def parse_dates(values: Sequence[str]) -> tuple[pd.Series, str, bool]:
         candidates = _candidates(series[index])
         if not candidates:
             sample = series[index[0]]
-            raise UserError(t("Unrecognised date format (first value: \"{value}\").").format(value=sample))
+            raise UserError("E_DATE_FORMAT_UNKNOWN", value=sample)
         groups.append((index, candidates))
 
     first = None
@@ -103,4 +102,4 @@ def parse_date(value: str | None) -> datetime | None:
             return datetime.strptime(text, fmt)
         except ValueError:
             continue
-    raise UserError(t("Unrecognised date format (first value: \"{value}\").").format(value=text))
+    raise UserError("E_DATE_FORMAT_UNKNOWN", value=text)

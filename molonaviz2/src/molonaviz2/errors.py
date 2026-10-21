@@ -34,6 +34,34 @@ MESSAGES: dict[str, str] = {
     "E_STUDY_EXISTS": "A study named \"{name}\" already exists.",
     "E_STUDY_NAME_REQUIRED": "The study needs a name.",
     "E_STUDY_NOT_FOUND": "Study \"{name}\" does not exist.",
+    # io
+    "E_DATES_EMPTY": "No dates to read.",
+    "E_DATE_FORMAT_UNKNOWN": "Unrecognised date format (first value: \"{value}\").",
+    "E_FOLDER_NOT_FOUND": "Folder not found: {path}",
+    "E_LAB_FILE_EMPTY_VALUE": "\"{key}\" is empty.",
+    "E_LAB_FILE_LINE_COUNT": "Expected {expected} lines, found {found}.",
+    "E_LAB_FILE_NOT_A_NUMBER": "\"{key}\" is not a number: \"{value}\".",
+    "E_LAB_FOLDER_INVALID": "This folder does not look like a laboratory: it should contain temperature_sensors, pressure_sensors and/or shafts.",
+    "E_LEGACY_DATABASE_INVALID": "{name} is not a database from the previous Molonaviz.",
+    "E_MEASURES_FILE_EMPTY": "The file {file} is empty.",
+    "E_MEASURES_NOT_CHRONOLOGICAL": "Dates in {file} are not in chronological order: line {line} ({value}) comes after line {previous_line} ({previous}). The file was probably altered by a spreadsheet; export it again from the logger software.",
+    "E_MEASURES_NO_DATE": "No dated measurement found at the start of {file}.",
+    "E_MEASURES_TOO_FEW": "Fewer than 2 valid measurements in {file}.",
+    "E_SHAFT_DEPTHS_FORMAT": "Sensor depths must be a list of 4 numbers, e.g. [0.1, 0.2, 0.3, 0.4].",
+    "E_SHAFT_DEPTHS_ORDER": "Sensor depths must be 4 strictly increasing positive values (m).",
+    "W_LAB_DUPLICATE_NAME": "Duplicate name \"{name}\": file ignored.",
+    "W_LAB_UNKNOWN_THERMOMETER": "Refers to thermometer \"{name}\", which is not in this laboratory.",
+    "W_LEGACY_LAB_EXISTS": "Laboratory \"{name}\" already exists: kept as is.",
+    "W_LEGACY_NOTICE_NOT_FOUND": "{point}: notice not found ({path}).",
+    "W_LEGACY_POINT_SKIPPED": "{point} : {error}",
+    "W_LEGACY_SCHEME_NOT_FOUND": "{point}: scheme not found ({path}).",
+    "W_LEGACY_STUDY_EXISTS": "Study \"{name}\" already exists: skipped.",
+    "W_POINT_INFO_UNREADABLE": "Could not read \"{value}\" for {field}.",
+    "W_ROW_DUPLICATE_DATE": "duplicate date {date}",
+    "W_ROW_EMPTY_VALUES": "empty values (logger event)",
+    "W_ROW_MISSING_COLUMNS": "missing columns",
+    "W_ROW_NOT_A_NUMBER": "not a number: \"{value}\"",
+    "W_ROW_NO_DATE": "no date",
 }
 
 
@@ -57,10 +85,11 @@ class UserError(Exception):
 
     `UserError(code, field=None, **params)`. `str(exc)` est le message anglais formaté ; le bord le
     traduit à partir de `.code` et `.params`. Le paramètre `issues` (liste d'`Issue`) est réservé aux
-    erreurs qui regroupent plusieurs problèmes.
+    erreurs qui regroupent plusieurs problèmes. `code` et `field` sont positionnels : un paramètre de
+    message peut donc s'appeler `field`.
     """
 
-    def __init__(self, code: str, field: str | None = None, **params):
+    def __init__(self, code: str, field: str | None = None, /, **params):
         if not _is_code(code):  # ancienne forme : texte libre (temporaire)
             code, params = "E_LEGACY", {"text": code}
         self.code = code
@@ -83,7 +112,7 @@ class Issue(str):
 
     `Issue(field, code, prefixed=False, **params)`. C'est une chaîne : sa valeur est le message anglais
     formaté (`.message`), précédé de `"<field>: "` si `prefixed`. Elle porte `.code`, `.field` et
-    `.params`. Attention : `==` compare le texte, pas le code.
+    `.params`. Attention : `==` compare le texte, pas le code. `field` et `code` sont positionnels.
     """
 
     code: str
@@ -92,11 +121,16 @@ class Issue(str):
     message: str
     prefixed: bool
 
-    def __new__(cls, field: str | None, code: str, prefixed: bool = False, **params):
+    def __new__(cls, field: str | None, code: str, /, prefixed: bool = False, **params):
         message = format_message(code, params)
         issue = super().__new__(cls, f"{field}: {message}" if prefixed and field else message)
         issue.code, issue.field, issue.params, issue.message, issue.prefixed = code, field, params, message, prefixed
         return issue
+
+    @classmethod
+    def from_error(cls, field: str | None, error: UserError, prefixed: bool = False) -> Issue:
+        """Problème qui reprend le code et les paramètres d'une erreur attendue."""
+        return cls(field, error.code, prefixed=prefixed, **error.params)
 
     def __getnewargs_ex__(self):
         return (self.field, self.code), {"prefixed": self.prefixed, **self.params}
