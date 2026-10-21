@@ -142,6 +142,7 @@ MESSAGES: dict[str, str] = {
     "E_TWIN_SENSOR_DEPTHS": "expected 4 strictly increasing positive depths (m).",
     "E_TWIN_TOO_FEW_MEASUREMENTS": "fewer than 3 measurements in the selected period.",
     "E_TWIN_UNKNOWN_KEY": "unknown key (allowed: {keys}).",
+    "W_FIELD_UNAVAILABLE": "Results written before format 2.0.0: flux fields, quantiles and chains are unavailable. Create a new twin with this version to get them.",
 }
 
 

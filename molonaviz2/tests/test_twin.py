@@ -23,6 +23,8 @@ from molonaviz2.twin.results import load_results
 from molonaviz2.twin.run import list_twins, next_twin_folder, run_twin, twin_status
 
 DEPTHS = (0.1, 0.2, 0.3, 0.4)
+# Champs du format 2.0.0, avec la première cellule (profondeur|unité).
+FIELD_FILES = {"water_flux_field.csv": "depth_m|m_per_s", "heat_flux_advective.csv": "depth_m|W_per_m2", "heat_flux_conductive.csv": "depth_m|W_per_m2"}
 
 
 @pytest.fixture(scope="module")
@@ -222,7 +224,7 @@ def test_full_lifecycle(twins, point034, monkeypatch):
     assert run.computed and run.status.state == "computed"
     results = run.status.results_dir
     assert results.parent == twins.parent / "results" and results.name == run.status.twin_id
-    assert {p.name for p in results.iterdir()} == {"temperature.csv", "water_flux.csv", "residuals.csv", "metadata.json"}
+    assert {p.name for p in results.iterdir()} == {"temperature.csv", "water_flux.csv", "residuals.csv", "metadata.json", *FIELD_FILES}
     meta = json.loads((results / "metadata.json").read_text())
     assert meta["twin_id"] == run.status.twin_id and meta["mode"] == "direct" and not meta["experimental"]
     assert meta["data"]["rows"] == 400 and len(meta["data"]["sha256"]) == 64
@@ -263,6 +265,38 @@ def test_results_are_identical_bit_for_bit(tmp_path, point034):
         assert (folders[0] / file).read_bytes() == (folders[1] / file).read_bytes(), file
 
 
+def test_direct_results_2_0_0_fields_and_metadata(twins, point034):
+    from molonaviz2.engine import api
+
+    folder = make_twin(twins, point034)
+    results_dir = run_twin(folder).status.results_dir
+    config = load_twin(folder)
+    forward = api.run_forward(config.column_inputs(), config.forward_config())
+    expected = {"water_flux_field.csv": forward.water_flux, "heat_flux_advective.csv": forward.advective_flux,
+                "heat_flux_conductive.csv": forward.conductive_flux_down}
+    for name, index_name in FIELD_FILES.items():
+        frame = pd.read_csv(results_dir / name, index_col=0, float_precision="round_trip")
+        assert frame.index.name == index_name
+        np.testing.assert_array_equal(frame.index.to_numpy(float), forward.depths)
+        np.testing.assert_array_equal(frame.to_numpy(float), expected[name])
+    metadata = json.loads((results_dir / "metadata.json").read_text())
+    assert metadata["results_format"] == "2.0.0"
+    assert metadata["instruments"] == {"sigma_temperature_C": 0.05, "sigma_pressure_m": 0.01}
+    assert metadata["conventions"]["advective_reference_C"] == 0.0
+    assert {"z", "q", "heat_flux"} <= set(metadata["conventions"]) and "downwards" in metadata["conventions"]["heat_flux"]
+    assert not any(results_dir.glob("*.npz"))  # tableaux .npz : mode mcmc seulement
+
+
+def test_results_2_0_0_are_identical_bit_for_bit(tmp_path, point034):
+    folders = []
+    for name in ("a", "b"):
+        twins = tmp_path / name / "twins"
+        twins.mkdir(parents=True)
+        folders.append(run_twin(make_twin(twins, point034)).status.results_dir)
+    for file in FIELD_FILES:
+        assert (folders[0] / file).read_bytes() == (folders[1] / file).read_bytes(), file
+
+
 @pytest.mark.parametrize("head, direction", [(0.05, "infiltration"), (-0.05, "exfiltration")])
 def test_flux_sign_convention(twins, point034, head, direction):
     data = point034.copy()
@@ -283,7 +317,93 @@ def test_mcmc_twin_is_marked_experimental(twins, point034):
     assert results.metadata["experimental"] is True
     assert {"burn_in_iterations", "acceptance_mean", "rhat", "best_parameters"} <= set(results.metadata["mcmc"])
     assert (run.status.results_dir / "posterior_summary.csv").is_file()
+    assert {p.name for p in run.status.results_dir.glob("*.npz")} == {"quantiles.npz", "posterior.npz", "fields_temperature.npz"}
+    assert results.results_format == "2.0.0" and results.warnings == []
+    assert results.posterior["samples"].shape == (10, 7, 1, 4) and set(results.fields) == {"temperature"}
+    assert results.fields["temperature"]["values"].shape[1] == 3  # aux 3 capteurs (store_fields par défaut)
+    assert results.quantiles["temperature_C"].shape[0] == 3 and results.heat_flux_conductive.shape == results.temperature.shape
     assert any(c.startswith("q_riverbed_q") for c in results.flux.columns)
+
+
+def as_format_1(results_dir):
+    """Ramène un dossier de résultats direct au format 1.x : sans les fichiers ni les clés de 2.0.0."""
+    for name in FIELD_FILES:
+        (results_dir / name).unlink()
+    metadata = json.loads((results_dir / "metadata.json").read_text())
+    for key in ("results_format", "instruments", "conventions"):
+        del metadata[key]
+    (results_dir / "metadata.json").write_text(json.dumps(metadata))
+    return results_dir
+
+
+def test_results_of_format_1_are_read_with_a_warning(twins, point034):
+    results_dir = run_twin(make_twin(twins, point034)).status.results_dir
+    current = load_results(results_dir)
+    assert current.results_format == "2.0.0" and current.warnings == [] and current.quantiles is None and current.fields == {}
+    written = pd.read_csv(results_dir / "heat_flux_conductive.csv", index_col=0, float_precision="round_trip")
+    np.testing.assert_array_equal(current.heat_flux_conductive, written.to_numpy(float))
+    old = as_format_1(shutil.copytree(results_dir, twins.parent / "old"))
+    previous = load_results(old)
+    assert previous.results_format == "1" and [w.code for w in previous.warnings] == ["W_FIELD_UNAVAILABLE"]
+    assert previous.heat_flux_conductive is None and previous.water_flux_field is None and previous.posterior is None
+    np.testing.assert_array_equal(previous.temperature, current.temperature)
+    pd.testing.assert_frame_equal(previous.flux, current.flux)
+
+
+def small_inversion_config(**overrides):
+    values = {"layers": [LayerSpec("couche 1", 0.4)], "nb_cells": 20, "nb_chains": 7, "nb_iter": 10, "burn_in_max": 10, "n_field_samples": 7}
+    return InversionConfig(**{**values, **overrides})
+
+
+def load_npz(path):
+    with np.load(path, allow_pickle=False) as data:
+        return {key: data[key] for key in data.files}
+
+
+@pytest.mark.parametrize("store_fields, files", [
+    ("sensors", {"fields_temperature.npz"}),
+    ("full", {"fields_temperature.npz", "fields_water_flux.npz"}),
+    ("none", set()),
+])
+def test_mcmc_arrays_2_0_0(tmp_path, point034, store_fields, files):
+    from molonaviz2.engine import api
+    from molonaviz2.twin.results import write_results
+
+    twins = tmp_path / "twins"
+    twins.mkdir()
+    config = load_twin(make_twin(twins, point034.iloc[:150], small_inversion_config(thin=2, store_fields=store_fields), sigma_t=0.2))
+    inversion = api.run_inversion(config.column_inputs(), config.inversion_config())
+    folder = tmp_path / "results"
+    write_results(folder, inversion.best, inversion, ["couche 1"], {})
+    assert {p.name for p in folder.glob("*.npz")} == {"quantiles.npz", "posterior.npz", *files}
+
+    quantiles = load_npz(folder / "quantiles.npz")
+    np.testing.assert_array_equal(quantiles["quantile"], [0.05, 0.5, 0.95])
+    assert quantiles["time"].dtype == np.dtype("datetime64[s]") and quantiles["depth_m"].shape == inversion.field_depths.shape
+    np.testing.assert_array_equal(quantiles["temperature_C"], np.stack([q.temperature for q in inversion.quantiles]))
+    np.testing.assert_array_equal(quantiles["water_flux_m_per_s"], np.stack([q.water_flux for q in inversion.quantiles]))
+
+    posterior = load_npz(folder / "posterior.npz")
+    assert posterior["samples"].shape == (5, 7, 1, 4)  # 10 itérations, thin = 2
+    np.testing.assert_array_equal(posterior["samples"], inversion.samples)
+    np.testing.assert_array_equal(posterior["energy"], inversion.energies)
+    np.testing.assert_array_equal(posterior["acceptance"], inversion.acceptance)
+    np.testing.assert_array_equal(posterior["resets"], inversion.resets)
+    np.testing.assert_array_equal(posterior["iteration"], [2, 4, 6, 8, 10])
+    assert list(posterior["parameter"]) == ["neg_log10_k", "porosity", "lambda_s", "rhos_cs"] and list(posterior["layer"]) == ["couche 1"]
+
+    if "fields_temperature.npz" in files:
+        fields = load_npz(folder / "fields_temperature.npz")
+        np.testing.assert_array_equal(fields["chain"], inversion.field_chain)
+        np.testing.assert_array_equal(fields["iteration"], inversion.field_iteration)
+        expected = inversion.sensor_temperature if store_fields == "sensors" else inversion.field_temperature
+        np.testing.assert_array_equal(fields["values"], expected)
+        assert fields["values"].dtype == expected.dtype
+        depths = inversion.best.sensor_depths if store_fields == "sensors" else inversion.field_depths
+        np.testing.assert_array_equal(fields["depth_m"], depths)
+        assert fields["values"].shape == (len(fields["chain"]), len(depths), len(fields["time"]))
+    if "fields_water_flux.npz" in files:
+        np.testing.assert_array_equal(load_npz(folder / "fields_water_flux.npz")["values"], inversion.field_water_flux)
 
 
 def test_listing_and_next_twin_name(twins):
@@ -356,6 +476,24 @@ def test_welcome_page_lists_twins_and_window_runs_them(qtbot, tmp_path, twins, p
     assert "Duplicate of twin_01" in duplicate_window.state.text() and duplicate_window.results is not None
     ui_errors.set_presenter(previous)
     assert shown == []
+
+
+def test_twin_window_warns_about_results_of_format_1(qtbot, tmp_path, twins, point034):
+    from PySide6 import QtCore
+
+    from molonaviz2.settings import Settings
+    from molonaviz2.ui.main_window import MainWindow
+
+    folder = make_twin(twins, point034)
+    as_format_1(run_twin(folder).status.results_dir)
+    settings = Settings(QtCore.QSettings(str(tmp_path / "s.ini"), QtCore.QSettings.Format.IniFormat))
+    window = MainWindow(settings)
+    qtbot.addWidget(window)
+    twin_window = window.open_twin(folder)
+    assert twin_window.results is not None and not twin_window.result_warnings.isHidden()
+    assert "before format 2.0.0" in twin_window.result_warnings.text()
+    run_twin_window = window.open_twin(run_twin(make_twin(twins, point034.iloc[:200])).status.config.folder)
+    assert run_twin_window.result_warnings.isHidden()
 
 
 def test_create_twin_from_a_computation_in_the_app(qtbot, tmp_path, twins, point034, monkeypatch):

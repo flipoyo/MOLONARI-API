@@ -52,6 +52,8 @@ class TwinWindow(QtWidgets.QMainWindow):
         self.identity.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.TextSelectableByMouse)
         self.state = QtWidgets.QLabel()
         self.state.setWordWrap(True)
+        self.result_warnings = hint("")  # avertissements de la relecture (résultats 1.x…)
+        self.result_warnings.hide()
         self.run_button = QtWidgets.QPushButton(t("Run  (F5)"))
         self.run_button.setDefault(True)
         self.run_button.clicked.connect(self.run)
@@ -133,6 +135,7 @@ class TwinWindow(QtWidgets.QMainWindow):
         layout.addWidget(self.title)
         layout.addWidget(self.identity)
         layout.addWidget(self.state)
+        layout.addWidget(self.result_warnings)
         layout.addLayout(buttons)
         layout.addWidget(splitter, 1)
         self.setCentralWidget(central)
@@ -169,6 +172,9 @@ class TwinWindow(QtWidgets.QMainWindow):
             self.state.setText(state_text(self.status))
             if self.status.has_results:
                 self.results = load_results(self.status.results_dir)
+        warnings = self.results.warnings if self.results is not None else []
+        self.result_warnings.setText("\n".join(f"⚠ {error_text(warning)}" for warning in warnings))
+        self.result_warnings.setVisible(bool(warnings))
         self.tabs.setVisible(self.results is not None)
         self.no_results.setVisible(self.results is None)
         self._update_buttons()

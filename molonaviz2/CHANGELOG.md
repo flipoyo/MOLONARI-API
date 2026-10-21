@@ -12,6 +12,37 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions : [S
 - Tags : `molonaviz2-vX.Y.Z`, posés sur `CGS-MOLO` après la fusion. La CI (`molonaviz2-version`) vérifie que le tag correspond à `pyproject.toml`.
 - La version entre dans `engine_version()`, donc dans chaque `twin_id`. Une nouvelle version donne de nouveaux identifiants, et un twin déjà calculé passe à l'état « modifié » : il faut créer un nouveau twin pour utiliser le nouveau code.
 
+## [0.4.0] - 2026-10-21
+
+Résultats de twin au format 2.0.0 et conventions des flux de chaleur (#25). Rassemble la pré-version 0.4.0-alpha.1 ci-dessous (#24).
+
+### Ajouté
+- Format de résultats `2.0.0`. `metadata.json` déclare :
+  - `results_format` ;
+  - les incertitudes des instruments (`instruments`) ;
+  - les conventions physiques (`conventions`) : z, q et flux de chaleur positifs vers le bas, et flux advectif rapporté à T_ref = 0 °C (#25).
+- Champs de flux en CSV : `water_flux_field.csv`, `heat_flux_advective.csv` et `heat_flux_conductive.csv`, au format de `temperature.csv`, avec la profondeur et l'unité dans la première cellule (#25).
+- En mcmc, des tableaux `.npz` lisibles avec `allow_pickle=False` :
+  - `quantiles.npz` ;
+  - `posterior.npz` : échantillons, énergies, acceptation, réinitialisations et numéro d'itération calculée ;
+  - selon `store_fields`, `fields_temperature.npz` et `fields_water_flux.npz`, avec la chaîne et l'itération de chaque champ (#25).
+- `load_results` lit les formats 1.x et 2.0.0. Un résultat 1.x porte l'avertissement `W_FIELD_UNAVAILABLE`, affiché dans la fenêtre du twin (#25).
+- `ForwardResult.conductive_flux_down` (−λm·∂T/∂z, positif vers le bas) et la constante `HEAT_REFERENCE_C` = 0 °C (#25).
+
+### Modifié
+- Les fichiers 1.x (`temperature.csv`, `water_flux.csv`, `residuals.csv`, `posterior_*.csv`) restent identiques octet pour octet. Un dossier de résultats contient en plus les fichiers 2.0.0 (#25).
+
+### Corrigé
+- Onglet Résultats : le flux de chaleur total additionnait le flux advectif (positif vers le bas) et le flux conductif hérité de pyheatmy (positif vers le haut). Le total et la carte du flux conductif sont maintenant positifs vers le bas. L'export CSV écrit `conductive_heat_flux_down_W_m2.csv` à la place de `conductive_heat_flux_W_m2.csv` : le nom change avec le signe (#25).
+
+### Écarts au plan
+- Première cellule des CSV de champs : `depth_m|<unité>` (séparateur `|`), pour garder une seule ligne d'en-tête relue par `index_col=0`.
+- La convention « positif vers le bas » s'applique aussi à la carte du flux conductif et à l'export CSV de l'onglet Résultats (décision du propriétaire), pas seulement au total.
+- `posterior.npz["iteration"]` donne le numéro d'itération calculée (`(i + 1)·thin`), comme `field_iteration`.
+
+### Identifiants de référence (0.4.0)
+- `twin_01` et `twin_02` : `c126c779567c5bbb` ; `twin_03` : `e97b626a80613ebb` ; `twin_04` : `a2ab3b5bb10ec53f`.
+
 ## [0.4.0-alpha.1] - 2026-10-21
 
 Chaînes DREAM, éclaircissement, champs par chaîne, `store_fields` et schéma de twin 1.1.0 (#24) : l'inversion garde de quoi alimenter les lots suivants (résultats de twin 2.0.0, bande prédictive, vue des chaînes). Avec les réglages par défaut, les résultats sont identiques à ceux de 0.3.1, octet pour octet.
