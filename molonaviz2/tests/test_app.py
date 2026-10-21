@@ -13,7 +13,7 @@ from molonaviz2.i18n import LANGUAGES, load_catalog
 
 TOOLS = Path(__file__).resolve().parents[1] / "tools"
 sys.path.insert(0, str(TOOLS))
-from extract_strings import extract  # noqa: E402
+from extract_strings import extract
 
 PLACEHOLDER = re.compile(r"\{[^{}]*\}")
 

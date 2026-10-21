@@ -136,10 +136,10 @@ class DataFrameModel(QtCore.QAbstractTableModel):
         self._marked = marked
         self.endResetModel()
 
-    def rowCount(self, parent=QtCore.QModelIndex()) -> int:  # noqa: N802
+    def rowCount(self, parent=QtCore.QModelIndex()) -> int:  # API Qt
         return 0 if parent.isValid() else len(self._frame)
 
-    def columnCount(self, parent=QtCore.QModelIndex()) -> int:  # noqa: N802
+    def columnCount(self, parent=QtCore.QModelIndex()) -> int:  # API Qt
         return 0 if parent.isValid() else len(self._frame.columns)
 
     def data(self, index, role=QtCore.Qt.ItemDataRole.DisplayRole):
@@ -158,7 +158,7 @@ class DataFrameModel(QtCore.QAbstractTableModel):
             return QtGui.QColor("#c0392b")
         return None
 
-    def headerData(self, section, orientation, role=QtCore.Qt.ItemDataRole.DisplayRole):  # noqa: N802
+    def headerData(self, section, orientation, role=QtCore.Qt.ItemDataRole.DisplayRole):  # API Qt
         if role != QtCore.Qt.ItemDataRole.DisplayRole:
             return None
         if orientation == QtCore.Qt.Orientation.Horizontal:

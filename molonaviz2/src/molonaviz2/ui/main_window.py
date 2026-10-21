@@ -635,7 +635,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(log_directory())))
 
-    def closeEvent(self, event: QtGui.QCloseEvent) -> None:  # noqa: N802
+    def closeEvent(self, event: QtGui.QCloseEvent) -> None:  # API Qt
         if not self._confirm_stop_task():
             event.ignore()
             return

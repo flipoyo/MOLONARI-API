@@ -76,7 +76,7 @@ class InfoTab(QtWidgets.QWidget):
             self.scheme.setPixmap(self._pixmap.scaled(self.scheme.size(), QtCore.Qt.AspectRatioMode.KeepAspectRatio,
                                                       QtCore.Qt.TransformationMode.SmoothTransformation))
 
-    def resizeEvent(self, event) -> None:  # noqa: N802
+    def resizeEvent(self, event) -> None:  # API Qt
         super().resizeEvent(event)
         self._scale()
 
