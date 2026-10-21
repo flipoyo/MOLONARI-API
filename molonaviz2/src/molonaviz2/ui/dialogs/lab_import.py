@@ -9,6 +9,7 @@ from PySide6 import QtWidgets
 from ...errors import UserError
 from ...i18n import t
 from ...io.lab_import import LabImport, import_lab_directory
+from ..errors import error_text
 from ..widgets import format_number, hint
 
 
@@ -76,7 +77,7 @@ class LabImportDialog(QtWidgets.QDialog):
             self.result_import = None
             self.issues_label.show()
             self.issues.show()
-            self.issues.addItem(str(exc))
+            self.issues.addItem(error_text(exc))
             self._validate()
             return
         lab = self.result_import.lab
@@ -99,7 +100,7 @@ class LabImportDialog(QtWidgets.QDialog):
                 QtWidgets.QTreeWidgetItem(parent, [item.name, describe(item)])
             parent.setExpanded(True)
         for issue in self.result_import.issues:
-            self.issues.addItem(str(issue))
+            self.issues.addItem(error_text(issue))
         has_issues = bool(self.result_import.issues)
         self.issues_label.setVisible(has_issues)
         self.issues.setVisible(has_issues)

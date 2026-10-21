@@ -1,0 +1,73 @@
+name: molonaviz2-tests
+
+# Tests de Molonaviz 2 dans la disposition de l'espace cgs MOLONARI1D :
+#   Molonaviz/ (ce dépôt), pyheatmy/ (MOLONARI-computo, dépendance locale ../../pyheatmy)
+#   et data/ (MOLONARI-data, mesures lues par les tests).
+# Job tests : suite rapide et suite slow, sous Xvfb : sans serveur X, matplotlib refuse le backend
+# QtAgg (« headless ») que choisit ui/plots/style.py. Job core-without-qt : seulement le test
+# d'architecture (le cœur s'importe et s'exécute sans Qt ni interface).
+on:
+  push:
+    branches: [CGS-MOLO]
+    paths: ["molonaviz2/**", ".github/workflows/molonaviz2-tests.yml"]
+  pull_request:
+    paths: ["molonaviz2/**", ".github/workflows/molonaviz2-tests.yml"]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: Molonaviz
+      - uses: actions/checkout@v4
+        with:
+          repository: flipoyo/MOLONARI-computo
+          ref: CGS-MOLO
+          path: pyheatmy
+      - uses: actions/checkout@v4
+        with:
+          repository: flipoyo/MOLONARI-data
+          ref: CGS-MOLO
+          path: data
+      - name: Paquets système pour Qt et serveur X virtuel
+        run: sudo apt-get update && sudo apt-get install -y xvfb libegl1 libxkbcommon-x11-0 libgl1 libdbus-1-3 libfontconfig1
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+      - name: Installer
+        working-directory: Molonaviz/molonaviz2
+        run: uv sync
+      - name: Tests
+        working-directory: Molonaviz/molonaviz2
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: xvfb-run -a uv run pytest
+      - name: Tests longs (slow)
+        working-directory: Molonaviz/molonaviz2
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: xvfb-run -a uv run pytest -m slow
+
+  core-without-qt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: Molonaviz
+      - uses: actions/checkout@v4
+        with:
+          repository: flipoyo/MOLONARI-computo
+          ref: CGS-MOLO
+          path: pyheatmy
+      # Pas de paquets système Qt : le crochet du test interdit de toute façon PySide6 au cœur, et le
+      # plugin pytest-qt, qui chargerait Qt au démarrage de pytest, est désactivé (-p no:pytest-qt).
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+      - name: Installer
+        working-directory: Molonaviz/molonaviz2
+        run: uv sync
+      - name: Test d'architecture
+        working-directory: Molonaviz/molonaviz2
+        run: uv run pytest -p no:pytest-qt tests/test_architecture.py

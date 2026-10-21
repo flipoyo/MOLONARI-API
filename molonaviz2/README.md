@@ -83,14 +83,16 @@ uv run molonaviz2 twin run      examples/twins/twin_02   # étape 6 : même conf
 uv run molonaviz2 twin list     examples/twins
 ```
 
-Les exemples fournis portent tous sur Point034. Leurs identifiants valent pour la version 0.2.0 : ils changent avec la version du code, qui entre dans le `twin_id`.
+La ligne de commande n'a pas besoin de Qt. Ses messages sont en français par défaut ; `MOLONAVIZ_LANG=en` les affiche en anglais.
 
-| Twin | Mode | `twin_id` (0.2.0) | Contenu |
+Les exemples fournis portent tous sur Point034. Leurs identifiants valent pour la version 0.3.0 : ils changent avec la version du code, qui entre dans le `twin_id`.
+
+| Twin | Mode | `twin_id` (0.3.0) | Contenu |
 |---|---|---|---|
-| `twin_01` | direct | `45ec70ecf74b2f33` | monocouche, −log₁₀ k = 12 |
-| `twin_02` | direct | `45ec70ecf74b2f33` | copie renommée de `twin_01`, pour montrer la détection de doublon |
-| `twin_03` | mcmc | `2d80e9fb04492ce3` | inversion courte (8 chaînes, 300 itérations, graine 1) |
-| `twin_04` | mcmc | `5109a4ba2ac2ed32` | créé depuis l'application, à partir d'une inversion |
+| `twin_01` | direct | `a0c8e1b5444c31ae` | monocouche, −log₁₀ k = 12 |
+| `twin_02` | direct | `a0c8e1b5444c31ae` | copie renommée de `twin_01`, pour montrer la détection de doublon |
+| `twin_03` | mcmc | `9eb09cb9985362fb` | inversion courte (8 chaînes, 300 itérations, graine 1) |
+| `twin_04` | mcmc | `c99f719be178b74f` | créé depuis l'application, à partir d'une inversion |
 
 Pour réinitialiser la démo : fermer l'application, puis `rm examples/twins/registry.csv; rm -rf examples/results`.
 

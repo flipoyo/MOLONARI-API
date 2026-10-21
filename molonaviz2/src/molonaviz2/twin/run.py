@@ -20,7 +20,6 @@ from datetime import datetime
 from pathlib import Path
 
 from ..errors import UserError
-from ..i18n import t
 from .config import TwinConfig, config_path, file_digest, load_twin
 from .registry import (
     RegistryEntry,
@@ -89,8 +88,7 @@ def run_twin(path_or_config, on_progress: Callable | None = None, should_cancel:
     twins_folder = status.twins_folder
     if status.state == "modified":
         raise UserError(
-            t("{name} was already run with another configuration (id {previous}). A configuration is frozen: create a new twin to change a parameter.").format(
-                name=config.name, previous=status.previous_id)
+            "E_TWIN_FROZEN", name=config.name, previous=status.previous_id
         )
     if status.has_results:
         entries = read_registry(twins_folder)

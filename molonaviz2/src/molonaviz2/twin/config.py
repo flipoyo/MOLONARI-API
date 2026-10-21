@@ -51,8 +51,7 @@ from ..domain.compute import (
     PriorRange,
 )
 from ..engine.column import ColumnInputs
-from ..errors import UserError
-from ..i18n import t
+from ..errors import Issue, UserError
 
 SCHEMA = "molonaviz-twin/1"
 CONFIG_NAME = "twin.yaml"
@@ -71,11 +70,14 @@ INITIAL_CONDITIONS = ("linear",)
 
 
 class TwinConfigError(UserError):
-    """Config invalide. `issues` liste les problèmes, chacun préfixé par le chemin de la clé."""
+    """Config invalide. `issues` liste les problèmes (`Issue`), chacun préfixé par le chemin de la clé."""
 
-    def __init__(self, issues: list[str]):
+    def __init__(self, issues: list[Issue]):
         self.issues = issues
-        super().__init__("\n".join(issues))
+        super().__init__("E_TWIN_CONFIG_INVALID", issues=issues)
+
+    def __reduce__(self):
+        return type(self), (self.issues,)
 
 
 @dataclass
@@ -192,34 +194,37 @@ def config_path(path: str | Path) -> Path:
 
 class _Checker:
     def __init__(self):
-        self.issues: list[str] = []
+        self.issues: list[Issue] = []
 
-    def add(self, where: str, message: str) -> None:
-        self.issues.append(f"{where}: {message}" if where else message)
+    def add(self, where: str, code: str, **params) -> None:
+        self.issues.append(Issue(where or None, code, prefixed=True, **params))
 
     def mapping(self, value, where: str, allowed: set[str], required=()) -> dict:
         if not isinstance(value, dict):
-            self.add(where, t("expected a mapping (key: value)."))
+            self.add(where, "E_TWIN_EXPECTED_MAPPING")
             return {}
         for key in sorted(set(value) - allowed, key=str):
-            self.add(f"{where}.{key}" if where else str(key), t("unknown key (allowed: {keys}).").format(keys=", ".join(sorted(allowed))))
+            self.add(f"{where}.{key}" if where else str(key), "E_TWIN_UNKNOWN_KEY", keys=", ".join(sorted(allowed)))
         for key in required:
             if key not in value:
-                self.add(f"{where}.{key}" if where else key, t("required."))
+                self.add(f"{where}.{key}" if where else key, "E_TWIN_REQUIRED")
         return value
 
     def number(self, value, where: str, integer: bool = False, positive: bool = False, minimum: float | None = None):
         if isinstance(value, bool) or not isinstance(value, int | float):
-            self.add(where, t("expected a whole number.") if integer else t("expected a number."))
+            if integer:
+                self.add(where, "E_TWIN_EXPECTED_INTEGER")
+            else:
+                self.add(where, "E_TWIN_EXPECTED_NUMBER")
             return None
         if integer and value != int(value):
-            self.add(where, t("expected a whole number."))
+            self.add(where, "E_TWIN_EXPECTED_INTEGER")
             return None
         if positive and value <= 0:
-            self.add(where, t("must be positive."))
+            self.add(where, "E_TWIN_POSITIVE")
             return None
         if minimum is not None and value < minimum:
-            self.add(where, t("must be at least {v}.").format(v=minimum))
+            self.add(where, "E_TWIN_MINIMUM", v=minimum)
             return None
         return int(value) if integer else float(value)
 
@@ -233,7 +238,7 @@ class _Checker:
         try:
             return parse_date(str(value))
         except UserError:
-            self.add(where, t("unreadable date \"{value}\".").format(value=value))
+            self.add(where, "E_TWIN_DATE_UNREADABLE", value=value)
             return None
 
 
@@ -241,42 +246,42 @@ def load_twin(path: str | Path, check_data: bool = True) -> TwinConfig:
     """Lit et valide un twin. Lève TwinConfigError avec la liste complète des problèmes."""
     path = config_path(path)
     if not path.is_file():
-        raise TwinConfigError([t("File not found: {path}").format(path=path)])
+        raise TwinConfigError([Issue(None, "E_FILE_NOT_FOUND", path=path)])
     try:
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     except yaml.YAMLError as exc:
-        raise TwinConfigError([t("Invalid YAML: {error}").format(error=exc)]) from None
+        raise TwinConfigError([Issue(None, "E_TWIN_INVALID_YAML", error=exc)]) from None
     check = _Checker()
     doc = check.mapping(raw, "", TOP_KEYS, REQUIRED_TOP)
     if check.issues and not doc:
         raise TwinConfigError(check.issues)
 
     if doc.get("schema") not in (None, SCHEMA):
-        check.add("schema", t("unsupported schema \"{value}\" (expected {expected}).").format(value=doc.get("schema"), expected=SCHEMA))
+        check.add("schema", "E_TWIN_SCHEMA", value=doc.get("schema"), expected=SCHEMA)
     name = str(doc.get("name", "")).strip()
     if "name" in doc and not name:
-        check.add("name", t("must not be empty."))
+        check.add("name", "E_TWIN_EMPTY")
     mode = doc.get("mode")
     if "mode" in doc and mode not in MODES:
-        check.add("mode", t("must be \"direct\" or \"mcmc\"."))
+        check.add("mode", "E_TWIN_MODE")
 
     data = check.mapping(doc.get("data", {}), "data", DATA_KEYS, ("measurements",))
     measurements = None
     if "measurements" in data:
         measurements = (path.parent / str(data["measurements"])).resolve()
         if not measurements.is_file():
-            check.add("data.measurements", t("file not found: {path}").format(path=measurements))
+            check.add("data.measurements", "E_TWIN_DATA_NOT_FOUND", path=measurements)
             measurements = None
     start, end = check.date(data.get("start"), "data.start"), check.date(data.get("end"), "data.end")
     if start and end and start >= end:
-        check.add("data.end", t("must be after data.start."))
+        check.add("data.end", "E_TWIN_END_BEFORE_START")
 
     sensors = check.mapping(doc.get("sensors", {}), "sensors", SENSOR_KEYS, ("depths",))
     depths = sensors.get("depths")
     if "depths" in sensors:
         values = [check.number(d, "sensors.depths", positive=True) for d in depths] if isinstance(depths, list) else []
         if len(values) != 4 or None in values or any(b <= a for a, b in zip(values, values[1:])):
-            check.add("sensors.depths", t("expected 4 strictly increasing positive depths (m)."))
+            check.add("sensors.depths", "E_TWIN_SENSOR_DEPTHS")
             depths = None
         else:
             depths = tuple(values)
@@ -288,20 +293,20 @@ def load_twin(path: str | Path, check_data: bool = True) -> TwinConfig:
     nb_cells = check.number(numerics.get("nb_cells", 100), "numerics.nb_cells", integer=True, positive=True)
     initial = numerics.get("initial_condition", "linear")
     if initial not in INITIAL_CONDITIONS:
-        check.add("numerics.initial_condition", t("only \"linear\" is supported (linear interpolation of the measurements at t0)."))
+        check.add("numerics.initial_condition", "E_TWIN_INITIAL_CONDITION")
     column_depth = None
     if depths is not None and offset is not None:
         column_depth = depths[-1] + offset
         if "column_depth" in numerics:
             declared = check.number(numerics["column_depth"], "numerics.column_depth", positive=True)
             if declared is not None and abs(declared - column_depth) > 1e-9:
-                check.add("numerics.column_depth", t("must equal the deepest sensor depth + offset ({depth:g} m).").format(depth=column_depth))
+                check.add("numerics.column_depth", "E_TWIN_COLUMN_DEPTH", depth=column_depth)
 
     layers: list[LayerSpec] = []
     raw_layers = doc.get("layers")
     if "layers" in doc:
         if not isinstance(raw_layers, list) or not raw_layers:
-            check.add("layers", t("expected a non-empty list of layers."))
+            check.add("layers", "E_TWIN_LAYERS")
             raw_layers = []
         for i, raw_layer in enumerate(raw_layers):
             where = f"layers[{i}]"
@@ -315,7 +320,7 @@ def load_twin(path: str | Path, check_data: bool = True) -> TwinConfig:
             if mode == "direct":
                 missing = [k for k in INVERTED_PARAMETERS if k not in layer]
                 if missing:
-                    check.add(where, t("direct mode needs {keys}.").format(keys=", ".join(missing)))
+                    check.add(where, "E_TWIN_DIRECT_KEYS", keys=", ".join(missing))
             if "z_low" in values:
                 layers.append(LayerSpec(**values))
 
@@ -328,7 +333,7 @@ def load_twin(path: str | Path, check_data: bool = True) -> TwinConfig:
         if raw_priors is None:
             priors = [{k: PriorRange(v.low, v.high) for k, v in DEFAULT_PRIORS.items()} for _ in layers]
         elif not isinstance(raw_priors, list) or len(raw_priors) != len(layers):
-            check.add("mcmc.priors", t("expected one entry per layer ({n}).").format(n=len(layers)))
+            check.add("mcmc.priors", "E_TWIN_PER_LAYER", n=len(layers))
         else:
             for i, raw_prior in enumerate(raw_priors):
                 where = f"mcmc.priors[{i}]"
@@ -337,7 +342,7 @@ def load_twin(path: str | Path, check_data: bool = True) -> TwinConfig:
                 for param in INVERTED_PARAMETERS:
                     bounds = entry.get(param, [DEFAULT_PRIORS[param].low, DEFAULT_PRIORS[param].high])
                     if not isinstance(bounds, list) or len(bounds) != 2:
-                        check.add(f"{where}.{param}", t("expected [min, max]."))
+                        check.add(f"{where}.{param}", "E_TWIN_RANGE")
                         bounds = [DEFAULT_PRIORS[param].low, DEFAULT_PRIORS[param].high]
                     low, high = (check.number(b, f"{where}.{param}") for b in bounds)
                     prior[param] = PriorRange(low if low is not None else 0.0, high if high is not None else 0.0)
@@ -356,27 +361,26 @@ def load_twin(path: str | Path, check_data: bool = True) -> TwinConfig:
         if "quantiles" in raw_mcmc:
             quantiles = raw_mcmc["quantiles"]
             if not isinstance(quantiles, list) or not quantiles:
-                check.add("mcmc.quantiles", t("expected a list of numbers between 0 and 1."))
+                check.add("mcmc.quantiles", "E_TWIN_QUANTILES")
             else:
                 settings["quantiles"] = tuple(check.number(q, "mcmc.quantiles") or 0.0 for q in quantiles)
         if layers and len(priors) == len(layers):
             mcmc = InversionConfig(layers=layers, priors=priors, nb_cells=nb_cells or 100, sigma_t=sigma_t or 0.1, seed=seed or 0, **settings)
     elif "mcmc" in doc:
-        check.add("mcmc", t("only allowed in mcmc mode."))
+        check.add("mcmc", "E_TWIN_MCMC_ONLY")
 
     # Validation métier commune avec l'application (bornes physiques, couches, DREAM).
     if layers and column_depth is not None and nb_cells:
         engine_config = mcmc if mcmc is not None else ForwardConfig(layers, nb_cells)
         for issue in engine_config.validate(column_depth):
-            check.add(issue.field, issue.message)
+            check.issues.append(Issue.from_error(issue.field, issue, prefixed=True))
 
     declared_version = doc.get("code_version")
     if declared_version is not None:
         from ..engine import api
 
         if str(declared_version) != api.engine_version():
-            check.add("code_version", t("this twin was defined for \"{declared}\" but the code is \"{current}\". Create a new twin to use this code.").format(
-                declared=declared_version, current=api.engine_version()))
+            check.add("code_version", "E_TWIN_CODE_VERSION", declared=declared_version, current=api.engine_version())
 
     config = None
     if not check.issues:
@@ -390,9 +394,11 @@ def load_twin(path: str | Path, check_data: bool = True) -> TwinConfig:
             try:
                 frame = config.load_measurements()
                 if len(frame) < 3:
-                    check.add("data", t("fewer than 3 measurements in the selected period."))
-            except (UserError, ValueError, OSError) as exc:
-                check.add("data.measurements", str(exc))
+                    check.add("data", "E_TWIN_TOO_FEW_MEASUREMENTS")
+            except UserError as exc:
+                check.issues.append(Issue.from_error("data.measurements", exc, prefixed=True))
+            except (ValueError, OSError) as exc:
+                check.add("data.measurements", "E_SYSTEM_ERROR", detail=str(exc))
     if check.issues:
         raise TwinConfigError(check.issues)
     return config

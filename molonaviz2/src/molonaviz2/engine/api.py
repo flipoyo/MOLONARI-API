@@ -26,7 +26,7 @@ def device() -> str:
 def run_forward(inputs: ColumnInputs, config: ForwardConfig) -> ForwardResult:
     issues = config.validate(inputs.column_depth)
     if issues:
-        raise UserError("\n".join(issue.message for issue in issues))
+        raise UserError("E_SETTINGS_INVALID", issues=issues)
     from .jax.forward import run_forward as _run
 
     return _run(inputs, [layer.physical() for layer in config.layers], [layer.z_low for layer in config.layers], config.nb_cells)

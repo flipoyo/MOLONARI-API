@@ -20,7 +20,7 @@ from .dialogs.lab_import import LabImportDialog
 from .dialogs.point_import import PointImportDialog
 from .dialogs.notice import NoticeDialog, key_for
 from .dialogs.simple import AboutDialog, AddSensorDialog, NewStudyDialog, QuickGuideDialog
-from .errors import report_exception
+from .errors import error_text, report_exception
 from .explorer import ProjectExplorer
 from .point_view.view import PointView
 from .twin_window import TwinWindow
@@ -133,7 +133,7 @@ def describe_twin(path: Path) -> str:
     try:
         status = twin_status(path)
     except TwinConfigError as exc:
-        return t("invalid: {issue}").format(issue=exc.issues[0])
+        return t("invalid: {issue}").format(issue=error_text(exc.issues[0]))
     state = {
         "new": t("not run yet"),
         "computed": t("computed"),
@@ -469,7 +469,7 @@ class MainWindow(QtWidgets.QMainWindow):
             labs=report.labs, studies=report.studies, points=report.points, cleaned=report.cleaned_points
         )
         text += "\n\n" + t("Previous computation results are not imported: run the models again.")
-        message(self, t("Import finished"), text, "\n".join(report.warnings))
+        message(self, t("Import finished"), text, "\n".join(error_text(warning) for warning in report.warnings))
 
     # Laboratoires, études, points -----------------------------------------------------
     def import_lab(self) -> None:

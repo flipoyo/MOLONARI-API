@@ -10,7 +10,7 @@ from ...errors import UserError
 from ...i18n import N_, t
 from ...processing.cleanup import VARIABLES, CleanupResult, CleanupSettings, clean, read_cleaned_csv, write_cleaned_csv
 from ..dialogs.notice import attach
-from ..errors import report_exception
+from ..errors import error_text, report_exception
 from ..plots.series import RegionSelector, TimeSeriesPlot
 from ..plots.style import PRESSURE_COLOR, REJECTED_COLOR, RIVER_COLOR, THERMOMETER_COLORS
 from ..units import temperature_unit
@@ -191,7 +191,7 @@ class CleanupTab(QtWidgets.QWidget):
             self.result = clean(self._raw_t, self._raw_p, self.context.sensors().pressure, self._settings())
         except UserError as exc:
             self.result = None
-            self.summary.setText(f"<span style='color:#c0392b'>{exc}</span>")
+            self.summary.setText(f"<span style='color:#c0392b'>{error_text(exc)}</span>")
             self.apply_button.setEnabled(False)
             self.plot.reset()
             return
@@ -280,7 +280,7 @@ class CleanupTab(QtWidgets.QWidget):
         try:
             cleaned = read_cleaned_csv(path)
         except (UserError, ValueError, OSError) as exc:
-            report_exception(exc if isinstance(exc, UserError) else UserError(str(exc)))
+            report_exception(exc if isinstance(exc, UserError) else UserError("E_SYSTEM_ERROR", detail=str(exc)))
             return
         if self.context.stage >= PointStage.CLEANED and not ask(
             self, t("Replace the cleaned measurements"), t("This replaces the current cleaned measurements and deletes the computations of this point."), t("Replace")
@@ -292,7 +292,7 @@ class CleanupTab(QtWidgets.QWidget):
     def _export_cleaned(self) -> None:
         cleaned = self.context.project.cleaned(self.context.study, self.context.name)
         if cleaned.empty:
-            report_exception(UserError(t("No cleaned measurements yet: apply a cleaning first.")))
+            report_exception(UserError("E_NO_CLEANED_MEASURES"))
             return
         path, _ = QtWidgets.QFileDialog.getSaveFileName(self, t("Export cleaned measurements"), f"{self.context.name}_cleaned.csv", "CSV (*.csv)")
         if path:

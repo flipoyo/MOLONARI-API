@@ -372,9 +372,8 @@ def to_forward_result(fields, geom: Geometry, inputs: ColumnInputs) -> ForwardRe
     temperature_np = np.asarray(temperature)
     if not np.all(np.isfinite(temperature_np)) or not np.all(np.isfinite(np.asarray(water_flux))):
         from ...errors import UserError
-        from ...i18n import t
 
-        raise UserError(t("The model produced non-finite values. Check the layer parameters and the measurements."))
+        raise UserError("E_MODEL_NON_FINITE")
     return ForwardResult(
         depths=geom.z_solve.copy(),
         times=inputs.times,

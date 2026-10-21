@@ -6,6 +6,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 from ...errors import UserError
 from ...i18n import t
+from ..errors import error_text
 from ..widgets import format_number, heading
 from .context import PointContext
 
@@ -58,7 +59,7 @@ class InfoTab(QtWidgets.QWidget):
                 (t("Thermometers"), f"{sensors.thermometer.name} · σ = {format_number(sensors.thermometer.sigma)} °C" if sensors.thermometer else "—"),
             ]
         except UserError as exc:
-            rows.append((t("Sensors"), str(exc)))
+            rows.append((t("Sensors"), error_text(exc)))
         self.details.setText("<table cellspacing='4'>" + "".join(f"<tr><td><b>{k}</b></td><td>{v}</td></tr>" for k, v in rows) + "</table>")
         self.notice.setPlainText(point.notice or t("No notice for this point."))
         self._pixmap = None

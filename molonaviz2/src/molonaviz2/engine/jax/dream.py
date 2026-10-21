@@ -145,7 +145,7 @@ class DreamSampler:
     def __init__(self, inputs: ColumnInputs, config: InversionConfig):
         issues = config.validate(inputs.column_depth)
         if issues:
-            raise UserError("\n".join(issue.message for issue in issues))
+            raise UserError("E_SETTINGS_INVALID", issues=issues)
         self.inputs = inputs
         self.config = config
         self.geom = build_geometry(inputs, [layer.z_low for layer in config.layers], config.nb_cells)

@@ -18,6 +18,7 @@ from ...errors import UserError
 from ...i18n import t
 from ...io.lab_import import read_text
 from ...io.point_import import ParsedMeasures, find_point_files, read_point_info, read_pressure_file, read_temperature_file
+from ..errors import error_text
 from ..widgets import NumberField, hint, to_qdatetime
 
 MAX_DROPPED_SHOWN = 6
@@ -180,9 +181,9 @@ class PointImportDialog(QtWidgets.QDialog):
         try:
             info = read_point_info(path)
         except (UserError, OSError) as exc:
-            self.info_warnings.setText(str(exc))
+            self.info_warnings.setText(error_text(exc))
             return
-        notes = list(info.warnings)
+        notes = [error_text(warning) for warning in info.warnings]
         if info.name:
             self.name.setText(info.name)
         for combo, value, label in ((self.pressure_sensor, info.pressure_sensor, t("pressure sensor")), (self.shaft, info.shaft, t("shaft"))):
@@ -225,7 +226,7 @@ class PointImportDialog(QtWidgets.QDialog):
             lines.append(t("Converted: {units}").format(units=", ".join(parsed.converted_units)))
         if parsed.dropped:
             shown = ", ".join(
-                (t("line {n}").format(n=line) if line > 0 else "") + f" ({reason})" for line, reason in parsed.dropped[:MAX_DROPPED_SHOWN]
+                (t("line {n}").format(n=line) if line > 0 else "") + f" ({error_text(reason)})" for line, reason in parsed.dropped[:MAX_DROPPED_SHOWN]
             )
             more = len(parsed.dropped) - MAX_DROPPED_SHOWN
             lines.append(t("Lines skipped: {list}").format(list=shown) + (t(" and {n} more").format(n=more) if more > 0 else ""))
@@ -237,7 +238,7 @@ class PointImportDialog(QtWidgets.QDialog):
             try:
                 parsed = reader(row.path)
             except UserError as exc:
-                error = str(exc)
+                error = error_text(exc)
             except OSError as exc:
                 error = str(exc)
         target.setText(self._describe(parsed, error, title))

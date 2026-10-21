@@ -14,13 +14,18 @@ from collections.abc import Callable
 from PySide6 import QtWidgets
 
 from ..errors import UserError
-from ..i18n import t
+from ..i18n import render, t
 from ..logs import log
 
-__all__ = ["UserError", "install_excepthook", "report_exception", "set_presenter"]
+__all__ = ["UserError", "error_text", "install_excepthook", "report_exception", "set_presenter"]
 
 
 Presenter = Callable[[str, str, str], None]
+
+
+def error_text(obj) -> str:
+    """Texte traduit d'une erreur ou d'un problème du cœur (à partir de son code), ou str(obj)."""
+    return render(obj, t)
 
 
 def _message_box(title: str, message: str, details: str) -> None:
@@ -50,7 +55,7 @@ def report_exception(exc: BaseException, context: str = "") -> None:
     details = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
     if isinstance(exc, UserError):
         log.warning("%s%s", f"{context} : " if context else "", exc)
-        title, message, details = t("Action not completed"), str(exc), ""
+        title, message, details = t("Action not completed"), error_text(exc), ""
     else:
         log.error("Unexpected error%s\n%s", f" ({context})" if context else "", details)
         title = t("Unexpected error")

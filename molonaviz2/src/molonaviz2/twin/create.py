@@ -8,7 +8,6 @@ import pandas as pd
 
 from ..domain.compute import INVERTED_PARAMETERS, ForwardConfig, InversionConfig
 from ..errors import UserError
-from ..i18n import t
 from ..processing.cleanup import write_cleaned_csv
 from .config import SCHEMA, write_twin_yaml
 from .run import next_twin_folder
@@ -63,9 +62,9 @@ def create_twin(twins_folder: Path, measurements: pd.DataFrame, point: str, desc
     """Crée le prochain twin_xx du dossier. Retourne le dossier créé."""
     twins_folder = Path(twins_folder)
     if not twins_folder.is_dir():
-        raise UserError(t("Twin folder not found: {path}").format(path=twins_folder))
+        raise UserError("E_TWIN_FOLDER_NOT_FOUND", path=twins_folder)
     if measurements.empty:
-        raise UserError(t("No cleaned measurements yet: apply a cleaning first."))
+        raise UserError("E_NO_CLEANED_MEASURES")
     folder = next_twin_folder(twins_folder)
     folder.mkdir()
     write_cleaned_csv(measurements, folder / MEASUREMENTS_NAME)
