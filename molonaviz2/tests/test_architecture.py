@@ -244,3 +244,41 @@ def test_interface_uses_the_facade_or_tolerated_imports():
     gone = sorted(TOLERATED - found)
     assert not new, f"nouvel import hors façade (passer par engine/api, twin/run, twin/results ou questions) : {new}"
     assert not gone, f"import toléré disparu : le retirer de TOLERATED : {gone}"
+
+
+def test_core_does_not_import_the_facade():
+    problems = []
+    for path in core_files():
+        relative = path.relative_to(SOURCE).as_posix()
+        if relative == "facade.py":
+            continue
+        for line, module in imported_modules(path):
+            if module == "molonaviz2.facade" or module.startswith("molonaviz2.facade."):
+                problems.append(f"{relative}:{line} importe la façade")
+    assert not problems, "\n".join(problems)
+
+
+def test_facade_import_is_light():
+    code = (
+        "import sys, molonaviz2.facade\n"
+        "print(sorted({n.split('.')[0] for n in sys.modules if n.split('.')[0] in ('PySide6', 'jax', 'arviz')}))"
+    )
+    completed = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=300, check=False)
+    assert completed.returncode == 0, completed.stderr[-4000:]
+    assert completed.stdout.strip() == "[]", f"modules lourds chargés par la façade : {completed.stdout.strip()}"
+
+
+def test_facade_exports_exist_and_are_the_original_objects():
+    import importlib
+
+    from molonaviz2 import facade
+    from molonaviz2.engine.jax import dream
+
+    assert not [name for name in facade.__all__ if not hasattr(facade, name)]
+    for name in facade.__all__:
+        value = getattr(facade, name)
+        origin = getattr(value, "__module__", None)
+        reexported = origin and origin.startswith("molonaviz2.") and origin != "molonaviz2.facade"
+        if (isinstance(value, type) or callable(value)) and reexported:
+            assert getattr(importlib.import_module(origin), value.__name__) is value, name
+    assert facade.Cancelled is dream.Cancelled
