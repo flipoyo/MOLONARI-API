@@ -204,6 +204,10 @@ def _rebuild_error(cls, code, field, params):
     return error
 
 
+class Cancelled(Exception):
+    """L'utilisateur a annulé le calcul (ce n'est pas une erreur : rien n'est affiché)."""
+
+
 class Issue(str):
     """Problème de saisie ou de validation, rattaché à un champ.
 

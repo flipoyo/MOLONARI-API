@@ -36,7 +36,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from ...domain.compute import INVERTED_PARAMETERS, InversionConfig
-from ...errors import UserError
+from ...errors import Cancelled, UserError
 from ..column import ColumnInputs
 from ..results import InversionResult, QuantileResult
 from .forward import build_geometry, energy, make_forward, rmse, to_forward_result
@@ -46,10 +46,6 @@ GAMMA_ONE_PROBABILITY = 0.2
 BURN_IN_BLOCK = 10
 OUTLIER_CHECK_EVERY = 50  # itérations (multiple de BURN_IN_BLOCK)
 MIN_HISTORY_FOR_RHAT = 8
-
-
-class Cancelled(Exception):
-    """L'utilisateur a annulé le calcul."""
 
 
 @dataclass
