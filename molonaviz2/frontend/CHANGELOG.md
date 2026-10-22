@@ -1,6 +1,6 @@
 # Changelog de Molonaviz 2
 
-Toutes les évolutions notables de Molonaviz 2 sont notées ici.
+Toutes les évolutions notables de Molonaviz 2 sont notées ici. Depuis 0.6.0-alpha.2, ce fichier suit l'application (`frontend/`) ; le backend a le sien : [../backend/CHANGELOG.md](../backend/CHANGELOG.md).
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions : [SemVer 2.0.0](https://semver.org/lang/fr/).
 
 ## Règles de version
@@ -10,7 +10,7 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions : [S
 - Commits conventionnels : `fix` fait monter le CORRECTIF, `feat` le MINEUR, `!` ou `BREAKING CHANGE` le MAJEUR. Tant que la version est en `0.y.z`, un changement incompatible fait monter le MINEUR.
 - Chaque version a sa section ici. `python tools/check_version.py` le vérifie, comme `tests/test_version.py`.
 - Tags : `molonaviz2-vX.Y.Z`, posés sur `CGS-MOLO` après la fusion. La CI (`molonaviz2-version`) vérifie que le tag correspond à `pyproject.toml`.
-- La version entre dans `engine_version()`, donc dans chaque `twin_id`. Une nouvelle version donne de nouveaux identifiants, et un twin déjà calculé passe à l'état « modifié » : il faut créer un nouveau twin pour utiliser le nouveau code.
+- Jusqu'à 0.6.0-alpha.1, la version entrait dans `engine_version()`, donc dans chaque `twin_id`. Depuis 0.6.0-alpha.2, c'est la version du backend (`molonari-twin`) qui y entre : une version de la seule application ne change aucun identifiant.
 
 ## [0.6.0-alpha.2] - 2026-10-22
 
@@ -22,6 +22,9 @@ Deux dossiers, deux paquets : le backend `molonari-twin` et l'application `molon
 - La version du code d'un twin (`code_version`, et donc le `twin_id`) est celle du backend : `molonari-twin X.Y.Z · jax …`. Une nouvelle version de la seule application ne change plus les identifiants (#37).
 - `molonaviz2 twin …` reste disponible, comme alias de `molonari-twin …` (#37).
 - Les tests sont répartis en deux suites (`backend/tests`, `frontend/tests`), chacune avec son test d'architecture ; la CI a un job backend sans Qt et un job frontend (#37).
+
+### Identifiants de référence (0.6.0-alpha.2, code molonari-twin 0.6.0-alpha.1)
+- `twin_01` et `twin_02` : `1edb6a9a3f307ba0` ; `twin_03` : `6aa2aaf841f74f74` ; `twin_04` : `3535bbcdb0adda21`.
 
 ## [0.6.0-alpha.1] - 2026-10-22
 

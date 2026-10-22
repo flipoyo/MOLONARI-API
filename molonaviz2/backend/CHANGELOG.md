@@ -27,3 +27,6 @@ Premier numéro du backend en paquet séparé (#37, lot B2). Le code est celui d
 - `engine_version()` vaut `molonari-twin X.Y.Z[+g…] · jax …`. Le suffixe local se calcule à partir des tags `molonari-twin-v*` et du seul dossier `backend/`, et la provenance du code porte sur ce dossier (#37).
 - `t()` et `install_language()` quittent l'i18n du backend : ils sont dans le frontend (#37).
 - Le schéma canonique des twins reste `molonaviz-twin/1` : les `twin_id` ne dépendent pas du nom du paquet, seulement de sa version.
+
+### Identifiants de référence (molonari-twin 0.6.0-alpha.1)
+- `twin_01` et `twin_02` : `1edb6a9a3f307ba0` ; `twin_03` : `6aa2aaf841f74f74` ; `twin_04` : `3535bbcdb0adda21`.
