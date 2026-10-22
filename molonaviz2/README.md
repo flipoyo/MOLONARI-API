@@ -185,4 +185,7 @@ src/molonaviz2/
   workers/     calculs en arrière-plan (annulation, progression)
   ui/          interface PySide6 : fenêtre, explorateur, onglets d'un point, graphiques
   i18n/        traduction française (fr.json) ; `make strings` liste les chaînes non traduites
+  facade.py    seule porte du cœur pour l'interface
 ```
+
+Le cœur (`domain`, `io`, `storage`, `processing`, `engine`, `twin`, `questions`, `errors`, `i18n` pur) s'importe et s'exécute sans Qt ; c'est le futur backend. L'interface (`ui`, `workers`, `app`, `notice`, `settings`, `logs`) ne l'appelle que par `molonaviz2.facade`. `tests/test_architecture.py` vérifie ces deux règles.
