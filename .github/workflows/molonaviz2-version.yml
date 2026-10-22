@@ -1,9 +1,10 @@
 name: molonaviz2-version
 
-# Version SemVer de Molonaviz 2 : pyproject.toml, CHANGELOG.md et, sur un tag, correspondance du tag.
+# Version SemVer des paquets de molonaviz2/ (backend molonari-twin, frontend molonaviz2) : pyproject.toml,
+# CHANGELOG.md et, sur un tag, correspondance du tag avec le paquet de son préfixe.
 on:
   push:
-    tags: ["molonaviz2-v*"]
+    tags: ["molonaviz2-v*", "molonari-twin-v*"]
   pull_request:
     paths: ["molonaviz2/**"]
 
