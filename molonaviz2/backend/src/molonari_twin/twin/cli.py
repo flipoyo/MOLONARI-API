@@ -9,7 +9,8 @@
 
 Codes de sortie : 0 succès, 1 config invalide ou erreur, 2 usage incorrect.
 
-Langue des messages : variable d'environnement MOLONAVIZ_LANG (fr, en), sinon fr. Ce module est
+Langue des messages : variable d'environnement MOLONARI_LANG (fr, en), sinon son ancien nom MOLONAVIZ_LANG,
+sinon fr. Ce module est
 un bord du cœur : il traduit sans Qt, avec i18n.translate (exception nommée de tests/test_architecture.py).
 """
 
@@ -24,8 +25,9 @@ from ..i18n import DEFAULT_LANGUAGE, LANGUAGES, render, translate
 
 
 def language() -> str:
-    """Langue de la ligne de commande : MOLONAVIZ_LANG si elle est proposée, sinon la langue par défaut."""
-    value = os.environ.get("MOLONAVIZ_LANG", DEFAULT_LANGUAGE)
+    """Langue de la ligne de commande : MOLONARI_LANG, sinon son ancien nom MOLONAVIZ_LANG, si la langue est
+    proposée ; sinon la langue par défaut."""
+    value = os.environ.get("MOLONARI_LANG", os.environ.get("MOLONAVIZ_LANG", DEFAULT_LANGUAGE))
     return value if value in LANGUAGES else DEFAULT_LANGUAGE
 
 

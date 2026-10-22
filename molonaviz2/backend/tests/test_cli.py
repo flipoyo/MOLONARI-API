@@ -1,4 +1,5 @@
-"""Ligne de commande des twins : langue choisie par MOLONAVIZ_LANG (fr par défaut), sans Qt."""
+"""Ligne de commande des twins : langue choisie par MOLONARI_LANG (ou son ancien nom MOLONAVIZ_LANG ; fr par
+défaut), sans Qt."""
 
 import os
 import shutil
@@ -13,10 +14,13 @@ EXAMPLES = Path(__file__).resolve().parents[2] / "examples" / "twins"
 FR = load_catalog("fr")
 
 
-def cli(*args, lang=None):
-    env = {k: v for k, v in os.environ.items() if k != "MOLONAVIZ_LANG"}
+def cli(*args, lang=None, old=None):
+    """Lance la CLI avec MOLONARI_LANG=lang et MOLONAVIZ_LANG=old (None : variable absente)."""
+    env = {k: v for k, v in os.environ.items() if k not in ("MOLONARI_LANG", "MOLONAVIZ_LANG")}
     if lang is not None:
-        env["MOLONAVIZ_LANG"] = lang
+        env["MOLONARI_LANG"] = lang
+    if old is not None:
+        env["MOLONAVIZ_LANG"] = old
     return subprocess.run([sys.executable, "-m", "molonari_twin", *map(str, args)], capture_output=True, text=True, timeout=300, env=env, check=False)
 
 
@@ -25,16 +29,22 @@ def twin_01(tmp_path):
     return shutil.copytree(EXAMPLES / "twin_01", tmp_path / "twin_01")
 
 
+ENGLISH = "twin_01: valid configuration (direct mode)."
+FRENCH = FR["{name}: valid configuration ({mode} mode)."].format(name="twin_01", mode="direct")
+
+
 @pytest.mark.parametrize(
-    "lang, expected",
+    "lang, old, expected",
     [
-        ("en", "twin_01: valid configuration (direct mode)."),
-        (None, FR["{name}: valid configuration ({mode} mode)."].format(name="twin_01", mode="direct")),
-        ("de", FR["{name}: valid configuration ({mode} mode)."].format(name="twin_01", mode="direct")),
+        ("en", None, ENGLISH),
+        (None, "en", ENGLISH),  # ancien nom de la variable, encore lu
+        ("fr", "en", FRENCH),  # le nouveau nom l'emporte
+        (None, None, FRENCH),
+        ("de", None, FRENCH),
     ],
 )
-def test_validate_speaks_the_requested_language(twin_01, lang, expected):
-    completed = cli("validate", twin_01, lang=lang)
+def test_validate_speaks_the_requested_language(twin_01, lang, old, expected):
+    completed = cli("validate", twin_01, lang=lang, old=old)
     assert completed.returncode == 0, completed.stderr
     assert completed.stdout.strip() == expected
 

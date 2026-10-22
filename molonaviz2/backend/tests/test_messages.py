@@ -19,11 +19,7 @@ from molonari_twin.errors import (
     message_template,
 )
 
-WORKSPACE = Path(__file__).resolve().parents[2]
-SOURCE = WORKSPACE / "backend" / "src" / "molonari_twin"
-# Le frontend crée aussi des UserError et des Issue : ses codes sont vérifiés ici, tant que le
-# catalogue fr.json est commun aux deux paquets.
-SOURCES = (SOURCE, WORKSPACE / "frontend" / "src" / "molonaviz2")
+SOURCE = Path(__file__).resolve().parents[1] / "src" / "molonari_twin"
 CATALOG = json.loads((SOURCE / "i18n" / "fr.json").read_text(encoding="utf-8"))
 CODE = CODE_PATTERN
 
@@ -42,10 +38,9 @@ def fields(template: str) -> set[str]:
 
 def calls():
     """(fichier, ligne, fonction englobante, nom appelé, nœud) pour chaque appel UserError(...) / Issue(...)."""
-    files = sorted((source, path) for source in SOURCES for path in source.rglob("*.py"))
-    for root, path in files:
+    for path in sorted(SOURCE.rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        relative = path.relative_to(root).as_posix()
+        relative = path.relative_to(SOURCE).as_posix()
 
         def visit(node, function, relative=relative):
             for child in ast.iter_child_nodes(node):

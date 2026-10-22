@@ -749,7 +749,7 @@ wheels = [
 
 [[package]]
 name = "molonari-twin"
-version = "0.6.0a1"
+version = "0.6.0"
 source = { editable = "backend" }
 dependencies = [
     { name = "arviz" },
@@ -788,7 +788,7 @@ dev = [
 
 [[package]]
 name = "molonaviz2"
-version = "0.6.0a2"
+version = "0.6.0"
 source = { editable = "frontend" }
 dependencies = [
     { name = "matplotlib" },

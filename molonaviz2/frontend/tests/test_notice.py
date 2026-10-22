@@ -1,8 +1,6 @@
 """Notice des paramètres : complète, juste (valeurs lues dans le code), consultable depuis l'interface."""
 
-import json
 from dataclasses import fields
-from pathlib import Path
 
 import pytest
 from molonari_twin.domain.compute import (
@@ -15,9 +13,10 @@ from molonari_twin.domain.compute import (
     LayerSpec,
 )
 from molonari_twin.twin.config import LAYER_KEYS, MCMC_KEYS, TwinConfig
+from molonaviz2.i18n import load_catalog
 from molonaviz2.notice import BY_KEY, ENTRIES, SECTIONS, limits_text, number
 
-CATALOG = json.loads((Path(__file__).resolve().parents[2] / "backend" / "src" / "molonari_twin" / "i18n" / "fr.json").read_text(encoding="utf-8"))
+CATALOG = load_catalog("fr")  # catalogue réuni : backend et application
 
 
 def test_entries_are_unique_and_grouped_in_known_sections():

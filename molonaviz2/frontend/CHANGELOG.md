@@ -12,6 +12,22 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions : [S
 - Tags : `molonaviz2-vX.Y.Z`, posés sur `CGS-MOLO` après la fusion. La CI (`molonaviz2-version`) vérifie que le tag correspond à `pyproject.toml`.
 - Jusqu'à 0.6.0-alpha.1, la version entrait dans `engine_version()`, donc dans chaque `twin_id`. Depuis 0.6.0-alpha.2, c'est la version du backend (`molonari-twin`) qui y entre : une version de la seule application ne change aucun identifiant.
 
+## [0.6.0] - 2026-10-22
+
+Séparation du backend et du frontend terminée (#37). Rassemble les pré-versions 0.6.0-alpha.1 (façade publique du cœur, lot B1) et 0.6.0-alpha.2 (deux paquets dans un espace uv, lot B2) ci-dessous, et ajoute le lot B3. Rien ne change à l'écran ni dans les calculs.
+
+### Ajouté
+- Catalogue français propre à l'application (`frontend/src/molonaviz2/i18n/fr.json`, 549 entrées). `molonaviz2.i18n.load_catalog` le réunit au catalogue du backend, lu par la façade : le catalogue réuni est identique à l'ancien `fr.json` unique (#37).
+- Les tests de l'application vérifient ses textes (tous traduits, aucune entrée inutilisée ni reprise du backend) et les codes d'erreur qu'elle crée (littéraux, connus, paramètres complets) (#37).
+
+### Modifié
+- `molonaviz2.i18n.translate` traduit avec le catalogue réuni (#37).
+- `molonaviz2 twin …` suit `MOLONARI_LANG`, comme `molonari-twin …` ; `MOLONAVIZ_LANG` reste lue en repli (#37).
+- Dépend de `molonari-twin>=0.6.0,<0.7`.
+
+### Identifiants de référence (0.6.0, code molonari-twin 0.6.0)
+- `twin_01` et `twin_02` : `1fe696e072167811` ; `twin_03` : `5e5be1abb4833551` ; `twin_04` : `01fd14746ddae774`.
+
 ## [0.6.0-alpha.2] - 2026-10-22
 
 Deux dossiers, deux paquets : le backend `molonari-twin` et l'application `molonaviz2` (#37, lot B2). Rien ne change à l'écran ni dans les calculs.
