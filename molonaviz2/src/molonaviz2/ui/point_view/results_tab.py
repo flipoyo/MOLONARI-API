@@ -9,12 +9,17 @@ import pandas as pd
 from matplotlib.colors import to_hex
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from ...domain.compute import ForwardConfig, InversionConfig
-from ...engine import api
-from ...engine.results import ForwardResult, InversionResult
+from molonaviz2 import facade as api
+from molonaviz2.facade import (
+    ComputationInfo,
+    ForwardConfig,
+    ForwardResult,
+    InversionConfig,
+    InversionResult,
+    chain_data,
+)
+
 from ...i18n import t
-from ...questions import chain_data
-from ...storage.project import ComputationInfo
 from ..dialogs.notice import attach
 from ..errors import error_text
 from ..plots import posterior
@@ -294,7 +299,7 @@ class ResultsTab(QtWidgets.QWidget):
             self.layer_choice.clear()
             self.layer_choice.addItems([layer["name"] for layer in config["layers"]])
             self.layer_choice.blockSignals(False)
-            table = posterior.summary_table(self.inversion, self._layer_names())
+            table = api.summary_table(self.inversion, self._layer_names())
             self.summary_model._headers = {
                 "parameter": t("Parameter"), "best": t("Best"), "mean": t("Mean"), "sd": t("Std. dev."),
                 "hdi90_lb": t("HDI 90 % low"), "hdi90_ub": t("HDI 90 % high"), "ess_bulk": "ESS", "r_hat": "R-hat",
@@ -530,7 +535,7 @@ class ResultsTab(QtWidgets.QWidget):
             path, _ = QtWidgets.QFileDialog.getSaveFileName(self, t("Export posterior samples"), f"{self.context.name}_posterior.nc", "NetCDF (*.nc)")
             if not path:
                 return
-        posterior.export_netcdf(self.inversion, self._layer_names(), path)
+        api.export_netcdf(self.inversion, self._layer_names(), path)
 
 
 def write_csv_exports(folder: Path, forward: ForwardResult, inversion: InversionResult | None, layer_names: list[str]) -> list[Path]:
@@ -558,7 +563,7 @@ def write_csv_exports(folder: Path, forward: ForwardResult, inversion: Inversion
     sensors.to_csv(path, index=False)
     written.append(path)
     if inversion is not None:
-        table = posterior.summary_table(inversion, layer_names)
+        table = api.summary_table(inversion, layer_names)
         path = folder / "posterior_summary.csv"
         table.to_csv(path)
         written.append(path)

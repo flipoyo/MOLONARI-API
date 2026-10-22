@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 from PySide6 import QtCore, QtWidgets
 
-from ..questions import MEASUREMENT_LEVELS, measurement_interval, z_score  # noqa: F401  (réexportés)
+from molonaviz2.facade import MEASUREMENT_LEVELS, measurement_interval, z_score  # noqa: F401  (réexportés)
 
 
 class TemperatureUnit(QtCore.QObject):

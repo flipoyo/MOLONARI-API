@@ -6,18 +6,19 @@ from dataclasses import dataclass
 
 from PySide6 import QtCore
 
-from ...domain.models import (
+from molonaviz2.facade import (
+    ColumnInputs,
     Lab,
     PointStage,
     PressureSensor,
+    Project,
     SamplingPoint,
     Shaft,
     Thermometer,
+    UserError,
 )
-from ...engine.column import ColumnInputs
-from ...errors import UserError
+
 from ...i18n import N_
-from ...storage.project import Project
 
 STAGE_LABELS = {
     PointStage.RAW: N_("Raw measurements"),

@@ -8,9 +8,9 @@ from __future__ import annotations
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from ...domain.models import PointStage
+from molonaviz2.facade import PointStage, Project
+
 from ...i18n import t
-from ...storage.project import Project
 from ...workers.tasks import TaskManager
 from ..theme import ACCENT, muted_color
 from .cleanup_tab import CleanupTab

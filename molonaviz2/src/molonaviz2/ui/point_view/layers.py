@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from ...domain.compute import (
+from molonaviz2.facade import (
     DEFAULT_PRIORS,
     INVERTED_PARAMETERS,
     PARAMETER_LABELS,
@@ -18,6 +18,7 @@ from ...domain.compute import (
     LayerSpec,
     PriorRange,
 )
+
 from ...i18n import t
 from ...notice import BY_KEY
 from ..widgets import format_number

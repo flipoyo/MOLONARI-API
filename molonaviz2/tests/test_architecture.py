@@ -39,26 +39,7 @@ FACADE = {
 }
 # Imports hors façade relevés au début de A1 (identiques à CGS-MOLO 59aaf3e), tolérés jusqu'à la
 # migration du frontend (partie C). La liste ne peut que raccourcir.
-TOLERATED = {
-    ("molonaviz2.ui.plots.posterior", "molonaviz2.domain.compute"),
-    ("molonaviz2.ui.plots.posterior", "molonaviz2.engine.diagnostics"),
-    ("molonaviz2.ui.plots.posterior", "molonaviz2.engine.results"),
-    ("molonaviz2.ui.point_view.cleanup_tab", "molonaviz2.domain.models"),
-    ("molonaviz2.ui.point_view.cleanup_tab", "molonaviz2.processing.cleanup"),
-    ("molonaviz2.ui.point_view.context", "molonaviz2.domain.models"),
-    ("molonaviz2.ui.point_view.context", "molonaviz2.engine.column"),
-    ("molonaviz2.ui.point_view.context", "molonaviz2.storage.project"),
-    ("molonaviz2.ui.point_view.forward_tab", "molonaviz2.domain.compute"),
-    ("molonaviz2.ui.point_view.forward_tab", "molonaviz2.engine.results"),
-    ("molonaviz2.ui.point_view.inversion_tab", "molonaviz2.domain.compute"),
-    ("molonaviz2.ui.point_view.inversion_tab", "molonaviz2.engine.results"),
-    ("molonaviz2.ui.point_view.layers", "molonaviz2.domain.compute"),
-    ("molonaviz2.ui.point_view.results_tab", "molonaviz2.domain.compute"),
-    ("molonaviz2.ui.point_view.results_tab", "molonaviz2.engine.results"),
-    ("molonaviz2.ui.point_view.results_tab", "molonaviz2.storage.project"),
-    ("molonaviz2.ui.point_view.view", "molonaviz2.domain.models"),
-    ("molonaviz2.ui.point_view.view", "molonaviz2.storage.project"),
-}
+TOLERATED: set[tuple[str, str]] = set()
 
 
 def top_level(path: Path) -> str:

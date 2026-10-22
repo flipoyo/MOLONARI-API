@@ -8,10 +8,16 @@ import re
 
 from PySide6 import QtCore, QtWidgets
 
-from ...domain.compute import InversionConfig, LayerSpec, default_priors, setting_limits
-from ...engine import api
-from ...engine.results import InversionResult
-from ...errors import UserError
+from molonaviz2 import facade as api
+from molonaviz2.facade import (
+    InversionConfig,
+    InversionResult,
+    LayerSpec,
+    UserError,
+    default_priors,
+    setting_limits,
+)
+
 from ...i18n import N_, t
 from ...workers.tasks import Task, TaskManager
 from ..dialogs.notice import attach
