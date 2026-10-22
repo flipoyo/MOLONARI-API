@@ -1,0 +1,39 @@
+[project]
+name = "molonari-twin"
+version = "0.6.0-alpha.1"
+description = "Backend des twins MOLONARI : données, nettoyage, calcul (JAX, DREAM), twins et questions, sans interface."
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "jax>=0.4.30",
+    "numpy>=1.26",
+    "pandas>=2.2",
+    "scipy>=1.13",
+    "arviz>=1.3",
+    "h5netcdf>=1.3",
+    "h5py>=3.11",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+molonari-twin = "molonari_twin.__main__:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pyheatmy",  # référence des tests du moteur (engine/reference.py)
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/molonari_twin"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: tests longs (DREAM, comparaisons complètes avec pyheatmy)",
+]
+addopts = "-m 'not slow'"

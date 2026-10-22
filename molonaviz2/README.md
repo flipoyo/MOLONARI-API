@@ -2,6 +2,15 @@
 
 Application de bureau pour l'inversion bayésienne des mesures de température et de pression dans la zone hyporhéique (projet MOLONARI). Elle remplace Molonaviz (PyQt5) avec les mêmes fonctions : laboratoires et capteurs, études, points de prélèvement, nettoyage des mesures, modèle direct et inversion MCMC (DREAM).
 
+Ce dossier est un espace [uv](https://docs.astral.sh/uv/) à deux paquets, avec un seul `uv.lock` :
+
+| Dossier | Paquet | Rôle |
+|---|---|---|
+| [`backend/`](backend/) | `molonari-twin` | données, nettoyage, calcul (moteur JAX, DREAM), twins et questions ; sans Qt ni interface ; commande `molonari-twin` |
+| [`frontend/`](frontend/) | `molonaviz2` | application de bureau PySide6 ; n'appelle le backend que par sa façade `molonari_twin.facade` |
+
+Tout fonctionne en local, dans un seul processus : l'application appelle le backend directement, sans serveur.
+
 ## Installation
 
 Prérequis : [uv](https://docs.astral.sh/uv/), Python 3.12 ou 3.13, et [ComplexGitSync](https://github.com/flipoyo/ComplexGitSync) (`cgitsync`).
@@ -12,7 +21,7 @@ Molonaviz 2 s'installe avec l'ensemble des dépôts MOLONARI, que cgs monte côt
 cgitsync bootstrap molonari.cgs            # MOLONARI1D, MOLONARI-API, MOLONARI-data, MOLONARI-computo…
 export CGSHOME=<dossier indiqué à la fin du bootstrap>
 cd "$CGSHOME/Molonaviz/molonaviz2"
-uv sync          # installe l'application et les outils de développement
+uv sync          # installe les deux paquets et les outils de développement
 uv run molonaviz2
 ```
 
@@ -78,8 +87,9 @@ Les résultats sont au format 2.0.0 (`metadata.json["results_format"]`) :
 Trois règles s'appliquent :
 - **Identifiant.** `twin_id` est le SHA-256 de la config canonique, qui inclut l'empreinte du fichier de mesures et la version du code. Les libellés (nom, description, point, noms des couches) n'en font pas partie.
   - Depuis un dépôt git, la version du code porte un suffixe local quand le code n'est pas exactement celui d'une version publiée :
-    - `+g<commit>` si le tag `molonaviz2-vX.Y.Z` est absent, ou si `molonaviz2/` en diffère ;
-    - `.dirty` en plus si `molonaviz2/` a des modifications non commitées.
+    - `+g<commit>` si le tag `molonari-twin-vX.Y.Z` est absent, ou si `backend/` en diffère ;
+    - `.dirty` en plus si `backend/` a des modifications non commitées.
+  - La version du code est celle du backend (`molonari-twin X.Y.Z · jax …`) : une nouvelle version de la seule application ne change aucun `twin_id`.
   - Sur une branche de travail, les `twin_id` diffèrent donc de ceux de la version publiée. L'exécutable n'a jamais de suffixe.
 - **Config figée.** Un twin modifié après son exécution est refusé. Pour changer un paramètre, on crée un nouveau twin.
 - **Doublons.** Une config identique relancée, sous le même nom ou sous un autre, renvoie au résultat existant, sans recalcul.
@@ -94,11 +104,11 @@ Le mode `direct` fixe les paramètres du sol. Le mode `mcmc` les estime par inve
 **En ligne de commande (démo)**
 
 ```bash
-uv run molonaviz2 twin validate examples/twins/twin_01   # étape 2 : validation
-uv run molonaviz2 twin id       examples/twins/twin_01   # étape 3 : twin_id et état dans le registre
-uv run molonaviz2 twin run      examples/twins/twin_01   # étapes 4-5 : exécution, résultats dans examples/results/<id>
-uv run molonaviz2 twin run      examples/twins/twin_02   # étape 6 : même config sous un autre nom → doublon
-uv run molonaviz2 twin list     examples/twins
+uv run molonari-twin validate examples/twins/twin_01   # étape 2 : validation
+uv run molonari-twin id       examples/twins/twin_01   # étape 3 : twin_id et état dans le registre
+uv run molonari-twin run      examples/twins/twin_01   # étapes 4-5 : exécution, résultats dans examples/results/<id>
+uv run molonari-twin run      examples/twins/twin_02   # étape 6 : même config sous un autre nom → doublon
+uv run molonari-twin list     examples/twins
 ```
 
 **Provenance et mode strict.** `metadata.json["provenance"]` enregistre, pour le dépôt du code et pour celui du twin :
@@ -110,20 +120,20 @@ Il donne aussi l'environnement (Python, plateforme, processeur, appareil, jax, j
 
 `twin run --strict` refuse de calculer avec une pré-version, un code non publié, un dépôt modifié, un twin sans tag ou une provenance illisible, et donne tous les motifs.
 
-La ligne de commande n'a pas besoin de Qt. Ses messages sont en français par défaut ; `MOLONAVIZ_LANG=en` les affiche en anglais.
+`molonaviz2 twin …` (y compris dans l'exécutable) est un alias de `molonari-twin …`. La ligne de commande n'a pas besoin de Qt. Ses messages sont en français par défaut ; `MOLONAVIZ_LANG=en` les affiche en anglais.
 
-Les exemples fournis portent tous sur Point034. Leurs identifiants valent pour la version 0.5.0 publiée, sans suffixe local : ils changent avec la version du code, qui entre dans le `twin_id`.
+Les exemples fournis portent tous sur Point034. Leurs identifiants valent pour molonari-twin 0.6.0-alpha.1 publié, sans suffixe local : ils changent avec la version du code, qui entre dans le `twin_id`.
 
-| Twin | Mode | `twin_id` (0.5.0) | Contenu |
+| Twin | Mode | `twin_id` (molonari-twin 0.6.0-alpha.1) | Contenu |
 |---|---|---|---|
-| `twin_01` | direct | `136ab511459b7996` | monocouche, −log₁₀ k = 12 |
-| `twin_02` | direct | `136ab511459b7996` | copie renommée de `twin_01`, pour montrer la détection de doublon |
-| `twin_03` | mcmc | `065d48abf5224659` | inversion courte (8 chaînes, 300 itérations, graine 1) |
-| `twin_04` | mcmc | `53462d6e7119aa9c` | créé depuis l'application, à partir d'une inversion |
+| `twin_01` | direct | `1edb6a9a3f307ba0` | monocouche, −log₁₀ k = 12 |
+| `twin_02` | direct | `1edb6a9a3f307ba0` | copie renommée de `twin_01`, pour montrer la détection de doublon |
+| `twin_03` | mcmc | `6aa2aaf841f74f74` | inversion courte (8 chaînes, 300 itérations, graine 1) |
+| `twin_04` | mcmc | `3535bbcdb0adda21` | créé depuis l'application, à partir d'une inversion |
 
 Pour réinitialiser la démo : fermer l'application, puis `rm examples/twins/registry.csv; rm -rf examples/results`.
 
-Le schéma complet de `twin.yaml`, avec toutes les clés acceptées, est documenté dans `src/molonaviz2/twin/config.py`.
+Le schéma complet de `twin.yaml`, avec toutes les clés acceptées, est documenté dans `backend/src/molonari_twin/twin/config.py`.
 
 ## Calcul
 
@@ -150,8 +160,9 @@ Le schéma complet de `twin.yaml`, avec toutes les clés acceptées, est documen
 ## Tests
 
 ```bash
-uv run pytest            # suite rapide (~1 min) : moteur, données, interface (hors écran)
-uv run pytest -m slow    # inversion DREAM sur une colonne synthétique aux paramètres connus
+make test               # les deux suites : backend (moteur, données, twins, questions) et frontend (interface hors écran)
+make test-slow          # inversion DREAM sur une colonne synthétique aux paramètres connus (backend)
+cd backend && uv run pytest     # une seule suite ; le backend se teste sans Qt (-p no:pytest-qt)
 ```
 
 Le moteur JAX est validé contre pyheatmy. Avec pyheatmy passé en float64, les résultats concordent à 1e-9 près en relatif, sur les températures comme sur les flux, en monocouche, multicouche et pas de temps variable, y compris sur les mesures réelles de Point034. Avec pyheatmy tel quel, qui calcule en float32, l'écart reste sous 0,05 K.
@@ -163,18 +174,22 @@ make package             # PyInstaller : dist/Molonaviz2/ (et dist/Molonaviz2.ap
 make selftest-package    # lance un petit modèle direct dans l'exécutable construit
 ```
 
-La version de l'exécutable est lue dans `pyproject.toml`, comme celle de l'application : les `twin_id` sont les mêmes depuis les sources et depuis l'exécutable.
+La version de l'exécutable est lue dans `frontend/pyproject.toml`, et l'exécutable embarque les métadonnées du backend : les `twin_id` sont les mêmes depuis les sources et depuis l'exécutable.
 
 Il faut un build par système d'exploitation, réalisé sur ce système. Un exécutable CUDA se construit sous Linux, avec `jax[cuda12]` installé.
 
 ## Versions
 
-Molonaviz 2 suit [SemVer 2.0.0](https://semver.org/lang/fr/). La version n'est écrite que dans `pyproject.toml`, et chaque version a sa section dans [CHANGELOG.md](CHANGELOG.md), qui donne aussi les règles. `python tools/check_version.py` vérifie que les deux sont cohérents. Les tags sont de la forme `molonaviz2-vX.Y.Z`.
+Les deux paquets suivent [SemVer 2.0.0](https://semver.org/lang/fr/), chacun avec sa version (écrite seulement dans son `pyproject.toml`), son CHANGELOG et ses tags :
+- backend : [backend/CHANGELOG.md](backend/CHANGELOG.md), tags `molonari-twin-vX.Y.Z` ;
+- application : [frontend/CHANGELOG.md](frontend/CHANGELOG.md) (historique de Molonaviz 2 jusqu'à 0.6.0-alpha.1 compris), tags `molonaviz2-vX.Y.Z`.
+
+`python tools/check_version.py [tag]` vérifie la cohérence des deux, ou du paquet du tag.
 
 ## Organisation du code
 
 ```
-src/molonaviz2/
+backend/src/molonari_twin/      backend (paquet molonari-twin), sans Qt
   domain/      objets du domaine et configurations de calcul (valeurs par défaut, validation)
   io/          lecture des fichiers de terrain, import des anciennes bases Molonaviz
   storage/     fichier projet .molo (SQLite, schéma versionné, écritures transactionnelles)
@@ -182,10 +197,15 @@ src/molonaviz2/
   engine/      moteur JAX (modèle direct, DREAM), adaptateur pyheatmy pour les tests
   twin/        twins versionnés : twin.yaml, twin_id, registre, exécution, ligne de commande
   questions/   réponses calculées à partir d'un résultat (volumes, bande prédictive, chaînes)
+  i18n/        traduction pure et catalogue français (fr.json) ; `make strings` liste les chaînes non traduites
+  facade.py    seule porte du backend pour le frontend
+frontend/src/molonaviz2/        application (paquet molonaviz2), PySide6
+  ui/          fenêtre, explorateur, onglets d'un point, fenêtre des twins, graphiques
   workers/     calculs en arrière-plan (annulation, progression)
-  ui/          interface PySide6 : fenêtre, explorateur, onglets d'un point, graphiques
-  i18n/        traduction française (fr.json) ; `make strings` liste les chaînes non traduites
-  facade.py    seule porte du cœur pour l'interface
+  i18n/        traduction par Qt (t, install_language), sur le catalogue du backend
+  app.py, notice.py, settings.py, logs.py
+examples/twins/   twins de démonstration
+tools/            check_version.py, extract_strings.py
 ```
 
-Le cœur (`domain`, `io`, `storage`, `processing`, `engine`, `twin`, `questions`, `errors`, `i18n` pur) s'importe et s'exécute sans Qt ; c'est le futur backend. L'interface (`ui`, `workers`, `app`, `notice`, `settings`, `logs`) ne l'appelle que par `molonaviz2.facade`. `tests/test_architecture.py` vérifie ces deux règles.
+Le backend s'importe et s'exécute sans Qt ni bibliothèque graphique ; le frontend ne l'appelle que par `molonari_twin.facade`. Chaque paquet a son test d'architecture (`backend/tests/test_architecture.py`, `frontend/tests/test_architecture.py`) qui vérifie ces règles.
