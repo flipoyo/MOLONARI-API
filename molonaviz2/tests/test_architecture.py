@@ -15,7 +15,7 @@ SOURCE = Path(__file__).resolve().parents[1] / "src" / "molonaviz2"
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples" / "twins"
 
 # Modules et paquets de premier niveau de molonaviz2 ("__init__" : le paquet lui-même).
-CORE = {"__init__", "errors", "gitinfo", "i18n", "domain", "io", "processing", "engine", "twin", "storage", "questions"}
+CORE = {"__init__", "errors", "gitinfo", "i18n", "domain", "io", "processing", "engine", "twin", "storage", "questions", "facade"}
 INTERFACE = {"__main__", "app", "settings", "notice", "logs", "ui", "workers"}
 # Sous-modules du cœur qui relèvent de l'interface.
 INTERFACE_SUBMODULES = {"i18n/qt.py"}
@@ -35,6 +35,7 @@ FACADE = {
     "molonaviz2", "molonaviz2.errors", "molonaviz2.i18n",
     "molonaviz2.engine.api", "molonaviz2.twin.run", "molonaviz2.twin.results",
     "molonaviz2.twin.cli",  # point d'entrée de la ligne de commande (aiguillage de __main__)
+    "molonaviz2.facade",
 }
 # Imports hors façade relevés au début de A1 (identiques à CGS-MOLO 59aaf3e), tolérés jusqu'à la
 # migration du frontend (partie C). La liste ne peut que raccourcir.
