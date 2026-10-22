@@ -27,7 +27,7 @@ class Application(QtCore.QObject):
         self.window = None
         project = None
         if project_path:
-            from molonaviz2.facade import Project
+            from molonari_twin.facade import Project
 
             from .ui.errors import report_exception
 
@@ -71,9 +71,8 @@ def selftest() -> int:
     import tempfile
 
     import numpy as np
-
-    from molonaviz2 import facade as api
-    from molonaviz2.facade import (
+    from molonari_twin import facade as api
+    from molonari_twin.facade import (
         ColumnInputs,
         ForwardConfig,
         InversionConfig,
@@ -130,7 +129,7 @@ def selftest() -> int:
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv if argv is None else argv)
     if len(argv) > 1 and argv[1] == "twin":
-        from molonaviz2.facade import twin_cli
+        from molonari_twin.facade import twin_cli
 
         return twin_cli(argv[2:])
     parser = argparse.ArgumentParser(prog="molonaviz2", description="Molonaviz 2")

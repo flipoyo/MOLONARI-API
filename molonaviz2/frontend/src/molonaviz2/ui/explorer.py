@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
+from molonari_twin.facade import Project
 from PySide6 import QtCore, QtWidgets
-
-from molonaviz2.facade import Project
 
 from ..i18n import t
 from .point_view.context import STAGE_LABELS

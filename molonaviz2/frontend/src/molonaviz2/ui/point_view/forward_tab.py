@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import numpy as np
+from molonari_twin import facade as api
+from molonari_twin.facade import ForwardConfig, ForwardResult, LayerSpec, setting_limits
 from PySide6 import QtCore, QtWidgets
-
-from molonaviz2 import facade as api
-from molonaviz2.facade import ForwardConfig, ForwardResult, LayerSpec, setting_limits
 
 from ...i18n import t
 from ...workers.tasks import Task, TaskManager

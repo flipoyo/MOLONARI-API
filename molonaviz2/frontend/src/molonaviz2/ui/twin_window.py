@@ -7,9 +7,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from PySide6 import QtCore, QtGui, QtWidgets
-
-from molonaviz2.facade import (
+from molonari_twin.facade import (
     Issue,
     TwinConfigError,
     TwinStatus,
@@ -18,6 +16,7 @@ from molonaviz2.facade import (
     run_twin,
     twin_status,
 )
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from ..i18n import t
 from ..workers.tasks import Task, TaskManager

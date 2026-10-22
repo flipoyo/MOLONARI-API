@@ -6,9 +6,8 @@ explique quoi faire : impossible de lancer un calcul sans mesures nettoyées.
 
 from __future__ import annotations
 
+from molonari_twin.facade import PointStage, Project
 from PySide6 import QtCore, QtGui, QtWidgets
-
-from molonaviz2.facade import PointStage, Project
 
 from ...i18n import t
 from ...workers.tasks import TaskManager

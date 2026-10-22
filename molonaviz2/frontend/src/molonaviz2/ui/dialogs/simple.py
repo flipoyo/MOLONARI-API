@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from itertools import pairwise
 
+from molonari_twin.facade import PressureSensor, Shaft, Thermometer
 from PySide6 import QtCore, QtWidgets
-
-from molonaviz2.facade import PressureSensor, Shaft, Thermometer
 
 from ... import __version__
 from ...i18n import N_, t

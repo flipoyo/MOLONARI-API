@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import pandas as pd
-from PySide6 import QtCore, QtWidgets
-
-from molonaviz2.facade import (
+from molonari_twin.facade import (
     VARIABLES,
     CleanupResult,
     CleanupSettings,
@@ -15,6 +13,7 @@ from molonaviz2.facade import (
     read_cleaned_csv,
     write_cleaned_csv,
 )
+from PySide6 import QtCore, QtWidgets
 
 from ...i18n import N_, t
 from ..dialogs.notice import attach

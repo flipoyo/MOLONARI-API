@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
+from molonari_twin.facade import UserError
 from PySide6 import QtCore, QtGui, QtWidgets
-
-from molonaviz2.facade import UserError
 
 from ...i18n import t
 from ..errors import error_text

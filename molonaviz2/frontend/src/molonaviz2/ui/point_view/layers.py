@@ -7,9 +7,7 @@ de la colonne (non modifiable).
 
 from __future__ import annotations
 
-from PySide6 import QtCore, QtGui, QtWidgets
-
-from molonaviz2.facade import (
+from molonari_twin.facade import (
     DEFAULT_PRIORS,
     INVERTED_PARAMETERS,
     PARAMETER_LABELS,
@@ -18,6 +16,7 @@ from molonaviz2.facade import (
     LayerSpec,
     PriorRange,
 )
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from ...i18n import t
 from ...notice import BY_KEY

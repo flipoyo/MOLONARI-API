@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from PySide6 import QtCore
-
-from molonaviz2.facade import (
+from molonari_twin.facade import (
     ColumnInputs,
     Lab,
     PointStage,
@@ -17,6 +15,7 @@ from molonaviz2.facade import (
     Thermometer,
     UserError,
 )
+from PySide6 import QtCore
 
 from ...i18n import N_
 

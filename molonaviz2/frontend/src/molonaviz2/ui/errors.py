@@ -11,9 +11,8 @@ import sys
 import traceback
 from collections.abc import Callable
 
+from molonari_twin.facade import UserError
 from PySide6 import QtWidgets
-
-from molonaviz2.facade import UserError
 
 from ..i18n import render, t
 from ..logs import log

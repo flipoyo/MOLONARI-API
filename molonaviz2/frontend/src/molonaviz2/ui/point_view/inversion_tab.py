@@ -6,10 +6,8 @@ import html
 import random
 import re
 
-from PySide6 import QtCore, QtWidgets
-
-from molonaviz2 import facade as api
-from molonaviz2.facade import (
+from molonari_twin import facade as api
+from molonari_twin.facade import (
     InversionConfig,
     InversionResult,
     LayerSpec,
@@ -17,6 +15,7 @@ from molonaviz2.facade import (
     default_priors,
     setting_limits,
 )
+from PySide6 import QtCore, QtWidgets
 
 from ...i18n import N_, t
 from ...workers.tasks import Task, TaskManager

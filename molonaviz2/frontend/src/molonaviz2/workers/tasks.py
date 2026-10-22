@@ -18,9 +18,8 @@ import threading
 import time
 from collections.abc import Callable
 
+from molonari_twin.facade import Cancelled
 from PySide6 import QtCore
-
-from molonaviz2.facade import Cancelled
 
 from ..logs import log
 

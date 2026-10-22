@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from molonari_twin.facade import LabImport, UserError, import_lab_directory
 from PySide6 import QtWidgets
-
-from molonaviz2.facade import LabImport, UserError, import_lab_directory
 
 from ...i18n import t
 from ..errors import error_text

@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from molonaviz2.facade import (
+from molonari_twin.facade import (
     DEFAULT_PRIORS,
     IQR_FACTOR,
     PARAMETER_LABELS,

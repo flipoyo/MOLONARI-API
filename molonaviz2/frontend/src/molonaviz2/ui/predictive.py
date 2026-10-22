@@ -8,8 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-
-from molonaviz2.facade import (
+from molonari_twin.facade import (
     UserError,
     coverage,
     observed_at,

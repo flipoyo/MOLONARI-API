@@ -11,9 +11,7 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-from PySide6 import QtCore, QtWidgets
-
-from molonaviz2.facade import (
+from molonari_twin.facade import (
     Lab,
     ParsedMeasures,
     SamplingPoint,
@@ -24,6 +22,7 @@ from molonaviz2.facade import (
     read_temperature_file,
     read_text,
 )
+from PySide6 import QtCore, QtWidgets
 
 from ...i18n import t
 from ..errors import error_text

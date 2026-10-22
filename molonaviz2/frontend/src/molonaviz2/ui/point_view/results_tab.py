@@ -7,10 +7,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from matplotlib.colors import to_hex
-from PySide6 import QtCore, QtGui, QtWidgets
-
-from molonaviz2 import facade as api
-from molonaviz2.facade import (
+from molonari_twin import facade as api
+from molonari_twin.facade import (
     ComputationInfo,
     ForwardConfig,
     ForwardResult,
@@ -18,6 +16,7 @@ from molonaviz2.facade import (
     InversionResult,
     chain_data,
 )
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from ...i18n import t
 from ..dialogs.notice import attach

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from molonaviz2.facade import INVERTED_PARAMETERS, PARAMETER_LABELS, InversionResult
+from molonari_twin.facade import INVERTED_PARAMETERS, PARAMETER_LABELS, InversionResult
 
 from ...i18n import t
 from .style import CHAIN_COLORMAP
