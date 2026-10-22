@@ -7,7 +7,8 @@ import sys
 from pathlib import Path
 
 import pytest
-from molonaviz2.i18n import LANGUAGES, load_catalog
+from molonari_twin import facade
+from molonaviz2.i18n import LANGUAGES, load_catalog, own_catalog
 from PySide6 import QtCore
 
 TOOLS = Path(__file__).resolve().parents[2] / "tools"
@@ -18,8 +19,8 @@ PLACEHOLDER = re.compile(r"\{[^{}]*\}")
 
 
 def test_every_interface_string_has_a_french_translation():
-    catalog = load_catalog("fr")
-    missing = sorted(set(extract()) - set(catalog))
+    catalog = load_catalog("fr")  # catalogue réuni : celui du backend, puis celui de l'application
+    missing = sorted(set(extract("frontend")) - set(catalog))
     assert missing == [], f"{len(missing)} chaîne(s) sans traduction : {missing[:10]}"
 
 
@@ -31,8 +32,14 @@ def test_translations_keep_placeholders_and_markup():
 
 
 def test_no_unused_translations():
-    unused = sorted(set(load_catalog("fr")) - set(extract()))
+    unused = sorted(set(own_catalog("fr")) - set(extract("frontend")))
     assert unused == [], unused
+
+
+def test_no_key_of_the_backend_catalog_is_repeated():
+    """Une chaîne employée aussi par le backend n'est traduite qu'une fois, dans le catalogue du backend."""
+    repeated = sorted(set(own_catalog("fr")) & set(facade.load_catalog("fr")))
+    assert repeated == [], repeated
 
 
 def test_languages_offered():
@@ -101,5 +108,5 @@ def test_task_cancellation_and_failure_signals(qtbot):
 
 
 def test_catalog_file_is_valid_json():
-    path = Path(__file__).resolve().parents[2] / "backend" / "src" / "molonari_twin" / "i18n" / "fr.json"
+    path = Path(__file__).resolve().parents[1] / "src" / "molonaviz2" / "i18n" / "fr.json"
     assert isinstance(json.loads(path.read_text(encoding="utf-8")), dict)
