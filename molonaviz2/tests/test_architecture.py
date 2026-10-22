@@ -1,5 +1,5 @@
 """Architecture : le cœur (futur backend) s'importe et s'exécute sans Qt ni interface, et ne produit
-aucune phrase traduite ; l'interface n'ajoute pas de nouvel import du cœur hors façade.
+aucune phrase traduite ; l'interface n'appelle le cœur que par la façade (molonaviz2.facade).
 
 Ce fichier ne dépend pas de PySide6 : la CI le lance seul (job core-without-qt).
 """
@@ -30,16 +30,8 @@ INTERFACE_DELEGATES = {("i18n/__init__.py", "molonaviz2.i18n.qt")}  # t() et ins
 # Bords du cœur autorisés à traduire avec translate() : fichier → raison.
 TRANSLATING_EDGES = {"twin/cli.py": "ligne de commande des twins (choix du propriétaire, A1)"}
 
-# Ce que l'interface appelle normalement dans le cœur.
-FACADE = {
-    "molonaviz2", "molonaviz2.errors", "molonaviz2.i18n",
-    "molonaviz2.engine.api", "molonaviz2.twin.run", "molonaviz2.twin.results",
-    "molonaviz2.twin.cli",  # point d'entrée de la ligne de commande (aiguillage de __main__)
-    "molonaviz2.facade",
-}
-# Imports hors façade relevés au début de A1 (identiques à CGS-MOLO 59aaf3e), tolérés jusqu'à la
-# migration du frontend (partie C). La liste ne peut que raccourcir.
-TOLERATED: set[tuple[str, str]] = set()
+# Seuls modules du cœur que l'interface importe : la racine (version), la traduction et la façade.
+FACADE = {"molonaviz2", "molonaviz2.i18n", "molonaviz2.facade"}
 
 
 def top_level(path: Path) -> str:
@@ -192,19 +184,16 @@ def test_n_marker_comes_from_pure_i18n():
 # 4. Façade -----------------------------------------------------------------------------------------
 
 
-def test_interface_uses_the_facade_or_tolerated_imports():
+def test_interface_uses_only_the_facade():
     found = set()
     for path in sorted(SOURCE.rglob("*.py")):
         if top_level(path) not in INTERFACE:
             continue
         for _, module in imported_modules(path):
             parts = module.split(".")
-            if parts[0] == "molonaviz2" and (len(parts) == 1 or parts[1] in CORE) and module not in FACADE and not module.startswith("molonaviz2.questions"):
+            if parts[0] == "molonaviz2" and (len(parts) == 1 or parts[1] in CORE) and module not in FACADE:
                 found.add((module_name(path), module))
-    new = sorted(found - TOLERATED)
-    gone = sorted(TOLERATED - found)
-    assert not new, f"nouvel import hors façade (passer par engine/api, twin/run, twin/results ou questions) : {new}"
-    assert not gone, f"import toléré disparu : le retirer de TOLERATED : {gone}"
+    assert not found, f"import du cœur hors façade (passer par molonaviz2.facade) : {sorted(found)}"
 
 
 def test_core_does_not_import_the_facade():
