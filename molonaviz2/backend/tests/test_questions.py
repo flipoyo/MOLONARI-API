@@ -5,25 +5,21 @@ import dataclasses
 import numpy as np
 import pytest
 from conftest import synthetic_inputs
-
-from molonaviz2.domain.compute import ForwardConfig, InversionConfig, LayerSpec
-from molonaviz2.engine.api import run_forward, run_inversion
-from molonaviz2.errors import UserError
-from molonaviz2.questions import (
-    MEASUREMENT_LEVELS,
+from molonari_twin.domain.compute import ForwardConfig, InversionConfig, LayerSpec
+from molonari_twin.engine.api import run_forward, run_inversion
+from molonari_twin.errors import UserError
+from molonari_twin.questions import (
     Answer,
     Quantity,
     chain_data,
     coverage,
     exchanged_volume,
-    measurement_interval,
     observed_at,
     predictive_band,
     sensor_intervals,
     sensor_samples,
-    z_score,
 )
-from molonaviz2.twin.results import load_results, write_results
+from molonari_twin.twin.results import load_results, write_results
 
 
 def test_answers_and_quantities_are_frozen():
@@ -46,12 +42,6 @@ def test_sensor_intervals_at_90_percent_is_plus_or_minus_1_645_sigma():
     np.testing.assert_allclose(observed - low, 1.6448536 * 0.3, rtol=1e-6)
     assert temperature.unit == "°C" and answer.provenance == {
         "question": "sensor_intervals", "parameters": {"sigma": 0.3, "level": 0.9}}
-
-
-def test_measurement_interval_is_reexported_by_the_interface():
-    units = pytest.importorskip("molonaviz2.ui.units")
-    assert units.z_score is z_score and units.measurement_interval is measurement_interval
-    assert units.MEASUREMENT_LEVELS is MEASUREMENT_LEVELS
 
 
 # Volumes ------------------------------------------------------------------------------------------

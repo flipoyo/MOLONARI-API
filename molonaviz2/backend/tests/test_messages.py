@@ -11,10 +11,19 @@ import string
 from pathlib import Path
 
 import pytest
+from molonari_twin.errors import (
+    CODE_PATTERN,
+    MESSAGES,
+    Issue,
+    UserError,
+    message_template,
+)
 
-from molonaviz2.errors import CODE_PATTERN, MESSAGES, Issue, UserError, message_template
-
-SOURCE = Path(__file__).resolve().parents[1] / "src" / "molonaviz2"
+WORKSPACE = Path(__file__).resolve().parents[2]
+SOURCE = WORKSPACE / "backend" / "src" / "molonari_twin"
+# Le frontend crée aussi des UserError et des Issue : ses codes sont vérifiés ici, tant que le
+# catalogue fr.json est commun aux deux paquets.
+SOURCES = (SOURCE, WORKSPACE / "frontend" / "src" / "molonaviz2")
 CATALOG = json.loads((SOURCE / "i18n" / "fr.json").read_text(encoding="utf-8"))
 CODE = CODE_PATTERN
 
@@ -33,9 +42,10 @@ def fields(template: str) -> set[str]:
 
 def calls():
     """(fichier, ligne, fonction englobante, nom appelé, nœud) pour chaque appel UserError(...) / Issue(...)."""
-    for path in sorted(SOURCE.rglob("*.py")):
+    files = sorted((source, path) for source in SOURCES for path in source.rglob("*.py"))
+    for root, path in files:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        relative = path.relative_to(SOURCE).as_posix()
+        relative = path.relative_to(root).as_posix()
 
         def visit(node, function, relative=relative):
             for child in ast.iter_child_nodes(node):
@@ -156,13 +166,13 @@ def test_free_text_falls_back_to_e_text():
 
 
 def french(text: str) -> str:
-    from molonaviz2.i18n import translate
+    from molonari_twin.i18n import translate
 
     return translate(text, "fr")
 
 
 def test_render_in_english_is_the_text(template, monkeypatch):
-    from molonaviz2.i18n import render
+    from molonari_twin.i18n import render
 
     monkeypatch.setitem(MESSAGES, "E_TEST_GROUP", "{issues}")
     issue = Issue("data", template, prefixed=True, path="a.csv")
@@ -171,7 +181,7 @@ def test_render_in_english_is_the_text(template, monkeypatch):
 
 
 def test_render_in_french_uses_the_catalog(template, monkeypatch):
-    from molonaviz2.i18n import render
+    from molonari_twin.i18n import render
 
     monkeypatch.setitem(MESSAGES, "E_TEST_GROUP", "{issues}")
     assert render(UserError(template, path="a.csv"), french) == "Fichier introuvable : a.csv"
@@ -182,7 +192,7 @@ def test_render_in_french_uses_the_catalog(template, monkeypatch):
 
 
 def test_render_delegates_to_objects_that_localize_themselves():
-    from molonaviz2.i18n import render
+    from molonari_twin.i18n import render
 
     class Located:
         def localized(self, tr):
@@ -200,7 +210,7 @@ def test_a_message_parameter_may_be_called_field(monkeypatch):
 
 
 def test_issue_from_error_and_nested_errors_are_rendered(template, monkeypatch):
-    from molonaviz2.i18n import render
+    from molonari_twin.i18n import render
 
     monkeypatch.setitem(MESSAGES, "W_TEST_SKIPPED", "{point} : {error}")
     error = UserError(template, path="a.csv")

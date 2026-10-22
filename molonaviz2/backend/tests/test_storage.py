@@ -7,14 +7,13 @@ import numpy as np
 import pandas as pd
 import pytest
 from conftest import FIXTURES, REPO_ROOT
-
-from molonaviz2.domain.models import PointStage, SamplingPoint, Study, Thermometer
-from molonaviz2.errors import UserError
-from molonaviz2.io.lab_import import import_lab_directory
-from molonaviz2.io.legacy_import import import_legacy_database
-from molonaviz2.io.point_import import read_pressure_file, read_temperature_file
-from molonaviz2.storage import project as project_module
-from molonaviz2.storage.project import Project
+from molonari_twin.domain.models import PointStage, SamplingPoint, Study, Thermometer
+from molonari_twin.errors import UserError
+from molonari_twin.io.lab_import import import_lab_directory
+from molonari_twin.io.legacy_import import import_legacy_database
+from molonari_twin.io.point_import import read_pressure_file, read_temperature_file
+from molonari_twin.storage import project as project_module
+from molonari_twin.storage.project import Project
 
 
 @pytest.fixture
@@ -203,7 +202,7 @@ def test_legacy_import_twice_skips_existing(project, tmp_path):
 
 def test_layers_of_older_projects_with_lateral_exchange_are_read():
     """Les projets plus anciens enregistrent q_s et t_lateral par couche : ces clés sont ignorées."""
-    from molonaviz2.domain.compute import ForwardConfig, InversionConfig, LayerSpec
+    from molonari_twin.domain.compute import ForwardConfig, InversionConfig, LayerSpec
 
     stored = ForwardConfig([LayerSpec("a", 0.4)]).to_dict()
     stored["layers"][0].update(q_s=0.0, t_lateral=None)
@@ -214,7 +213,11 @@ def test_layers_of_older_projects_with_lateral_exchange_are_read():
 
 
 def small_inversion_result():
-    from molonaviz2.engine.results import ForwardResult, InversionResult, QuantileResult
+    from molonari_twin.engine.results import (
+        ForwardResult,
+        InversionResult,
+        QuantileResult,
+    )
 
     rng = np.random.default_rng(0)
     times = np.array(["2016-06-27T12:00", "2016-06-27T12:15"], "datetime64[s]")
@@ -235,7 +238,7 @@ def small_inversion_result():
 
 
 def test_inversion_result_round_trip_through_a_project(filled):
-    from molonaviz2.engine.results import OPTIONAL_ARRAYS, InversionResult
+    from molonari_twin.engine.results import OPTIONAL_ARRAYS, InversionResult
 
     project = filled[0]
     result = small_inversion_result()
@@ -249,7 +252,7 @@ def test_inversion_result_round_trip_through_a_project(filled):
 
 
 def test_inversion_result_of_0_3_0_is_read_without_the_new_arrays(filled):
-    from molonaviz2.engine.results import OPTIONAL_ARRAYS, InversionResult
+    from molonari_twin.engine.results import OPTIONAL_ARRAYS, InversionResult
 
     project = filled[0]
     arrays = small_inversion_result().to_arrays()

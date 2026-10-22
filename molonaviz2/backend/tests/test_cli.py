@@ -7,10 +7,9 @@ import sys
 from pathlib import Path
 
 import pytest
+from molonari_twin.i18n import load_catalog
 
-from molonaviz2.i18n import load_catalog
-
-EXAMPLES = Path(__file__).resolve().parents[1] / "examples" / "twins"
+EXAMPLES = Path(__file__).resolve().parents[2] / "examples" / "twins"
 FR = load_catalog("fr")
 
 
@@ -18,7 +17,7 @@ def cli(*args, lang=None):
     env = {k: v for k, v in os.environ.items() if k != "MOLONAVIZ_LANG"}
     if lang is not None:
         env["MOLONAVIZ_LANG"] = lang
-    return subprocess.run([sys.executable, "-m", "molonaviz2", "twin", *map(str, args)], capture_output=True, text=True, timeout=300, env=env, check=False)
+    return subprocess.run([sys.executable, "-m", "molonari_twin", *map(str, args)], capture_output=True, text=True, timeout=300, env=env, check=False)
 
 
 @pytest.fixture

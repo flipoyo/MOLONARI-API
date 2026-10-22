@@ -12,17 +12,16 @@ import numpy as np
 import pandas as pd
 import pytest
 from conftest import FIXTURES, git_run
-
-from molonaviz2.domain.compute import ForwardConfig, InversionConfig, LayerSpec
-from molonaviz2.errors import UserError
-from molonaviz2.io.lab_import import import_lab_directory
-from molonaviz2.io.point_import import read_pressure_file, read_temperature_file
-from molonaviz2.processing.cleanup import CleanupSettings, clean
-from molonaviz2.twin.config import TwinConfigError, load_twin
-from molonaviz2.twin.create import create_twin
-from molonaviz2.twin.registry import read_registry
-from molonaviz2.twin.results import load_results
-from molonaviz2.twin.run import list_twins, next_twin_folder, run_twin, twin_status
+from molonari_twin.domain.compute import ForwardConfig, InversionConfig, LayerSpec
+from molonari_twin.errors import UserError
+from molonari_twin.io.lab_import import import_lab_directory
+from molonari_twin.io.point_import import read_pressure_file, read_temperature_file
+from molonari_twin.processing.cleanup import CleanupSettings, clean
+from molonari_twin.twin.config import TwinConfigError, load_twin
+from molonari_twin.twin.create import create_twin
+from molonari_twin.twin.registry import read_registry
+from molonari_twin.twin.results import load_results
+from molonari_twin.twin.run import list_twins, next_twin_folder, run_twin, twin_status
 
 DEPTHS = (0.1, 0.2, 0.3, 0.4)
 # Champs du format 2.0.0, avec la première cellule (profondeur|unité).
@@ -91,7 +90,7 @@ def test_validation_lists_every_problem_with_its_key(twins):
         ("initial_condition: linear", "initial_condition: steady", "numerics.initial_condition"),
         ("mode: direct", "mode: mcmc\nmcmc: {nb_chains: 3}", "nb_chains"),
         ("measurements: measurements.csv", "measurements: measurements.csv\n  start: 2016-07-12 10:00\n  end: 2016-07-12 10:15", "data"),
-        ("name: twin_01", "name: twin_01\ncode_version: molonaviz2 0.0.1", "code_version"),
+        ("name: twin_01", "name: twin_01\ncode_version: molonari-twin 0.0.1", "code_version"),
         ("depths: [0.1, 0.2, 0.3, 0.4]", "depths: [0.1, 0.3, 0.2, 0.4]", "sensors.depths"),
     ],
 )
@@ -113,7 +112,7 @@ def test_yaml_syntax_error_is_reported(twins):
 
 # Schéma ------------------------------------------------------------------------------------
 
-EXAMPLES = Path(__file__).resolve().parents[1] / "examples" / "twins"
+EXAMPLES = Path(__file__).resolve().parents[2] / "examples" / "twins"
 EXAMPLE_IDS_V1 = {"twin_01": "aac866e95333d10f", "twin_02": "aac866e95333d10f", "twin_03": "864cad617b96bb5d", "twin_04": "d20973170dbd571a"}
 
 
@@ -234,7 +233,7 @@ def test_full_lifecycle(twins, point034, monkeypatch):
     assert [(e.name, e.status) for e in entries] == [("twin_01", "computed")]
 
     # Relance : aucun recalcul, résultat existant.
-    from molonaviz2.engine import api
+    from molonari_twin.engine import api
 
     monkeypatch.setattr(api, "run_forward", lambda *a, **k: pytest.fail("ne doit pas recalculer"))
     again = run_twin(folder)
@@ -268,7 +267,7 @@ def test_results_are_identical_bit_for_bit(tmp_path, point034):
 
 
 def test_direct_results_2_0_0_fields_and_metadata(twins, point034):
-    from molonaviz2.engine import api
+    from molonari_twin.engine import api
 
     folder = make_twin(twins, point034)
     results_dir = run_twin(folder).status.results_dir
@@ -369,8 +368,8 @@ def load_npz(path):
     ("none", set()),
 ])
 def test_mcmc_arrays_2_0_0(tmp_path, point034, store_fields, files):
-    from molonaviz2.engine import api
-    from molonaviz2.twin.results import write_results
+    from molonari_twin.engine import api
+    from molonari_twin.twin.results import write_results
 
     twins = tmp_path / "twins"
     twins.mkdir()
@@ -436,7 +435,7 @@ def test_provenance_of_a_twin_in_a_git_repository(twins, point034):
     twin = provenance["twin"]
     assert twin["remote"] == "https://github.com/org/twins.git" and twin["commit"] == git_run(twins, "rev-parse", "HEAD")
     assert twin["tags"] == ["campagne-2016"] and twin["branch"] == "main" and twin["clean"] is True and twin["path"] == "twin_01"
-    assert provenance["code"]["commit"] is not None and provenance["code"]["path"].endswith("molonaviz2")
+    assert provenance["code"]["commit"] is not None and provenance["code"]["path"].endswith("backend")
     environment = provenance["environment"]
     assert all(environment[name] for name in ("python", "platform", "processor", "device", "jax", "jaxlib", "numpy"))
     assert provenance["cgs_state_sha256"] == hashlib.sha256("récent".encode()).hexdigest()
@@ -454,7 +453,7 @@ def test_provenance_outside_a_repository_is_null_with_a_warning(twins, point034)
 
 
 def test_provenance_without_remote_or_git(twins, point034, monkeypatch):
-    from molonaviz2.twin import provenance as provenance_module
+    from molonari_twin.twin import provenance as provenance_module
 
     folder = make_twin(twins, point034)
     git_run(twins, "init", "-q")
@@ -469,13 +468,13 @@ def test_provenance_without_remote_or_git(twins, point034, monkeypatch):
 
 # Mode strict -------------------------------------------------------------------------------
 
-PUBLISHED = "molonaviz2 1.0.0 · jax 0.11.2"
+PUBLISHED = "molonari-twin 1.0.0 · jax 0.11.2"
 
 
 @pytest.mark.parametrize("version, code_version, code, twin, expected", [
     ("1.0.0", PUBLISHED, {}, {}, []),
     ("1.0.0-alpha.1", PUBLISHED, {}, {}, [("E_STRICT_PRERELEASE", {"version": "1.0.0-alpha.1"})]),
-    ("1.0.0", "molonaviz2 1.0.0+g0123456789ab · jax 0.11.2", {}, {}, [("E_STRICT_LOCAL_BUILD", {"version": "molonaviz2 1.0.0+g0123456789ab · jax 0.11.2"})]),
+    ("1.0.0", "molonari-twin 1.0.0+g0123456789ab · jax 0.11.2", {}, {}, [("E_STRICT_LOCAL_BUILD", {"version": "molonari-twin 1.0.0+g0123456789ab · jax 0.11.2"})]),
     ("1.0.0", PUBLISHED, {"clean": False}, {}, [("E_STRICT_DIRTY", {"target": "code"})]),
     ("1.0.0", PUBLISHED, {}, {"clean": False}, [("E_STRICT_DIRTY", {"target": "twin"})]),
     ("1.0.0", PUBLISHED, {}, {"tags": []}, [("E_STRICT_UNTAGGED", {})]),
@@ -483,7 +482,7 @@ PUBLISHED = "molonaviz2 1.0.0 · jax 0.11.2"
     ("1.0.0", PUBLISHED, {}, {"commit": None, "tags": []}, [("E_STRICT_NO_PROVENANCE", {"target": "twin"})]),
 ])
 def test_each_reason_of_strict_mode(version, code_version, code, twin, expected):
-    from molonaviz2.twin.provenance import strict_problems
+    from molonari_twin.twin.provenance import strict_problems
 
     published = {"commit": "0" * 40, "clean": True, "tags": ["v1"]}
     provenance = {"code": {**published, **code}, "twin": {**published, **twin}}
@@ -492,7 +491,7 @@ def test_each_reason_of_strict_mode(version, code_version, code, twin, expected)
 
 def test_strict_run_is_refused_with_every_reason(twins, point034):
     folder = make_twin(twins, point034)  # hors dépôt, avec le code de la branche de travail
-    completed = subprocess.run([sys.executable, "-m", "molonaviz2", "twin", "run", "--strict", str(folder)], capture_output=True, text=True,
+    completed = subprocess.run([sys.executable, "-m", "molonari_twin", "run", "--strict", str(folder)], capture_output=True, text=True,
                                timeout=300, check=False, env={**os.environ, "MOLONAVIZ_LANG": "en"})
     assert completed.returncode == 1
     assert "Strict mode: the twin was not run." in completed.stderr
@@ -501,9 +500,9 @@ def test_strict_run_is_refused_with_every_reason(twins, point034):
 
 
 def test_strict_run_accepts_a_published_code_and_a_clean_tagged_twin(tmp_path, twins, point034, monkeypatch):
-    import molonaviz2
-    from molonaviz2.engine import api
-    from molonaviz2.twin import provenance
+    import molonari_twin
+    from molonari_twin.engine import api
+    from molonari_twin.twin import provenance
 
     code = tmp_path / "code"
     code.mkdir()
@@ -511,10 +510,10 @@ def test_strict_run_accepts_a_published_code_and_a_clean_tagged_twin(tmp_path, t
     (code / "pyproject.toml").write_text("[project]\n")
     git_run(code, "add", ".")
     git_run(code, "commit", "-q", "-m", "code")
-    git_run(code, "tag", "molonaviz2-v1.0.0")
+    git_run(code, "tag", "molonari-twin-v1.0.0")
     monkeypatch.setattr(provenance, "code_path", lambda: code)
     monkeypatch.setattr(api, "engine_version", lambda: PUBLISHED)
-    monkeypatch.setattr(molonaviz2, "__version__", "1.0.0")
+    monkeypatch.setattr(molonari_twin, "__version__", "1.0.0")
     folder = make_twin(twins, point034)
     git_run(twins, "init", "-q")
     git_run(twins, "add", "twin_01")
@@ -540,11 +539,11 @@ def test_command_line(twins, point034):
     folder = make_twin(twins, point034)
 
     def cli(*args):
-        return subprocess.run([sys.executable, "-m", "molonaviz2", "twin", *args], capture_output=True, text=True, timeout=300, check=False)
+        return subprocess.run([sys.executable, "-m", "molonari_twin", *args], capture_output=True, text=True, timeout=300, check=False)
 
     assert cli("validate", str(folder)).returncode == 0
     identity = cli("id", str(folder))
-    assert identity.returncode == 0 and identity.stdout.split()[0] == load_twin(folder).twin_id(__import__("molonaviz2.engine.api", fromlist=["x"]).engine_version())
+    assert identity.returncode == 0 and identity.stdout.split()[0] == load_twin(folder).twin_id(__import__("molonari_twin.engine.api", fromlist=["x"]).engine_version())
     assert cli("run", str(folder)).returncode == 0
     assert cli("run", str(folder)).returncode == 0  # doublon : succès, sans recalcul
     assert [e.status for e in read_registry(twins)] == ["computed"]
@@ -552,175 +551,3 @@ def test_command_line(twins, point034):
     assert cli("run", str(folder)).returncode == 1  # config figée
     assert cli("validate", str(twins / "absent")).returncode == 1
     assert "twin_01" in cli("list", str(twins)).stdout
-
-
-# Interface ---------------------------------------------------------------------------------
-
-
-def test_welcome_page_lists_twins_and_window_runs_them(qtbot, tmp_path, twins, point034, monkeypatch):
-    from PySide6 import QtCore
-
-    from molonaviz2.settings import Settings
-    from molonaviz2.ui import errors as ui_errors
-    from molonaviz2.ui.main_window import MainWindow
-
-    shown = []
-    previous = ui_errors.set_presenter(lambda *args: shown.append(args))
-    folder = make_twin(twins, point034)
-    settings = Settings(QtCore.QSettings(str(tmp_path / "s.ini"), QtCore.QSettings.Format.IniFormat))
-    settings.twin_folder = twins
-    window = MainWindow(settings)
-    qtbot.addWidget(window)
-    assert window.welcome.twins.count() == 1
-    assert "not run yet" in window.welcome.twins.item(0).text()
-
-    twin_window = window.open_twin(folder)
-    assert twin_window.run_button.isEnabled() and not twin_window.tabs.isVisible()
-    twin_window.run()
-    qtbot.waitUntil(lambda: not window.tasks.busy, timeout=120_000)
-    qtbot.waitUntil(lambda: twin_window.results is not None, timeout=10_000)
-    assert twin_window.status.state == "computed"
-    assert not twin_window.run_button.isEnabled() and "Already computed" in twin_window.run_button.toolTip()
-    assert "Infiltration" in twin_window.flux_summary.text()
-    from molonaviz2.ui.units import measurement_level
-
-    sigma = twin_window.status.config.sigma_temperature
-    dashed = {round(abs(float(line.get_ydata()[0])), 9) for line in twin_window.residuals.figure.axes[0].lines if line.get_linestyle() == "--"}
-    assert dashed == {round(measurement_level.z * sigma, 9)}  # résidus : lignes à ± z·σT (90 % par défaut)
-    window.welcome.refresh_twins(twins)
-    assert "computed" in window.welcome.twins.item(0).text()
-
-    copy = twins / "twin_02"
-    shutil.copytree(folder, copy)
-    edit(copy, "name: twin_01", "name: twin_02")
-    duplicate_window = window.open_twin(copy)
-    assert "Duplicate of twin_01" in duplicate_window.state.text() and duplicate_window.results is not None
-    ui_errors.set_presenter(previous)
-    assert shown == []
-
-
-def test_twin_window_warns_about_results_of_format_1(qtbot, tmp_path, twins, point034):
-    from PySide6 import QtCore
-
-    from molonaviz2.settings import Settings
-    from molonaviz2.ui.main_window import MainWindow
-
-    folder = make_twin(twins, point034)
-    as_format_1(run_twin(folder).status.results_dir)
-    settings = Settings(QtCore.QSettings(str(tmp_path / "s.ini"), QtCore.QSettings.Format.IniFormat))
-    window = MainWindow(settings)
-    qtbot.addWidget(window)
-    twin_window = window.open_twin(folder)
-    assert twin_window.results is not None and not twin_window.result_warnings.isHidden()
-    assert "before format 2.0.0" in twin_window.result_warnings.text()
-    run_twin_window = window.open_twin(run_twin(make_twin(twins, point034.iloc[:200])).status.config.folder)
-    assert "before format 2.0.0" not in run_twin_window.result_warnings.text()
-
-
-def test_create_twin_from_a_computation_in_the_app(qtbot, tmp_path, twins, point034, monkeypatch):
-    from PySide6 import QtCore
-
-    from molonaviz2.domain.models import SamplingPoint, Study
-    from molonaviz2.settings import Settings
-    from molonaviz2.storage.project import Project
-    from molonaviz2.ui.main_window import MainWindow
-
-    project = Project.create(tmp_path / "p.molo")
-    project.add_lab(import_lab_directory(FIXTURES / "lab", name="Lab").lab)
-    project.add_study(Study("E", "Lab"))
-    raw_t = read_temperature_file(FIXTURES / "point034" / "point034_T_measures.csv").frame.iloc[:200]
-    raw_p = read_pressure_file(FIXTURES / "point034" / "point034_P_measures.csv").frame.iloc[:200]
-    project.add_point(SamplingPoint("Point034", "E", "P508", "S007", river_bed=0.505), raw_t, raw_p)
-    settings = Settings(QtCore.QSettings(str(tmp_path / "s.ini"), QtCore.QSettings.Format.IniFormat))
-    settings.twin_folder = twins
-    window = MainWindow(settings, project)
-    qtbot.addWidget(window)
-    window.open_point("E", "Point034")
-    view = window.point_tabs.currentWidget()
-    view.cleanup_tab.apply()
-    view.forward_tab.nb_cells.set_value(30)
-    view.forward_tab.run()
-    qtbot.waitUntil(lambda: not window.tasks.busy, timeout=120_000)
-    view.results_tab.refresh()
-    monkeypatch.setattr("molonaviz2.ui.main_window.ask", lambda *a, **k: False)
-    created = window.create_twin_from_computation(view.context, view.results_tab.info)
-    assert created == twins / "twin_01"
-    config = load_twin(created)
-    assert config.point == "Point034" and config.nb_cells == 30 and config.depths == (0.1, 0.2, 0.3, 0.4)
-    data = pd.read_csv(created / "measurements.csv")
-    assert len(data) == len(project.cleaned("E", "Point034"))
-    # Même calcul dans l'application et dans le twin.
-    run = run_twin(created)
-    app_result = view.results_tab.forward
-    twin_temperature = load_results(run.status.results_dir).temperature
-    assert np.max(np.abs(twin_temperature - app_result.temperature)) < 1e-4  # mesures relues depuis le CSV (6 chiffres)
-
-
-def open_twin_window(qtbot, tmp_path, folder):
-    from PySide6 import QtCore
-
-    from molonaviz2.settings import Settings
-    from molonaviz2.ui.main_window import MainWindow
-
-    settings = Settings(QtCore.QSettings(str(tmp_path / "s.ini"), QtCore.QSettings.Format.IniFormat))
-    window = MainWindow(settings)
-    qtbot.addWidget(window)
-    return window.open_twin(folder)
-
-
-def predictive_in(twin_window):
-    return [[c for c in ax.collections if c.get_gid() == "predictive"] for ax in twin_window.sensors.figure.axes]
-
-
-def test_twin_window_draws_the_predictive_band_of_questions(qtbot, tmp_path, twins, point034):
-    from molonaviz2.questions import (
-        coverage,
-        observed_at,
-        predictive_band,
-        sensor_samples,
-    )
-    from molonaviz2.ui.predictive import PREDICTIVE_SEED
-    from molonaviz2.ui.units import measurement_level
-
-    folder = make_twin(twins, point034.iloc[:150], small_inversion_config(store_fields="sensors", time_step=2), sigma_t=0.2)
-    results = load_results(run_twin(folder).status.results_dir)
-    twin_window = open_twin_window(qtbot, tmp_path, folder)
-    assert twin_window.tabs.tabText(twin_window.sensors_index) == "Sensors t₁–t₃" and twin_window.predictive_note.isHidden()
-
-    samples = sensor_samples(results).data
-    band = predictive_band(samples["temperature"].value, 0.2, measurement_level.level, seed=PREDICTIVE_SEED).data["temperature"]
-    n = len(samples["time"].value)
-    for i, (found,) in enumerate(predictive_in(twin_window)):
-        vertices = found.get_paths()[0].vertices[:, 1]
-        np.testing.assert_array_equal(vertices[1:n + 1], band.interval[0][i])
-        np.testing.assert_array_equal(vertices[n + 2:2 * n + 2][::-1], band.interval[1][i])
-    observed = np.stack([results.residuals[f"t{i + 1}_measured"].to_numpy(float) for i in range(3)], axis=1)
-    dates = pd.to_datetime(results.residuals["date"]).to_numpy()
-    expected = coverage(observed_at(dates, observed, samples["time"].value).data["temperature"].value, band).data
-    assert expected["points"].value == 3 * n  # dates des champs = une date sur 2 des mesures
-    label = f"Predictive 90 % — {expected['coverage'].value * 100:.0f} % of measurements (n = {expected['points'].value})"
-    assert label in [text.get_text() for text in twin_window.sensors.figure.axes[0].get_legend().get_texts()]
-
-
-@pytest.mark.parametrize("kind, mention", [
-    ("format_1", "Results written before format 2.0.0"),
-    ("mcmc_without_fields", "No temperature fields were stored"),
-    ("direct", None),
-])
-def test_twin_window_explains_a_missing_predictive_band(qtbot, tmp_path, twins, point034, kind, mention):
-    if kind == "mcmc_without_fields":
-        folder = make_twin(twins, point034.iloc[:150], small_inversion_config(store_fields="none"), sigma_t=0.2)
-        run_twin(folder)
-    else:
-        folder = make_twin(twins, point034)
-        results_dir = run_twin(folder).status.results_dir
-        if kind == "format_1":
-            as_format_1(results_dir)
-    twin_window = open_twin_window(qtbot, tmp_path, folder)
-    assert twin_window.results is not None and twin_window.predictive is None
-    assert all(found == [] for found in predictive_in(twin_window))
-    assert len(twin_window.sensors.figure.axes) == 3  # mesures et simulation restent dessinées
-    if mention is None:
-        assert twin_window.predictive_note.isHidden()
-    else:
-        assert not twin_window.predictive_note.isHidden() and mention in twin_window.predictive_note.text()

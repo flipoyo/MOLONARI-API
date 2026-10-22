@@ -6,11 +6,10 @@ import numpy as np
 import pandas as pd
 import pytest
 from conftest import FIXTURES
-
-from molonaviz2.domain.models import PressureSensor
-from molonaviz2.errors import UserError
-from molonaviz2.io.point_import import read_pressure_file, read_temperature_file
-from molonaviz2.processing.cleanup import (
+from molonari_twin.domain.models import PressureSensor
+from molonari_twin.errors import UserError
+from molonari_twin.io.point_import import read_pressure_file, read_temperature_file
+from molonari_twin.processing.cleanup import (
     CleanupSettings,
     clean,
     read_cleaned_csv,

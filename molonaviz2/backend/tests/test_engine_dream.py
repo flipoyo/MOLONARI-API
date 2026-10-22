@@ -7,16 +7,15 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 from conftest import synthetic_inputs
-
-from molonaviz2.domain.compute import InversionConfig, LayerSpec
-from molonaviz2.engine.api import run_forward, run_inversion
-from molonaviz2.engine.jax.dream import (
+from molonari_twin.domain.compute import InversionConfig, LayerSpec
+from molonari_twin.engine.api import run_forward, run_inversion
+from molonari_twin.engine.jax.dream import (
     Cancelled,
     DreamSampler,
     sampling_layout,
     split_rhat,
 )
-from molonaviz2.errors import UserError
+from molonari_twin.errors import UserError
 
 
 def small_config(**overrides):
@@ -167,7 +166,7 @@ def test_stored_bytes_by_kind_of_stored_fields():
 
 def test_sampling_layout_is_what_the_sampler_stores(monkeypatch):
     """Le nombre de champs (T, q) réellement conservés est celui qu'affiche l'interface."""
-    from molonaviz2.engine.jax import dream
+    from molonari_twin.engine.jax import dream
 
     inputs = synthetic_inputs(nb_times=60)
     config = small_config(n_field_samples=15, time_step=2)
@@ -204,7 +203,7 @@ def test_iterations_not_multiple_of_thin():
 
 @pytest.mark.slow
 def test_each_stored_field_is_the_direct_model_of_its_chain_and_iteration():
-    from molonaviz2.engine.jax.dream import to_physical
+    from molonari_twin.engine.jax.dream import to_physical
 
     config = small_config(thin=2, n_field_samples=14, time_step=3)
     sampler = DreamSampler(synthetic_inputs(nb_times=60), config)
@@ -222,7 +221,7 @@ def test_each_stored_field_is_the_direct_model_of_its_chain_and_iteration():
 
 @pytest.mark.slow
 def test_resets_are_counted_per_chain(monkeypatch):
-    from molonaviz2.engine.jax import dream
+    from molonari_twin.engine.jax import dream
 
     inputs = synthetic_inputs(nb_times=60)
     result = run_inversion(inputs, small_config())  # burn-in de 20 itérations : aucun contrôle des chaînes aberrantes
@@ -297,8 +296,8 @@ def test_recovers_known_parameters_on_synthetic_column():
     - le meilleur ajustement retrouve le niveau de bruit ;
     - la perméabilité, bien contrainte par les données, est retrouvée.
     """
-    from molonaviz2.domain.compute import ForwardConfig
-    from molonaviz2.engine.jax.dream import single_energy
+    from molonari_twin.domain.compute import ForwardConfig
+    from molonari_twin.engine.jax.dream import single_energy
 
     nb_times = 400
     true = LayerSpec("a", 0.4, 11.3, 0.15, 2.0, 3.5e6)
@@ -325,8 +324,8 @@ def test_recovers_known_parameters_on_synthetic_column():
 
 def test_single_energy_matches_the_direct_model():
     """L'énergie d'un jeu de paramètres (espace des priors) est celle du modèle direct avec les mêmes paramètres."""
-    from molonaviz2.engine.jax.dream import single_energy
-    from molonaviz2.engine.jax.forward import build_geometry, energy, make_forward
+    from molonari_twin.engine.jax.dream import single_energy
+    from molonari_twin.engine.jax.forward import build_geometry, energy, make_forward
 
     inputs = synthetic_inputs(nb_times=120)
     config = InversionConfig([LayerSpec("a", 0.4)], nb_cells=30, sigma_t=0.1)

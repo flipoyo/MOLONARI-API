@@ -3,10 +3,9 @@
 import numpy as np
 import pytest
 from conftest import synthetic_inputs
-
-from molonaviz2.domain.compute import ForwardConfig, LayerSpec
-from molonaviz2.engine import api, reference
-from molonaviz2.errors import UserError
+from molonari_twin.domain.compute import ForwardConfig, LayerSpec
+from molonari_twin.engine import api, reference
+from molonari_twin.errors import UserError
 
 FIELDS = ["temperature", "water_flux", "advective_flux", "conductive_flux", "rmse"]
 
@@ -58,7 +57,7 @@ def test_close_to_stock_pyheatmy(inputs):
 
 
 def test_energy_matches_pyheatmy(inputs):
-    from molonaviz2.engine.jax.forward import build_geometry, energy, make_forward
+    from molonari_twin.engine.jax.forward import build_geometry, energy, make_forward
 
     layers = CASES["one_layer"]
     geom = build_geometry(inputs, [0.4], 100)
@@ -90,11 +89,10 @@ def test_invalid_layers_are_rejected_before_computing(inputs):
 def test_real_point034_from_files_to_model(pyheatmy_float64):
     """Chaîne complète sur des mesures réelles : import HOBO, nettoyage, modèle direct JAX = pyheatmy."""
     from conftest import FIXTURES
-
-    from molonaviz2.engine.column import ColumnInputs
-    from molonaviz2.io.lab_import import import_lab_directory
-    from molonaviz2.io.point_import import read_pressure_file, read_temperature_file
-    from molonaviz2.processing.cleanup import CleanupSettings, clean
+    from molonari_twin.engine.column import ColumnInputs
+    from molonari_twin.io.lab_import import import_lab_directory
+    from molonari_twin.io.point_import import read_pressure_file, read_temperature_file
+    from molonari_twin.processing.cleanup import CleanupSettings, clean
 
     lab = import_lab_directory(FIXTURES / "lab").lab
     sensor = next(p for p in lab.pressure_sensors if p.name == "P508")
@@ -112,8 +110,8 @@ def test_real_point034_from_files_to_model(pyheatmy_float64):
 
 def test_conductive_flux_down_of_a_linear_gradient():
     """T croît vers le bas (dT/dz = 5 K/m), q = 0 : la chaleur remonte, le flux vers le bas vaut −λm·dT/dz."""
-    from molonaviz2.engine.jax.forward import conductive_flux
-    from molonaviz2.engine.results import ForwardResult
+    from molonari_twin.engine.jax.forward import conductive_flux
+    from molonari_twin.engine.results import ForwardResult
 
     dz, cells, times = 0.01, 10, 3
     z = (np.arange(cells) + 0.5) * dz
@@ -129,8 +127,7 @@ def test_conductive_flux_down_of_a_linear_gradient():
 def test_advective_flux_is_relative_to_the_reference_temperature():
     """q constant et T uniforme : flux advectif = ρw·cw·q·(T − T_ref), T_ref = 0 °C."""
     import jax.numpy as jnp
-
-    from molonaviz2.engine.jax.forward import (
+    from molonari_twin.engine.jax.forward import (
         C_W,
         HEAT_REFERENCE_C,
         RHO_W,

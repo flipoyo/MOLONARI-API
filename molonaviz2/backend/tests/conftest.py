@@ -6,8 +6,8 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-REPO_ROOT = Path(__file__).resolve().parents[2]  # racine du dépôt MOLONARI-API (contient l'ancien Molonaviz)
-WORKSPACE_ROOT = Path(__file__).resolve().parents[3]  # espace cgs MOLONARI1D
+REPO_ROOT = Path(__file__).resolve().parents[3]  # racine du dépôt MOLONARI-API (contient l'ancien Molonaviz)
+WORKSPACE_ROOT = Path(__file__).resolve().parents[4]  # espace cgs MOLONARI1D
 DATA_DIR = WORKSPACE_ROOT / "data"
 LAB_DIR = DATA_DIR / "Laboratory"
 POINT034_DIR = DATA_DIR / "SamplingPoints" / "Point034"
@@ -16,7 +16,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 def synthetic_inputs(nb_times=300, depths=(0.1, 0.2, 0.3, 0.4), offset=0.0, step_minutes=15, sigma_t=0.1):
     """Colonne synthétique simple : rivière sinusoïdale journalière, aquifère constant."""
-    from molonaviz2.engine.column import ColumnInputs
+    from molonari_twin.engine.column import ColumnInputs
 
     i = np.arange(nb_times)
     times = (np.datetime64("2016-06-27T12:00") + i * np.timedelta64(step_minutes, "m")).astype("datetime64[s]")

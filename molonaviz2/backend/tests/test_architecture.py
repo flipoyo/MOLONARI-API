@@ -1,7 +1,7 @@
-"""Architecture : le cœur (futur backend) s'importe et s'exécute sans Qt ni interface, et ne produit
-aucune phrase traduite ; l'interface n'appelle le cœur que par la façade (molonaviz2.facade).
+"""Architecture du backend : molonari_twin s'importe et s'exécute sans Qt, sans bibliothèque graphique et
+sans le frontend, ne produit aucune phrase traduite, et n'offre au frontend qu'une porte, sa façade.
 
-Ce fichier ne dépend pas de PySide6 : la CI le lance seul (job core-without-qt).
+Ce fichier ne dépend pas de PySide6 : le job backend de la CI le lance sans Qt installé.
 """
 
 import ast
@@ -11,38 +11,21 @@ import sys
 import textwrap
 from pathlib import Path
 
-SOURCE = Path(__file__).resolve().parents[1] / "src" / "molonaviz2"
-EXAMPLES = Path(__file__).resolve().parents[1] / "examples" / "twins"
+SOURCE = Path(__file__).resolve().parents[1] / "src" / "molonari_twin"
+EXAMPLES = Path(__file__).resolve().parents[2] / "examples" / "twins"
 
-# Modules et paquets de premier niveau de molonaviz2 ("__init__" : le paquet lui-même).
-CORE = {"__init__", "errors", "gitinfo", "i18n", "domain", "io", "processing", "engine", "twin", "storage", "questions", "facade"}
-INTERFACE = {"__main__", "app", "settings", "notice", "logs", "ui", "workers"}
-# Sous-modules du cœur qui relèvent de l'interface.
-INTERFACE_SUBMODULES = {"i18n/qt.py"}
+# Modules et paquets de premier niveau de molonari_twin ("__init__" : le paquet lui-même).
+MODULES = {"__init__", "__main__", "errors", "gitinfo", "i18n", "domain", "io", "processing", "engine", "twin", "storage", "questions", "facade"}
 
-# Imports interdits au cœur (préfixes de noms de modules).
-FORBIDDEN = ["PySide6", *(f"molonaviz2.{name}" for name in sorted(INTERFACE - {"__main__"})), "molonaviz2.i18n.qt"]
+# Imports interdits au backend (préfixes de noms de modules) : Qt, bibliothèques graphiques, frontend.
+FORBIDDEN = ["PySide6", "pyqtgraph", "matplotlib", "molonaviz2"]
 
-# Délégations à l'interface, importées seulement à l'appel par des fonctions que seule l'interface
-# appelle : (fichier, module importé).
-INTERFACE_DELEGATES = {("i18n/__init__.py", "molonaviz2.i18n.qt")}  # t() et install_language()
-
-# Bords du cœur autorisés à traduire avec translate() : fichier → raison.
+# Bords du backend autorisés à traduire avec translate() : fichier → raison.
 TRANSLATING_EDGES = {"twin/cli.py": "ligne de commande des twins (choix du propriétaire, A1)"}
 
-# Seuls modules du cœur que l'interface importe : la racine (version), la traduction et la façade.
-FACADE = {"molonaviz2", "molonaviz2.i18n", "molonaviz2.facade"}
 
-
-def top_level(path: Path) -> str:
-    return path.relative_to(SOURCE).parts[0].removesuffix(".py")
-
-
-def core_files() -> list[Path]:
-    return [
-        path for path in sorted(SOURCE.rglob("*.py"))
-        if top_level(path) in CORE and path.relative_to(SOURCE).as_posix() not in INTERFACE_SUBMODULES
-    ]
+def files() -> list[Path]:
+    return sorted(SOURCE.rglob("*.py"))
 
 
 def module_name(path: Path) -> str:
@@ -79,9 +62,8 @@ def imported_modules(path: Path):
 
 def test_every_module_is_classified():
     names = {path.name.removesuffix(".py") for path in SOURCE.iterdir() if path.suffix == ".py" or (path / "__init__.py").is_file()}
-    assert CORE.isdisjoint(INTERFACE)
-    unclassified = sorted(names - CORE - INTERFACE)
-    assert not unclassified, f"module(s) à classer dans CORE ou INTERFACE : {unclassified}"
+    unclassified = sorted(names - MODULES)
+    assert not unclassified, f"module(s) à classer dans MODULES : {unclassified}"
 
 
 # 2. Import et exécution sans Qt ------------------------------------------------------------------
@@ -92,60 +74,54 @@ HOOKED = textwrap.dedent(
 
     FORBIDDEN = {forbidden!r}
 
-    class Forbid:
-        def find_spec(self, name, path=None, target=None):
-            if any(name == f or name.startswith(f + ".") for f in FORBIDDEN):
-                raise ImportError(f"import interdit au cœur : {{name}}")
+    # Paquets interdits rendus absents, comme s'ils n'étaient pas installés : leur import échoue, et
+    # importlib.util.find_spec (par lequel ArviZ sonde matplotlib) répond None.
+    for name in FORBIDDEN:
+        sys.modules[name] = None
 
-    sys.meta_path.insert(0, Forbid())
+    import molonari_twin
+    for info in pkgutil.walk_packages(molonari_twin.__path__, "molonari_twin."):
+        importlib.import_module(info.name)
 
-    import molonaviz2
-    for info in pkgutil.walk_packages(molonaviz2.__path__, "molonaviz2."):
-        top = info.name.split(".")[1]
-        if top in {core!r} and info.name != "molonaviz2.i18n.qt":
-            importlib.import_module(info.name)
-
-    from molonaviz2.twin.cli import main
+    from molonari_twin.twin.cli import main
     for command in ("validate", "id", "run"):
         code = main([command, {twin!r}])
         assert code == 0, (command, code)
 
-    # Le point d'entrée (python -m molonaviz2 twin …) aiguille vers la CLI sans charger Qt.
-    sys.argv = ["molonaviz2", "twin", "validate", {twin!r}]
+    # Le point d'entrée (python -m molonari_twin …) lance la ligne de commande.
+    sys.argv = ["molonari-twin", "validate", {twin!r}]
     try:
-        runpy.run_module("molonaviz2", run_name="__main__", alter_sys=True)
+        runpy.run_module("molonari_twin", run_name="__main__", alter_sys=True)
     except SystemExit as exit:
         assert exit.code == 0, exit.code
-    print("OK", sorted(m for m in sys.modules if m.startswith("PySide6")))
+    print("OK", sorted(m for m, module in sys.modules.items() if m.split(".")[0] in FORBIDDEN and module is not None))
     """
 )
 
 
-def test_core_imports_and_runs_without_qt(tmp_path):
+def test_backend_imports_and_runs_without_qt(tmp_path):
     twin = shutil.copytree(EXAMPLES / "twin_01", tmp_path / "twin_01")
-    code = HOOKED.format(forbidden=FORBIDDEN, core=sorted(CORE), twin=str(twin))
+    code = HOOKED.format(forbidden=FORBIDDEN, twin=str(twin))
     completed = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=600, check=False)
     assert completed.returncode == 0, completed.stderr[-4000:]
     assert completed.stdout.strip().endswith("OK []"), completed.stdout
 
 
-def test_core_does_not_import_the_interface():
+def test_backend_does_not_import_qt_graphics_or_the_frontend():
     problems = []
-    for path in core_files():
+    for path in files():
         for line, module in imported_modules(path):
-            if (path.relative_to(SOURCE).as_posix(), module) in INTERFACE_DELEGATES:
-                continue
             if any(module == f or module.startswith(f + ".") for f in FORBIDDEN):
                 problems.append(f"{path.relative_to(SOURCE)}:{line} importe {module}")
     assert not problems, "\n".join(problems)
 
 
-# 3. Aucune phrase traduite dans le cœur ----------------------------------------------------------
+# 3. Aucune phrase traduite dans le backend --------------------------------------------------------
 
 
-def test_core_does_not_translate():
+def test_backend_does_not_translate():
     problems = []
-    for path in core_files():
+    for path in files():
         relative = path.relative_to(SOURCE).as_posix()
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
@@ -154,16 +130,14 @@ def test_core_does_not_translate():
                 name = func.id if isinstance(func, ast.Name) else func.attr if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name) and func.value.id == "i18n" else None
                 if name == "t" or (name == "translate" and relative not in TRANSLATING_EDGES):
                     problems.append(f"{relative}:{node.lineno} appelle {name}(...)")
-            if isinstance(node, ast.ImportFrom) and node.module and node.module.split(".")[-1] == "i18n":
-                for alias in node.names:
-                    if alias.name in ("t", "install_language"):
-                        problems.append(f"{relative}:{node.lineno} importe {alias.name}")
+            if isinstance(node, ast.FunctionDef) and node.name in ("t", "install_language"):
+                problems.append(f"{relative}:{node.lineno} définit {node.name}() (traduction Qt : frontend)")
     assert not problems, "\n".join(problems)
 
 
 def test_n_marker_comes_from_pure_i18n():
     problems = []
-    for path in core_files():
+    for path in files():
         relative = path.relative_to(SOURCE).as_posix()
         tree = ast.parse(path.read_text(encoding="utf-8"))
         uses = any(isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "N_" for n in ast.walk(tree))
@@ -173,44 +147,32 @@ def test_n_marker_comes_from_pure_i18n():
             continue
         if defines:
             problems.append(f"{relative} redéfinit N_")
-        imported = {module for _, module in imported_modules(path) if module == "molonaviz2.i18n"}
+        imported = {module for _, module in imported_modules(path) if module == "molonari_twin.i18n"}
         if uses and not any(isinstance(n, ast.ImportFrom) and any(a.name == "N_" for a in n.names) for n in ast.walk(tree)):
             problems.append(f"{relative} utilise N_ sans l'importer")
         elif uses and not imported:
-            problems.append(f"{relative} importe N_ d'ailleurs que molonaviz2.i18n")
+            problems.append(f"{relative} importe N_ d'ailleurs que molonari_twin.i18n")
     assert not problems, "\n".join(problems)
 
 
 # 4. Façade -----------------------------------------------------------------------------------------
 
 
-def test_interface_uses_only_the_facade():
-    found = set()
-    for path in sorted(SOURCE.rglob("*.py")):
-        if top_level(path) not in INTERFACE:
-            continue
-        for _, module in imported_modules(path):
-            parts = module.split(".")
-            if parts[0] == "molonaviz2" and (len(parts) == 1 or parts[1] in CORE) and module not in FACADE:
-                found.add((module_name(path), module))
-    assert not found, f"import du cœur hors façade (passer par molonaviz2.facade) : {sorted(found)}"
-
-
-def test_core_does_not_import_the_facade():
+def test_backend_does_not_import_the_facade():
     problems = []
-    for path in core_files():
+    for path in files():
         relative = path.relative_to(SOURCE).as_posix()
         if relative == "facade.py":
             continue
         for line, module in imported_modules(path):
-            if module == "molonaviz2.facade" or module.startswith("molonaviz2.facade."):
+            if module == "molonari_twin.facade" or module.startswith("molonari_twin.facade."):
                 problems.append(f"{relative}:{line} importe la façade")
     assert not problems, "\n".join(problems)
 
 
 def test_facade_import_is_light():
     code = (
-        "import sys, molonaviz2.facade\n"
+        "import sys, molonari_twin.facade\n"
         "print(sorted({n.split('.')[0] for n in sys.modules if n.split('.')[0] in ('PySide6', 'jax', 'arviz')}))"
     )
     completed = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=300, check=False)
@@ -221,14 +183,14 @@ def test_facade_import_is_light():
 def test_facade_exports_exist_and_are_the_original_objects():
     import importlib
 
-    from molonaviz2 import facade
-    from molonaviz2.engine.jax import dream
+    from molonari_twin import facade
+    from molonari_twin.engine.jax import dream
 
     assert not [name for name in facade.__all__ if not hasattr(facade, name)]
     for name in facade.__all__:
         value = getattr(facade, name)
         origin = getattr(value, "__module__", None)
-        reexported = origin and origin.startswith("molonaviz2.") and origin != "molonaviz2.facade"
+        reexported = origin and origin.startswith("molonari_twin.") and origin != "molonari_twin.facade"
         if (isinstance(value, type) or callable(value)) and reexported:
             assert getattr(importlib.import_module(origin), value.__name__) is value, name
     assert facade.Cancelled is dream.Cancelled
