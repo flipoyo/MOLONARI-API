@@ -1,8 +1,8 @@
-"""Façade du cœur : seul module du cœur que l'interface importe (avec la racine du paquet et `i18n`).
+"""Façade du backend : seul module de molonari_twin que le frontend (molonaviz2) importe.
 
 Les objets sont réexportés tels quels : ce sont les mêmes classes et les mêmes fonctions que dans leur
-module d'origine. L'interface appelle les calculs comme attributs du module
-(`from molonaviz2 import facade as api`, puis `api.run_forward(...)`), ce qui permet aux tests de les
+module d'origine. Le frontend appelle les calculs comme attributs du module
+(`from molonari_twin import facade as api`, puis `api.run_forward(...)`), ce qui permet aux tests de les
 remplacer. Importer la façade ne charge ni Qt, ni JAX, ni ArviZ : les diagnostics et la ligne de
 commande sont importés à l'appel. Aucun autre module du cœur n'importe la façade.
 """
@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from dataclasses import MISSING, fields
 from pathlib import Path
+
+from . import __version__ as backend_version
 
 # Modèles et configurations des calculs.
 from .domain.compute import (
@@ -52,6 +54,9 @@ from .engine.results import ForwardResult, InversionResult
 
 # Erreurs.
 from .errors import Cancelled, Issue, UserError
+
+# Traduction, partie pure (catalogue, rendu des erreurs) ; la partie Qt est dans le frontend.
+from .i18n import DEFAULT_LANGUAGE, LANGUAGES, N_, load_catalog, render, translate
 
 # Imports de fichiers.
 from .io.lab_import import LabImport, import_lab_directory, read_text
@@ -124,17 +129,20 @@ def twin_defaults() -> dict[str, object]:
 
 
 def twin_cli(argv: list[str]) -> int:
-    """Ligne de commande des twins (`molonaviz2 twin …`), sans Qt."""
+    """Ligne de commande des twins (`molonari-twin …`, alias `molonaviz2 twin …`), sans Qt."""
     from .twin.cli import main
 
     return main(argv)
 
 
 __all__ = [
+    "DEFAULT_LANGUAGE",
     "DEFAULT_PRIORS",
     "INVERTED_PARAMETERS",
     "IQR_FACTOR",
+    "LANGUAGES",
     "MEASUREMENT_LEVELS",
+    "N_",
     "PARAMETER_LABELS",
     "PARAMETER_UNITS",
     "PHYSICAL_BOUNDS",
@@ -172,6 +180,7 @@ __all__ = [
     "TwinConfigError",
     "TwinStatus",
     "UserError",
+    "backend_version",
     "chain_data",
     "clean",
     "config_path",
@@ -186,6 +195,7 @@ __all__ = [
     "import_lab_directory",
     "import_legacy_database",
     "list_twins",
+    "load_catalog",
     "load_results",
     "measurement_interval",
     "observed_at",
@@ -196,6 +206,7 @@ __all__ = [
     "read_temperature_file",
     "read_text",
     "release_version",
+    "render",
     "run_forward",
     "run_inversion",
     "run_twin",
@@ -204,6 +215,7 @@ __all__ = [
     "sensor_samples",
     "setting_limits",
     "summary_table",
+    "translate",
     "twin_cli",
     "twin_defaults",
     "twin_status",

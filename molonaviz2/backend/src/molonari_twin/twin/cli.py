@@ -1,9 +1,11 @@
 """Ligne de commande des twins.
 
-    molonaviz2 twin validate <twin_xx>     étape 2 : valide la config
-    molonaviz2 twin id <twin_xx>           étape 3 : affiche le twin_id et l'état dans le registre
-    molonaviz2 twin run <twin_xx>          étapes 4-6 : exécute (ou signale un doublon) et range les résultats
-    molonaviz2 twin list <dossier twins>   liste les twins et leur état
+    molonari-twin validate <twin_xx>     étape 2 : valide la config
+    molonari-twin id <twin_xx>           étape 3 : affiche le twin_id et l'état dans le registre
+    molonari-twin run <twin_xx>          étapes 4-6 : exécute (ou signale un doublon) et range les résultats
+    molonari-twin list <dossier twins>   liste les twins et leur état
+
+(aussi `python -m molonari_twin …`, et `molonaviz2 twin …` depuis l'application)
 
 Codes de sortie : 0 succès, 1 config invalide ou erreur, 2 usage incorrect.
 
@@ -43,7 +45,7 @@ def state_label(status) -> str:
 
 
 def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="molonaviz2 twin", description=tr("Digital twins of sampling points"))
+    parser = argparse.ArgumentParser(prog="molonari-twin", description=tr("Digital twins of sampling points"))
     sub = parser.add_subparsers(dest="command", required=True)
     for command in ("validate", "id", "run"):
         sub.add_parser(command).add_argument("twin", help="twin_xx folder or twin.yaml")

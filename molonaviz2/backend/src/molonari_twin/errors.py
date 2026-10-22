@@ -16,7 +16,7 @@ CODE_PATTERN = re.compile(r"^[EW]_[A-Z0-9_]+$")
 # Code → modèle anglais. Le modèle est aussi la clé de sa traduction dans i18n/fr.json.
 MESSAGES: dict[str, str] = {
     # Repli de l'API Python : `UserError(texte)` sans code (texte affiché tel quel). Interdit dans le code
-    # de molonaviz2 (tests/test_messages.py), admis pour les appelants externes et les tests.
+    # de molonari_twin et de molonaviz2 (tests/test_messages.py), admis pour les appelants externes et les tests.
     "E_TEXT": "{text}",
     # Erreurs qui regroupent des problèmes (paramètre issues)
     "E_SETTINGS_INVALID": "{issues}",

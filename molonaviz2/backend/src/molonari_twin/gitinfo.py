@@ -1,4 +1,4 @@
-"""État git d'un chemin : seule partie de molonaviz2 qui appelle git.
+"""État git d'un chemin : seule partie de molonari_twin qui appelle git.
 
 Sert à la provenance des twins (twin/provenance.py) et au suffixe local de la version du code
 (engine/api.py::engine_version). Sans git, hors dépôt ou en cas d'échec, les fonctions renvoient

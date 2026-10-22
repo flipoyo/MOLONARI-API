@@ -1,6 +1,6 @@
 """Provenance d'un twin, écrite dans metadata.json["provenance"], et motifs du mode strict.
 
-- code : dépôt du code (qui contient molonaviz2/) ; twin : dépôt du dossier du twin. Pour chacun :
+- code : dépôt du code (qui contient molonaviz2/backend/) ; twin : dépôt du dossier du twin. Pour chacun :
   remote sans identifiants, commit, tags exacts, branche ou HEAD détaché, état propre limité au chemin.
 - environment : Python, plateforme, processeur, appareil, versions de jax, jaxlib et numpy.
   pyheatmy n'est pas enregistré : le moteur est un portage JAX qui ne l'importe pas.
@@ -24,7 +24,7 @@ EMPTY_REPOSITORY = {"path": None, "remote": None, "commit": None, "tags": [], "b
 
 
 def code_path() -> Path:
-    """Dossier du code : le projet molonaviz2/ en installation éditable, sinon le paquet installé."""
+    """Dossier du code : le projet backend/ en installation éditable, sinon le paquet installé."""
     package = Path(__file__).resolve().parents[1]
     project = package.parents[1]
     return project if (project / "pyproject.toml").is_file() else package

@@ -1,12 +1,9 @@
 """Traduction : partie pure, importable sans Qt.
 
 Les chaînes sont écrites en anglais et traduites à partir d'un catalogue JSON par langue
-(`fr.json`, {texte anglais: traduction}). Ce module ne dépend pas de Qt : le cœur peut l'importer
-(`N_`, `LANGUAGES`), et la ligne de commande traduit avec `translate`.
-
-Pour l'interface, `t()` et `install_language()` passent par le mécanisme standard de Qt
-(QTranslator, dans `i18n/qt.py`), si bien que les boîtes de dialogue de Qt et nos propres textes
-suivent le même chemin. Ils importent Qt au moment de l'appel seulement.
+(`fr.json`, {texte anglais: traduction}). Ce module ne dépend pas de Qt : le backend l'importe
+(`N_`, `LANGUAGES`), et la ligne de commande traduit avec `translate`. Le frontend lit le même
+catalogue par la façade et l'installe dans Qt (molonaviz2.i18n : `t()`, `install_language()`).
 """
 
 from __future__ import annotations
@@ -17,7 +14,6 @@ from importlib import resources
 
 from ..errors import Issue, UserError, message_template
 
-CONTEXT = "molonaviz2"
 LANGUAGES = {"fr": "Français", "en": "English"}
 DEFAULT_LANGUAGE = "fr"
 
@@ -70,16 +66,3 @@ def _render_param(key: str, value, tr):
         return render(value, tr)
     return value
 
-
-def t(text: str) -> str:
-    """Interface : traduit `text` dans la langue installée dans l'application Qt."""
-    from .qt import t as qt_t
-
-    return qt_t(text)
-
-
-def install_language(app, language: str) -> None:
-    """Interface : installe (ou remplace) la traduction active de l'application Qt."""
-    from .qt import install_language as qt_install_language
-
-    qt_install_language(app, language)
