@@ -12,6 +12,17 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions : [S
 - Tags : `molonaviz2-vX.Y.Z`, posés sur `CGS-MOLO` après la fusion. La CI (`molonaviz2-version`) vérifie que le tag correspond à `pyproject.toml`.
 - La version entre dans `engine_version()`, donc dans chaque `twin_id`. Une nouvelle version donne de nouveaux identifiants, et un twin déjà calculé passe à l'état « modifié » : il faut créer un nouveau twin pour utiliser le nouveau code.
 
+## [0.6.0-alpha.2] - 2026-10-22
+
+Deux dossiers, deux paquets : le backend `molonari-twin` et l'application `molonaviz2` (#37, lot B2). Rien ne change à l'écran ni dans les calculs.
+
+### Modifié
+- `molonaviz2/` devient un espace uv à deux membres, avec un seul `uv.lock`. `backend/` contient le paquet `molonari_twin`, avec son propre CHANGELOG ; `frontend/` contient l'application `molonaviz2` (#37).
+- L'application n'appelle le backend que par `molonari_twin.facade`. Elle ne dépend plus directement de JAX, scipy ni ArviZ (#37).
+- La version du code d'un twin (`code_version`, et donc le `twin_id`) est celle du backend : `molonari-twin X.Y.Z · jax …`. Une nouvelle version de la seule application ne change plus les identifiants (#37).
+- `molonaviz2 twin …` reste disponible, comme alias de `molonari-twin …` (#37).
+- Les tests sont répartis en deux suites (`backend/tests`, `frontend/tests`), chacune avec son test d'architecture ; la CI a un job backend sans Qt et un job frontend (#37).
+
 ## [0.6.0-alpha.1] - 2026-10-22
 
 Façade publique du cœur : premier lot de la séparation du backend et du frontend (#37, lot B1). Rien ne change pour l'utilisateur : écrans, textes, calculs et résultats écrits restent les mêmes.
