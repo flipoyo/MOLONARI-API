@@ -1,11 +1,11 @@
 [project]
 name = "molonaviz2"
-version = "0.6.0-alpha.2"
+version = "0.6.0"
 description = "Application de bureau pour l'inversion bayésienne des mesures MOLONARI (zone hyporhéique)."
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
 dependencies = [
-    "molonari-twin>=0.6.0a1,<0.7",
+    "molonari-twin>=0.6.0,<0.7",
     "pyside6>=6.7",
     "numpy>=1.26",
     "pandas>=2.2",

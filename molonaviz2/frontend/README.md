@@ -15,6 +15,10 @@ uv run molonaviz2 --selftest       # petit calcul sans fenêtre
 uv run molonaviz2 twin …           # alias de molonari-twin …, sans Qt
 ```
 
+## Traduction
+
+Les textes de l'application sont dans `src/molonaviz2/i18n/fr.json` ; les messages d'erreur du backend restent dans le catalogue du backend. `molonaviz2.i18n.load_catalog` réunit les deux, et Qt traduit l'interface avec ce catalogue réuni. `make strings` (depuis l'espace) liste les textes sans traduction.
+
 ## Tests
 
 ```bash

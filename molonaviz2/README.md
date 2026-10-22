@@ -122,14 +122,14 @@ Il donne aussi l'environnement (Python, plateforme, processeur, appareil, jax, j
 
 `molonaviz2 twin …` (y compris dans l'exécutable) est un alias de `molonari-twin …`. La ligne de commande n'a pas besoin de Qt. Ses messages sont en français par défaut ; `MOLONARI_LANG=en` les affiche en anglais (l'ancien nom `MOLONAVIZ_LANG` est encore lu).
 
-Les exemples fournis portent tous sur Point034. Leurs identifiants valent pour molonari-twin 0.6.0-alpha.1 publié, sans suffixe local : ils changent avec la version du code, qui entre dans le `twin_id`.
+Les exemples fournis portent tous sur Point034. Leurs identifiants valent pour molonari-twin 0.6.0 publié, sans suffixe local : ils changent avec la version du code, qui entre dans le `twin_id`.
 
-| Twin | Mode | `twin_id` (molonari-twin 0.6.0-alpha.1) | Contenu |
+| Twin | Mode | `twin_id` (molonari-twin 0.6.0) | Contenu |
 |---|---|---|---|
-| `twin_01` | direct | `1edb6a9a3f307ba0` | monocouche, −log₁₀ k = 12 |
-| `twin_02` | direct | `1edb6a9a3f307ba0` | copie renommée de `twin_01`, pour montrer la détection de doublon |
-| `twin_03` | mcmc | `6aa2aaf841f74f74` | inversion courte (8 chaînes, 300 itérations, graine 1) |
-| `twin_04` | mcmc | `3535bbcdb0adda21` | créé depuis l'application, à partir d'une inversion |
+| `twin_01` | direct | `1fe696e072167811` | monocouche, −log₁₀ k = 12 |
+| `twin_02` | direct | `1fe696e072167811` | copie renommée de `twin_01`, pour montrer la détection de doublon |
+| `twin_03` | mcmc | `5e5be1abb4833551` | inversion courte (8 chaînes, 300 itérations, graine 1) |
+| `twin_04` | mcmc | `01fd14746ddae774` | créé depuis l'application, à partir d'une inversion |
 
 Pour réinitialiser la démo : fermer l'application, puis `rm examples/twins/registry.csv; rm -rf examples/results`.
 
@@ -197,15 +197,15 @@ backend/src/molonari_twin/      backend (paquet molonari-twin), sans Qt
   engine/      moteur JAX (modèle direct, DREAM), adaptateur pyheatmy pour les tests
   twin/        twins versionnés : twin.yaml, twin_id, registre, exécution, ligne de commande
   questions/   réponses calculées à partir d'un résultat (volumes, bande prédictive, chaînes)
-  i18n/        traduction pure et catalogue français (fr.json) ; `make strings` liste les chaînes non traduites
+  i18n/        traduction pure et catalogue français du backend (fr.json : messages d'erreur, ligne de commande)
   facade.py    seule porte du backend pour le frontend
 frontend/src/molonaviz2/        application (paquet molonaviz2), PySide6
   ui/          fenêtre, explorateur, onglets d'un point, fenêtre des twins, graphiques
   workers/     calculs en arrière-plan (annulation, progression)
-  i18n/        traduction par Qt (t, install_language), sur le catalogue du backend
+  i18n/        traduction par Qt (t, install_language) ; fr.json propre à l'application, réuni à celui du backend
   app.py, notice.py, settings.py, logs.py
 examples/twins/   twins de démonstration
 tools/            check_version.py, extract_strings.py
 ```
 
-Le backend s'importe et s'exécute sans Qt ni bibliothèque graphique ; le frontend ne l'appelle que par `molonari_twin.facade`. Chaque paquet a son test d'architecture (`backend/tests/test_architecture.py`, `frontend/tests/test_architecture.py`) qui vérifie ces règles.
+Chaque paquet a son catalogue de traduction ; `make strings` (`tools/extract_strings.py [backend|frontend]`) liste les chaînes sans traduction française, paquet par paquet. Le backend s'importe et s'exécute sans Qt ni bibliothèque graphique ; le frontend ne l'appelle que par `molonari_twin.facade`. Chaque paquet a son test d'architecture (`backend/tests/test_architecture.py`, `frontend/tests/test_architecture.py`) qui vérifie ces règles.
