@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from ...errors import UserError
+from molonaviz2.facade import UserError
+
 from ...i18n import t
 from ..errors import error_text
 from ..widgets import format_number, heading

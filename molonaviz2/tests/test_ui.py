@@ -439,7 +439,7 @@ def test_invalid_settings_disable_running_with_a_reason(qtbot, window):
 
 
 def test_error_inside_a_computation_is_shown_and_the_app_keeps_working(qtbot, window, shown_errors, monkeypatch):
-    from molonaviz2.engine import api
+    from molonaviz2 import facade as api  # l'interface appelle le calcul par la façade
 
     view = open_point(qtbot, window)
     view.cleanup_tab.apply()

@@ -6,9 +6,9 @@ from pathlib import Path
 
 from PySide6 import QtWidgets
 
-from ...errors import UserError
+from molonaviz2.facade import LabImport, UserError, import_lab_directory
+
 from ...i18n import t
-from ...io.lab_import import LabImport, import_lab_directory
 from ..errors import error_text
 from ..widgets import format_number, hint
 

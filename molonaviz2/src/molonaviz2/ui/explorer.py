@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from PySide6 import QtCore, QtWidgets
 
+from molonaviz2.facade import Project
+
 from ..i18n import t
-from ..storage.project import Project
 from .point_view.context import STAGE_LABELS
 from .widgets import format_number
 

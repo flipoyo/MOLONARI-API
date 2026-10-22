@@ -6,15 +6,20 @@ from pathlib import Path
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from ..domain.models import Study
-from ..engine import api
+from molonaviz2 import facade as api
+from molonaviz2.facade import (
+    SUFFIX,
+    Project,
+    Study,
+    TwinConfigError,
+    import_legacy_database,
+    list_twins,
+    twin_status,
+)
+
 from ..i18n import LANGUAGES, t
-from ..io.legacy_import import import_legacy_database
 from ..logs import bridge, log
 from ..settings import TEMPERATURE_UNITS, Settings
-from ..storage.project import SUFFIX, Project
-from ..twin.config import TwinConfigError
-from ..twin.run import list_twins, twin_status
 from ..workers.tasks import Task, TaskManager
 from .dialogs.lab_import import LabImportDialog
 from .dialogs.notice import NoticeDialog, key_for
@@ -401,8 +406,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def create_twin_from_computation(self, context, info) -> Path | None:
         """Fige un calcul de l'application en twin : twin.yaml + mesures nettoyées du point."""
-        from ..domain.compute import ForwardConfig, InversionConfig
-        from ..twin.create import create_twin
+        from molonaviz2.facade import ForwardConfig, InversionConfig, create_twin
 
         folder = self.settings.twin_folder
         if folder is None or not folder.is_dir():

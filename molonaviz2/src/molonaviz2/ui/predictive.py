@@ -9,9 +9,15 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from ..errors import UserError
+from molonaviz2.facade import (
+    UserError,
+    coverage,
+    observed_at,
+    predictive_band,
+    sensor_samples,
+)
+
 from ..i18n import t
-from ..questions import coverage, observed_at, predictive_band, sensor_samples
 from .units import level_label
 
 PREDICTIVE_SEED = 0  # graine fixe : la bande ne change pas d'un affichage à l'autre

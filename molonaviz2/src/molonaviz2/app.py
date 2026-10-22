@@ -27,7 +27,8 @@ class Application(QtCore.QObject):
         self.window = None
         project = None
         if project_path:
-            from .storage.project import Project
+            from molonaviz2.facade import Project
+
             from .ui.errors import report_exception
 
             try:
@@ -71,9 +72,13 @@ def selftest() -> int:
 
     import numpy as np
 
-    from .domain.compute import ForwardConfig, InversionConfig, LayerSpec
-    from .engine import api
-    from .engine.column import ColumnInputs
+    from molonaviz2 import facade as api
+    from molonaviz2.facade import (
+        ColumnInputs,
+        ForwardConfig,
+        InversionConfig,
+        LayerSpec,
+    )
 
     n = 96
     i = np.arange(n)
@@ -96,13 +101,11 @@ def selftest() -> int:
     inversion = api.run_inversion(inputs, config)
     checks.append(("inversion", inversion.samples.shape == (8, 7, 1, 4)))
 
-    from .ui.plots import posterior
-
-    table = posterior.summary_table(inversion, ["l"])
+    table = api.summary_table(inversion, ["l"])
     checks.append(("ArviZ summary", len(table) == 4))
     with tempfile.TemporaryDirectory() as folder:
         path = os.path.join(folder, "posterior.nc")
-        posterior.export_netcdf(inversion, ["l"], path)
+        api.export_netcdf(inversion, ["l"], path)
         checks.append(("NetCDF export", os.path.getsize(path) > 0))
 
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -127,9 +130,9 @@ def selftest() -> int:
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv if argv is None else argv)
     if len(argv) > 1 and argv[1] == "twin":
-        from .twin.cli import main as twin_main
+        from molonaviz2.facade import twin_cli
 
-        return twin_main(argv[2:])
+        return twin_cli(argv[2:])
     parser = argparse.ArgumentParser(prog="molonaviz2", description="Molonaviz 2")
     parser.add_argument("project", nargs="?", help="project file (.molo) to open")
     parser.add_argument("--selftest", action="store_true", help="run a small computation without a window and exit")

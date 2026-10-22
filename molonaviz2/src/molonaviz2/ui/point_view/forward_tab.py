@@ -5,9 +5,9 @@ from __future__ import annotations
 import numpy as np
 from PySide6 import QtCore, QtWidgets
 
-from ...domain.compute import ForwardConfig, LayerSpec, setting_limits
-from ...engine import api
-from ...engine.results import ForwardResult
+from molonaviz2 import facade as api
+from molonaviz2.facade import ForwardConfig, ForwardResult, LayerSpec, setting_limits
+
 from ...i18n import t
 from ...workers.tasks import Task, TaskManager
 from ..dialogs.notice import attach

@@ -1,5 +1,5 @@
 """Architecture : le cœur (futur backend) s'importe et s'exécute sans Qt ni interface, et ne produit
-aucune phrase traduite ; l'interface n'ajoute pas de nouvel import du cœur hors façade.
+aucune phrase traduite ; l'interface n'appelle le cœur que par la façade (molonaviz2.facade).
 
 Ce fichier ne dépend pas de PySide6 : la CI le lance seul (job core-without-qt).
 """
@@ -15,7 +15,7 @@ SOURCE = Path(__file__).resolve().parents[1] / "src" / "molonaviz2"
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples" / "twins"
 
 # Modules et paquets de premier niveau de molonaviz2 ("__init__" : le paquet lui-même).
-CORE = {"__init__", "errors", "gitinfo", "i18n", "domain", "io", "processing", "engine", "twin", "storage", "questions"}
+CORE = {"__init__", "errors", "gitinfo", "i18n", "domain", "io", "processing", "engine", "twin", "storage", "questions", "facade"}
 INTERFACE = {"__main__", "app", "settings", "notice", "logs", "ui", "workers"}
 # Sous-modules du cœur qui relèvent de l'interface.
 INTERFACE_SUBMODULES = {"i18n/qt.py"}
@@ -30,54 +30,8 @@ INTERFACE_DELEGATES = {("i18n/__init__.py", "molonaviz2.i18n.qt")}  # t() et ins
 # Bords du cœur autorisés à traduire avec translate() : fichier → raison.
 TRANSLATING_EDGES = {"twin/cli.py": "ligne de commande des twins (choix du propriétaire, A1)"}
 
-# Ce que l'interface appelle normalement dans le cœur.
-FACADE = {
-    "molonaviz2", "molonaviz2.errors", "molonaviz2.i18n",
-    "molonaviz2.engine.api", "molonaviz2.twin.run", "molonaviz2.twin.results",
-    "molonaviz2.twin.cli",  # point d'entrée de la ligne de commande (aiguillage de __main__)
-}
-# Imports hors façade relevés au début de A1 (identiques à CGS-MOLO 59aaf3e), tolérés jusqu'à la
-# migration du frontend (partie C). La liste ne peut que raccourcir.
-TOLERATED = {
-    ("molonaviz2.app", "molonaviz2.domain.compute"),
-    ("molonaviz2.app", "molonaviz2.engine.column"),
-    ("molonaviz2.app", "molonaviz2.storage.project"),
-    ("molonaviz2.notice", "molonaviz2.domain.compute"),
-    ("molonaviz2.notice", "molonaviz2.processing.cleanup"),
-    ("molonaviz2.notice", "molonaviz2.twin.config"),
-    ("molonaviz2.ui.dialogs.lab_import", "molonaviz2.io.lab_import"),
-    ("molonaviz2.ui.dialogs.point_import", "molonaviz2.domain.models"),
-    ("molonaviz2.ui.dialogs.point_import", "molonaviz2.io.lab_import"),
-    ("molonaviz2.ui.dialogs.point_import", "molonaviz2.io.point_import"),
-    ("molonaviz2.ui.dialogs.simple", "molonaviz2.domain.models"),
-    ("molonaviz2.ui.explorer", "molonaviz2.storage.project"),
-    ("molonaviz2.ui.main_window", "molonaviz2.domain.compute"),
-    ("molonaviz2.ui.main_window", "molonaviz2.domain.models"),
-    ("molonaviz2.ui.main_window", "molonaviz2.io.legacy_import"),
-    ("molonaviz2.ui.main_window", "molonaviz2.storage.project"),
-    ("molonaviz2.ui.main_window", "molonaviz2.twin.config"),
-    ("molonaviz2.ui.main_window", "molonaviz2.twin.create"),
-    ("molonaviz2.ui.plots.posterior", "molonaviz2.domain.compute"),
-    ("molonaviz2.ui.plots.posterior", "molonaviz2.engine.diagnostics"),
-    ("molonaviz2.ui.plots.posterior", "molonaviz2.engine.results"),
-    ("molonaviz2.ui.point_view.cleanup_tab", "molonaviz2.domain.models"),
-    ("molonaviz2.ui.point_view.cleanup_tab", "molonaviz2.processing.cleanup"),
-    ("molonaviz2.ui.point_view.context", "molonaviz2.domain.models"),
-    ("molonaviz2.ui.point_view.context", "molonaviz2.engine.column"),
-    ("molonaviz2.ui.point_view.context", "molonaviz2.storage.project"),
-    ("molonaviz2.ui.point_view.forward_tab", "molonaviz2.domain.compute"),
-    ("molonaviz2.ui.point_view.forward_tab", "molonaviz2.engine.results"),
-    ("molonaviz2.ui.point_view.inversion_tab", "molonaviz2.domain.compute"),
-    ("molonaviz2.ui.point_view.inversion_tab", "molonaviz2.engine.results"),
-    ("molonaviz2.ui.point_view.layers", "molonaviz2.domain.compute"),
-    ("molonaviz2.ui.point_view.results_tab", "molonaviz2.domain.compute"),
-    ("molonaviz2.ui.point_view.results_tab", "molonaviz2.engine.results"),
-    ("molonaviz2.ui.point_view.results_tab", "molonaviz2.storage.project"),
-    ("molonaviz2.ui.point_view.view", "molonaviz2.domain.models"),
-    ("molonaviz2.ui.point_view.view", "molonaviz2.storage.project"),
-    ("molonaviz2.ui.twin_window", "molonaviz2.twin.config"),
-    ("molonaviz2.workers.tasks", "molonaviz2.engine.jax.dream"),
-}
+# Seuls modules du cœur que l'interface importe : la racine (version), la traduction et la façade.
+FACADE = {"molonaviz2", "molonaviz2.i18n", "molonaviz2.facade"}
 
 
 def top_level(path: Path) -> str:
@@ -230,16 +184,51 @@ def test_n_marker_comes_from_pure_i18n():
 # 4. Façade -----------------------------------------------------------------------------------------
 
 
-def test_interface_uses_the_facade_or_tolerated_imports():
+def test_interface_uses_only_the_facade():
     found = set()
     for path in sorted(SOURCE.rglob("*.py")):
         if top_level(path) not in INTERFACE:
             continue
         for _, module in imported_modules(path):
             parts = module.split(".")
-            if parts[0] == "molonaviz2" and (len(parts) == 1 or parts[1] in CORE) and module not in FACADE and not module.startswith("molonaviz2.questions"):
+            if parts[0] == "molonaviz2" and (len(parts) == 1 or parts[1] in CORE) and module not in FACADE:
                 found.add((module_name(path), module))
-    new = sorted(found - TOLERATED)
-    gone = sorted(TOLERATED - found)
-    assert not new, f"nouvel import hors façade (passer par engine/api, twin/run, twin/results ou questions) : {new}"
-    assert not gone, f"import toléré disparu : le retirer de TOLERATED : {gone}"
+    assert not found, f"import du cœur hors façade (passer par molonaviz2.facade) : {sorted(found)}"
+
+
+def test_core_does_not_import_the_facade():
+    problems = []
+    for path in core_files():
+        relative = path.relative_to(SOURCE).as_posix()
+        if relative == "facade.py":
+            continue
+        for line, module in imported_modules(path):
+            if module == "molonaviz2.facade" or module.startswith("molonaviz2.facade."):
+                problems.append(f"{relative}:{line} importe la façade")
+    assert not problems, "\n".join(problems)
+
+
+def test_facade_import_is_light():
+    code = (
+        "import sys, molonaviz2.facade\n"
+        "print(sorted({n.split('.')[0] for n in sys.modules if n.split('.')[0] in ('PySide6', 'jax', 'arviz')}))"
+    )
+    completed = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=300, check=False)
+    assert completed.returncode == 0, completed.stderr[-4000:]
+    assert completed.stdout.strip() == "[]", f"modules lourds chargés par la façade : {completed.stdout.strip()}"
+
+
+def test_facade_exports_exist_and_are_the_original_objects():
+    import importlib
+
+    from molonaviz2 import facade
+    from molonaviz2.engine.jax import dream
+
+    assert not [name for name in facade.__all__ if not hasattr(facade, name)]
+    for name in facade.__all__:
+        value = getattr(facade, name)
+        origin = getattr(value, "__module__", None)
+        reexported = origin and origin.startswith("molonaviz2.") and origin != "molonaviz2.facade"
+        if (isinstance(value, type) or callable(value)) and reexported:
+            assert getattr(importlib.import_module(origin), value.__name__) is value, name
+    assert facade.Cancelled is dream.Cancelled

@@ -13,7 +13,8 @@ from collections.abc import Callable
 
 from PySide6 import QtWidgets
 
-from ..errors import UserError
+from molonaviz2.facade import UserError
+
 from ..i18n import render, t
 from ..logs import log
 

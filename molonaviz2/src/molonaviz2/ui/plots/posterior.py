@@ -1,14 +1,13 @@
-"""Analyse a posteriori : histogrammes et traces (le diagnostic ArviZ est dans engine.diagnostics)."""
+"""Analyse a posteriori : histogrammes et traces (le diagnostic ArviZ passe par la façade : summary_table, export_netcdf)."""
 
 from __future__ import annotations
 
-from ...domain.compute import INVERTED_PARAMETERS, PARAMETER_LABELS
-from ...engine.diagnostics import export_netcdf, inference_data, summary_table
-from ...engine.results import InversionResult
+from molonaviz2.facade import INVERTED_PARAMETERS, PARAMETER_LABELS, InversionResult
+
 from ...i18n import t
 from .style import CHAIN_COLORMAP
 
-__all__ = ["chain_traces", "export_netcdf", "histograms", "inference_data", "summary_table"]
+__all__ = ["chain_traces", "histograms"]
 
 
 def histograms(figure, result: InversionResult, layer: int, bins: int) -> None:

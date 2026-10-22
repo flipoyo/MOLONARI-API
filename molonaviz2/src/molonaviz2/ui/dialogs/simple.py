@@ -6,8 +6,9 @@ from itertools import pairwise
 
 from PySide6 import QtCore, QtWidgets
 
+from molonaviz2.facade import PressureSensor, Shaft, Thermometer
+
 from ... import __version__
-from ...domain.models import PressureSensor, Shaft, Thermometer
 from ...i18n import N_, t
 from ..widgets import NumberField, heading, hint
 

@@ -20,7 +20,8 @@ from collections.abc import Callable
 
 from PySide6 import QtCore
 
-from ..engine.jax.dream import Cancelled
+from molonaviz2.facade import Cancelled
+
 from ..logs import log
 
 

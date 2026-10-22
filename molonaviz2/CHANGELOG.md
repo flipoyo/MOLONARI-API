@@ -12,6 +12,25 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions : [S
 - Tags : `molonaviz2-vX.Y.Z`, posés sur `CGS-MOLO` après la fusion. La CI (`molonaviz2-version`) vérifie que le tag correspond à `pyproject.toml`.
 - La version entre dans `engine_version()`, donc dans chaque `twin_id`. Une nouvelle version donne de nouveaux identifiants, et un twin déjà calculé passe à l'état « modifié » : il faut créer un nouveau twin pour utiliser le nouveau code.
 
+## [0.6.0-alpha.1] - 2026-10-22
+
+Façade publique du cœur : premier lot de la séparation du backend et du frontend (#37, lot B1). Rien ne change pour l'utilisateur : écrans, textes, calculs et résultats écrits restent les mêmes.
+
+### Ajouté
+- `molonaviz2.facade` : seul module du cœur que l'interface importe, avec la racine du paquet (version) et `i18n` (#37).
+  - Il réexporte tels quels les types, constantes et fonctions dont l'interface a besoin : modèles et configurations, projet `.molo`, imports de fichiers, nettoyage, calcul, twins, questions et erreurs.
+  - `summary_table` et `export_netcdf` chargent ArviZ seulement à l'appel ; `twin_cli(argv)` lance la ligne de commande des twins ; `twin_defaults()` donne les valeurs par défaut d'un twin.
+  - L'importer ne charge ni Qt, ni JAX, ni ArviZ.
+
+### Modifié
+- `Cancelled` (annulation d'un calcul) est défini dans `errors`. `engine.jax.dream.Cancelled` reste importable : c'est la même classe (#37).
+- L'interface n'importe plus `domain`, `io`, `processing`, `storage`, `engine`, `twin` ni `questions` directement. Les 38 imports « tolérés » depuis A1 passent par la façade, et le test d'architecture n'admet plus aucune exception (#37).
+- L'application ne charge plus JAX ni ArviZ au démarrage : ils sont chargés au premier calcul ou au premier diagnostic (#37).
+- `ui/plots/posterior` ne réexporte plus `summary_table`, `export_netcdf` ni `inference_data` (#37).
+
+### Identifiants de référence (0.6.0-alpha.1)
+- `twin_01` et `twin_02` : `801fcd52aad54165` ; `twin_03` : `7c37332fa1df829c` ; `twin_04` : `5f020c2ec719d907`.
+
 ## [0.5.0] - 2026-10-21
 
 Bande prédictive, couverture et vue Chaînes dans l'interface (#28). Clôt le jalon 0.5 et rassemble les pré-versions 0.5.0-alpha.1 (#26) et 0.5.0-alpha.2 (#27) ci-dessous.
