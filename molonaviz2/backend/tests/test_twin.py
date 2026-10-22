@@ -492,7 +492,7 @@ def test_each_reason_of_strict_mode(version, code_version, code, twin, expected)
 def test_strict_run_is_refused_with_every_reason(twins, point034):
     folder = make_twin(twins, point034)  # hors dépôt, avec le code de la branche de travail
     completed = subprocess.run([sys.executable, "-m", "molonari_twin", "run", "--strict", str(folder)], capture_output=True, text=True,
-                               timeout=300, check=False, env={**os.environ, "MOLONAVIZ_LANG": "en"})
+                               timeout=300, check=False, env={**os.environ, "MOLONARI_LANG": "en"})
     assert completed.returncode == 1
     assert "Strict mode: the twin was not run." in completed.stderr
     assert "The provenance of the twin cannot be read (no git repository)." in completed.stderr

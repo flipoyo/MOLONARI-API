@@ -23,7 +23,7 @@ uv run molonari-twin list     examples/twins
 python -m molonari_twin …                              # équivalent
 ```
 
-Messages en français par défaut ; `MOLONAVIZ_LANG=en` les affiche en anglais.
+Messages en français par défaut ; `MOLONARI_LANG=en` les affiche en anglais (l'ancien nom `MOLONAVIZ_LANG` est encore lu).
 
 ## Façade
 

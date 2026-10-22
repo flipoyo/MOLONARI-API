@@ -120,7 +120,7 @@ Il donne aussi l'environnement (Python, plateforme, processeur, appareil, jax, j
 
 `twin run --strict` refuse de calculer avec une pré-version, un code non publié, un dépôt modifié, un twin sans tag ou une provenance illisible, et donne tous les motifs.
 
-`molonaviz2 twin …` (y compris dans l'exécutable) est un alias de `molonari-twin …`. La ligne de commande n'a pas besoin de Qt. Ses messages sont en français par défaut ; `MOLONAVIZ_LANG=en` les affiche en anglais.
+`molonaviz2 twin …` (y compris dans l'exécutable) est un alias de `molonari-twin …`. La ligne de commande n'a pas besoin de Qt. Ses messages sont en français par défaut ; `MOLONARI_LANG=en` les affiche en anglais (l'ancien nom `MOLONAVIZ_LANG` est encore lu).
 
 Les exemples fournis portent tous sur Point034. Leurs identifiants valent pour molonari-twin 0.6.0-alpha.1 publié, sans suffixe local : ils changent avec la version du code, qui entre dans le `twin_id`.
 
