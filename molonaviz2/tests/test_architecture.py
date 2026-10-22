@@ -40,18 +40,6 @@ FACADE = {
 # Imports hors façade relevés au début de A1 (identiques à CGS-MOLO 59aaf3e), tolérés jusqu'à la
 # migration du frontend (partie C). La liste ne peut que raccourcir.
 TOLERATED = {
-    ("molonaviz2.ui.dialogs.lab_import", "molonaviz2.io.lab_import"),
-    ("molonaviz2.ui.dialogs.point_import", "molonaviz2.domain.models"),
-    ("molonaviz2.ui.dialogs.point_import", "molonaviz2.io.lab_import"),
-    ("molonaviz2.ui.dialogs.point_import", "molonaviz2.io.point_import"),
-    ("molonaviz2.ui.dialogs.simple", "molonaviz2.domain.models"),
-    ("molonaviz2.ui.explorer", "molonaviz2.storage.project"),
-    ("molonaviz2.ui.main_window", "molonaviz2.domain.compute"),
-    ("molonaviz2.ui.main_window", "molonaviz2.domain.models"),
-    ("molonaviz2.ui.main_window", "molonaviz2.io.legacy_import"),
-    ("molonaviz2.ui.main_window", "molonaviz2.storage.project"),
-    ("molonaviz2.ui.main_window", "molonaviz2.twin.config"),
-    ("molonaviz2.ui.main_window", "molonaviz2.twin.create"),
     ("molonaviz2.ui.plots.posterior", "molonaviz2.domain.compute"),
     ("molonaviz2.ui.plots.posterior", "molonaviz2.engine.diagnostics"),
     ("molonaviz2.ui.plots.posterior", "molonaviz2.engine.results"),
@@ -70,7 +58,6 @@ TOLERATED = {
     ("molonaviz2.ui.point_view.results_tab", "molonaviz2.storage.project"),
     ("molonaviz2.ui.point_view.view", "molonaviz2.domain.models"),
     ("molonaviz2.ui.point_view.view", "molonaviz2.storage.project"),
-    ("molonaviz2.ui.twin_window", "molonaviz2.twin.config"),
 }
 
 

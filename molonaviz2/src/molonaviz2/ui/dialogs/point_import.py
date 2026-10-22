@@ -13,17 +13,19 @@ from pathlib import Path
 
 from PySide6 import QtCore, QtWidgets
 
-from ...domain.models import Lab, SamplingPoint
-from ...errors import UserError
-from ...i18n import t
-from ...io.lab_import import read_text
-from ...io.point_import import (
+from molonaviz2.facade import (
+    Lab,
     ParsedMeasures,
+    SamplingPoint,
+    UserError,
     find_point_files,
     read_point_info,
     read_pressure_file,
     read_temperature_file,
+    read_text,
 )
+
+from ...i18n import t
 from ..errors import error_text
 from ..widgets import NumberField, hint, to_qdatetime
 

@@ -9,11 +9,17 @@ import numpy as np
 import pandas as pd
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from ..errors import Issue
+from molonaviz2.facade import (
+    Issue,
+    TwinConfigError,
+    TwinStatus,
+    config_path,
+    load_results,
+    run_twin,
+    twin_status,
+)
+
 from ..i18n import t
-from ..twin.config import TwinConfigError, config_path
-from ..twin.results import load_results
-from ..twin.run import TwinStatus, run_twin, twin_status
 from ..workers.tasks import Task, TaskManager
 from .dialogs.notice import attach
 from .errors import error_text
