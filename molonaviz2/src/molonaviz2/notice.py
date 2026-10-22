@@ -1,30 +1,32 @@
 """Notice des paramètres de calcul : une fiche par réglage (Aide › Notice des paramètres).
 
 Les textes sont en anglais (langue source) et traduits à l'affichage avec `t()`. Les
-valeurs par défaut et les bornes ne sont pas recopiées : elles sont lues dans le
-domaine (`domain.compute`) et le nettoyage (`processing.cleanup`), pour que la notice
-reste juste quand ces constantes changent.
+valeurs par défaut et les bornes ne sont pas recopiées : elles sont lues dans le cœur,
+par la façade (domaine, nettoyage, config des twins), pour que la notice reste juste
+quand ces constantes changent.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field
 
-from .domain.compute import (
+from molonaviz2.facade import (
     DEFAULT_PRIORS,
+    IQR_FACTOR,
     PARAMETER_LABELS,
     PARAMETER_UNITS,
     PHYSICAL_BOUNDS,
     SETTING_LIMITS,
     STORE_FIELDS,
+    ZSCORE_LIMIT,
     ForwardConfig,
     InversionConfig,
     LayerSpec,
+    twin_defaults,
 )
+
 from .i18n import N_, t
-from .processing.cleanup import IQR_FACTOR, ZSCORE_LIMIT
-from .twin.config import TwinConfig
 
 CLEANING = N_("Cleaning")
 LAYERS = N_("Layers")
@@ -93,7 +95,7 @@ def _layer_default(name: str) -> Callable[[], str]:
 
 
 def _twin_default(name: str) -> Callable[[], str]:
-    return lambda: str(next(f.default for f in fields(TwinConfig) if f.name == name))
+    return lambda: str(twin_defaults()[name])
 
 
 def _physical(name: str) -> Callable[[], str]:
