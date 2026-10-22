@@ -5,17 +5,15 @@ import html
 import numpy as np
 import pytest
 from conftest import FIXTURES
-from PySide6 import QtCore, QtWidgets
-
-from molonaviz2.domain.models import PointStage, SamplingPoint, Study
-from molonaviz2.io.lab_import import import_lab_directory
-from molonaviz2.io.point_import import (
+from molonari_twin.domain.models import PointStage, SamplingPoint, Study
+from molonari_twin.io.lab_import import import_lab_directory
+from molonari_twin.io.point_import import (
     read_point_info,
     read_pressure_file,
     read_temperature_file,
 )
+from molonari_twin.storage.project import Project
 from molonaviz2.settings import Settings
-from molonaviz2.storage.project import Project
 from molonaviz2.ui import errors as ui_errors
 from molonaviz2.ui.dialogs.lab_import import LabImportDialog
 from molonaviz2.ui.dialogs.point_import import PointImportDialog
@@ -28,6 +26,7 @@ from molonaviz2.ui.units import (
     z_score,
 )
 from molonaviz2.ui.widgets import TypedConfirmation
+from PySide6 import QtCore, QtWidgets
 
 TASK_TIMEOUT = 120_000
 
@@ -247,9 +246,8 @@ def test_direct_model_then_inversion_then_results(qtbot, window, shown_errors, t
 def test_csv_export_writes_heat_fluxes_positive_downwards(tmp_path):
     import pandas as pd
     from conftest import synthetic_inputs
-
-    from molonaviz2.domain.compute import ForwardConfig, LayerSpec
-    from molonaviz2.engine import api
+    from molonari_twin.domain.compute import ForwardConfig, LayerSpec
+    from molonari_twin.engine import api
     from molonaviz2.ui.point_view.results_tab import write_csv_exports
 
     forward = api.run_forward(synthetic_inputs(nb_times=50), ForwardConfig([LayerSpec("a", 0.4)], nb_cells=20))
@@ -364,7 +362,7 @@ def test_per_chain_box_shows_thinning_and_stored_fields(qtbot, window):
 
 
 def test_every_setting_is_linked_to_the_parameter_guide(qtbot, window, monkeypatch):
-    from molonaviz2.domain.compute import SETTING_LIMITS
+    from molonari_twin.domain.compute import SETTING_LIMITS
     from molonaviz2.notice import BY_KEY
     from molonaviz2.ui.dialogs.notice import key_for
 
@@ -439,7 +437,9 @@ def test_invalid_settings_disable_running_with_a_reason(qtbot, window):
 
 
 def test_error_inside_a_computation_is_shown_and_the_app_keeps_working(qtbot, window, shown_errors, monkeypatch):
-    from molonaviz2 import facade as api  # l'interface appelle le calcul par la façade
+    from molonari_twin import (
+        facade as api,  # l'interface appelle le calcul par la façade
+    )
 
     view = open_point(qtbot, window)
     view.cleanup_tab.apply()
@@ -468,7 +468,7 @@ def test_exception_in_a_qt_slot_does_not_abort(qtbot, window, shown_errors):
 
 
 def test_user_errors_show_only_the_message(shown_errors):
-    from molonaviz2.errors import UserError
+    from molonari_twin.errors import UserError
 
     ui_errors.report_exception(UserError("Le fichier est vide."))
     assert shown_errors == [("Action not completed", "Le fichier est vide.", "")]
@@ -573,7 +573,7 @@ def predictive_collections(results):
 
 
 def test_predictive_band_and_its_coverage_come_from_questions(qtbot, window):
-    from molonaviz2.questions import (
+    from molonari_twin.questions import (
         coverage,
         observed_at,
         predictive_band,
@@ -627,7 +627,7 @@ def chain_lines(results, row=0):
 
 
 def test_chains_view_selects_chains_thinning_and_iterations(qtbot, window):
-    from molonaviz2.questions import chain_data
+    from molonari_twin.questions import chain_data
 
     view = open_point(qtbot, window)
     results = run_small_inversion(qtbot, window, view, nb_iter=21, thin=1)

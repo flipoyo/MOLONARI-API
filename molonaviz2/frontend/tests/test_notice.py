@@ -5,8 +5,7 @@ from dataclasses import fields
 from pathlib import Path
 
 import pytest
-
-from molonaviz2.domain.compute import (
+from molonari_twin.domain.compute import (
     DEFAULT_PRIORS,
     INVERTED_PARAMETERS,
     PHYSICAL_BOUNDS,
@@ -15,10 +14,10 @@ from molonaviz2.domain.compute import (
     InversionConfig,
     LayerSpec,
 )
+from molonari_twin.twin.config import LAYER_KEYS, MCMC_KEYS, TwinConfig
 from molonaviz2.notice import BY_KEY, ENTRIES, SECTIONS, limits_text, number
-from molonaviz2.twin.config import LAYER_KEYS, MCMC_KEYS, TwinConfig
 
-CATALOG = json.loads((Path(__file__).resolve().parents[1] / "src" / "molonaviz2" / "i18n" / "fr.json").read_text(encoding="utf-8"))
+CATALOG = json.loads((Path(__file__).resolve().parents[2] / "backend" / "src" / "molonari_twin" / "i18n" / "fr.json").read_text(encoding="utf-8"))
 
 
 def test_entries_are_unique_and_grouped_in_known_sections():
@@ -76,7 +75,7 @@ def test_shared_limits_match_the_validation_of_the_configurations():
 
 
 def test_cleanup_constants_appear_in_the_outlier_entry():
-    from molonaviz2.processing.cleanup import IQR_FACTOR, ZSCORE_LIMIT
+    from molonari_twin.processing.cleanup import IQR_FACTOR, ZSCORE_LIMIT
 
     details = BY_KEY["cleaning.outliers"].text("details")
     assert f"Q1 − {number(IQR_FACTOR)}·IQR" in details and f"more than {number(ZSCORE_LIMIT)} standard deviations" in details

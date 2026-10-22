@@ -33,9 +33,5 @@ build-backend = "hatchling.build"
 packages = ["src/molonaviz2"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-markers = [
-    "slow: tests longs (inversion depuis l'interface)",
-]
-addopts = "-m 'not slow'"
+testpaths = ["tests"]  # pas de tests longs ici : ceux du calcul (marqueur slow) sont dans le backend
 qt_api = "pyside6"

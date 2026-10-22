@@ -2,8 +2,7 @@
 texte qu'en 0.2.0, où le cœur appelait t(modèle).format(...) lui-même."""
 
 import pytest
-
-from molonaviz2.errors import UserError
+from molonari_twin.errors import UserError
 from molonaviz2.i18n import install_language, load_catalog
 from molonaviz2.ui import errors as ui_errors
 
@@ -21,7 +20,7 @@ def shown_errors(qapp):
 
 
 def test_core_error_is_shown_in_french(shown_errors, tmp_path):
-    from molonaviz2.storage.project import Project
+    from molonari_twin.storage.project import Project
 
     path = tmp_path / "absent.molo"
     with pytest.raises(UserError) as error:
@@ -31,7 +30,7 @@ def test_core_error_is_shown_in_french(shown_errors, tmp_path):
 
 
 def test_grouped_settings_issues_are_shown_in_french(shown_errors):
-    from molonaviz2.domain.compute import ForwardConfig, LayerSpec
+    from molonari_twin.domain.compute import ForwardConfig, LayerSpec
 
     issues = ForwardConfig([LayerSpec("c1", z_low=0.4)], nb_cells=5).validate(0.4)
     ui_errors.report_exception(UserError("E_SETTINGS_INVALID", issues=issues))
@@ -39,8 +38,8 @@ def test_grouped_settings_issues_are_shown_in_french(shown_errors):
 
 
 def test_twin_issue_keeps_its_key_in_french(tmp_path):
+    from molonari_twin.twin.config import TwinConfigError, load_twin
     from molonaviz2.i18n import render, translate
-    from molonaviz2.twin.config import TwinConfigError, load_twin
 
     (tmp_path / "twin.yaml").write_text("schema: molonaviz-twin/1\nname: x\nmode: direct\nsensors: {ofset: 0}\n")
     with pytest.raises(TwinConfigError) as error:

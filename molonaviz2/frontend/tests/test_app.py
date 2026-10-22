@@ -7,11 +7,10 @@ import sys
 from pathlib import Path
 
 import pytest
+from molonaviz2.i18n import LANGUAGES, load_catalog
 from PySide6 import QtCore
 
-from molonaviz2.i18n import LANGUAGES, load_catalog
-
-TOOLS = Path(__file__).resolve().parents[1] / "tools"
+TOOLS = Path(__file__).resolve().parents[2] / "tools"
 sys.path.insert(0, str(TOOLS))
 from extract_strings import extract
 
@@ -102,5 +101,5 @@ def test_task_cancellation_and_failure_signals(qtbot):
 
 
 def test_catalog_file_is_valid_json():
-    path = Path(__file__).resolve().parents[1] / "src" / "molonaviz2" / "i18n" / "fr.json"
+    path = Path(__file__).resolve().parents[2] / "backend" / "src" / "molonari_twin" / "i18n" / "fr.json"
     assert isinstance(json.loads(path.read_text(encoding="utf-8")), dict)
