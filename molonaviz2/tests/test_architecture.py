@@ -40,9 +40,6 @@ FACADE = {
 # Imports hors façade relevés au début de A1 (identiques à CGS-MOLO 59aaf3e), tolérés jusqu'à la
 # migration du frontend (partie C). La liste ne peut que raccourcir.
 TOLERATED = {
-    ("molonaviz2.app", "molonaviz2.domain.compute"),
-    ("molonaviz2.app", "molonaviz2.engine.column"),
-    ("molonaviz2.app", "molonaviz2.storage.project"),
     ("molonaviz2.notice", "molonaviz2.domain.compute"),
     ("molonaviz2.notice", "molonaviz2.processing.cleanup"),
     ("molonaviz2.notice", "molonaviz2.twin.config"),
@@ -77,7 +74,6 @@ TOLERATED = {
     ("molonaviz2.ui.point_view.view", "molonaviz2.domain.models"),
     ("molonaviz2.ui.point_view.view", "molonaviz2.storage.project"),
     ("molonaviz2.ui.twin_window", "molonaviz2.twin.config"),
-    ("molonaviz2.workers.tasks", "molonaviz2.engine.jax.dream"),
 }
 
 

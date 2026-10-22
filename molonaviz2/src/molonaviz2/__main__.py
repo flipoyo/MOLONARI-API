@@ -10,9 +10,9 @@ import sys
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv if argv is None else argv)
     if len(argv) > 1 and argv[1] == "twin":
-        from molonaviz2.twin.cli import main as twin_main
+        from molonaviz2.facade import twin_cli
 
-        return twin_main(argv[2:])
+        return twin_cli(argv[2:])
     from molonaviz2.app import main as app_main
 
     return app_main(argv)
