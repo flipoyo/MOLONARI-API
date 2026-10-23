@@ -44,7 +44,7 @@ def code_of(call):
 
 def test_catalog_is_consistent():
     ids, refs = [q.id for q in CATALOG], [q.ref for q in CATALOG]
-    assert len(set(ids)) == len(ids) == 12 and len(set(refs)) == len(refs)
+    assert len(set(ids)) == len(ids) == 16 and len(set(refs)) == len(refs)
     french = load_catalog("fr")
     for question in CATALOG:
         assert re.fullmatch(r"[a-z_]+", question.id)
@@ -101,7 +101,7 @@ def test_questions_of_a_twin_follow_its_mode(api):
     direct = {q.id for q in api.questions("twin_01")}
     mcmc = {q.id for q in api.questions("twin_03")}
     assert mcmc == {q.id for q in CATALOG}
-    assert direct == mcmc - {"chain_data", "sampling_layout"}
+    assert direct == mcmc - {"chain_data", "sampling_layout", "posterior_samples", "convergence"}
 
 
 # Questions sans twin et sur un dossier ------------------------------------------------------------

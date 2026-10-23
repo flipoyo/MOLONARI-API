@@ -13,19 +13,23 @@ from molonari_twin.questions import (
     Answer,
     Quantity,
     chain_data,
+    convergence,
     coverage,
     describe,
+    energy_breakdown,
     exchange_direction,
     exchanged_volume,
     fit_quality,
     heat_budget,
     observed_at,
+    posterior_samples,
     predictive_band,
     provenance,
     residuals,
     sensor_intervals,
     sensor_report,
     sensor_samples,
+    soil_properties,
     temperature_at,
     twin_exchanged_volume,
     water_flux,
@@ -603,3 +607,166 @@ def test_residual_autocorrelation_separates_noise_from_structure(direct):
 
 def test_fit_quality_in_direct_mode_has_no_coverage(direct):
     assert "coverage_per_sensor" not in fit_quality(direct).data
+
+
+# Propriétés du sol, échantillons, convergence et énergie (lot C3) ---------------------------------
+
+PRIOR = {"neg_log10_k": (11.0, 15.0), "porosity": (0.01, 0.25), "lambda_s": (1.0, 5.0), "rhos_cs": (1e6, 1e7)}
+PARAMETERS = tuple(PRIOR)
+
+
+def with_posterior(results, samples, energy=None, acceptance=None, best=None, layers=("a",)):
+    """Résultats mcmc synthétiques : `samples` (I, N, L, 4), priors uniformes de PRIOR, meilleurs paramètres `best`."""
+    kept, chains = samples.shape[:2]
+    best = best if best is not None else samples.reshape(-1, *samples.shape[2:])[0]
+    posterior = {
+        "samples": samples,
+        "energy": np.zeros((kept, chains)) if energy is None else energy,
+        "acceptance": np.full(chains, 0.2) if acceptance is None else acceptance,
+        "resets": np.zeros(chains, np.int64),
+        "iteration": np.arange(1, kept + 1),
+        "layer": np.array(layers),
+        "parameter": np.array(PARAMETERS),
+    }
+    mcmc = {"best_parameters": {layer: dict(zip(PARAMETERS, map(float, best[i]), strict=True)) for i, layer in enumerate(layers)},
+            "burn_in_converged": True, "burn_in_iterations": 12}
+    config = {"mcmc": {"priors": [{name: list(bounds) for name, bounds in PRIOR.items()} for _ in layers]}}
+    metadata = {**direct_metadata(results), "mode": "mcmc", "mcmc": mcmc, "config": config}
+    return dataclasses.replace(results, posterior=posterior, metadata=metadata)
+
+
+def direct_metadata(results):
+    return {key: value for key, value in results.metadata.items() if key not in ("mcmc", "config")}
+
+
+def uniform_samples(kept=400, chains=4, layers=1, seed=0):
+    rng = np.random.default_rng(seed)
+    columns = [rng.uniform(low, high, (kept, chains, layers)) for low, high in PRIOR.values()]
+    return np.stack(columns, axis=-1)
+
+
+def test_direct_soil_properties_are_the_configuration_values(direct):
+    layer = {"z_low": 0.4, "neg_log10_k": 12.0, "porosity": 0.15, "lambda_s": 3.4, "rhos_cs": 5e6}
+    results = dataclasses.replace(direct, metadata={**direct.metadata, "config": {"layers": [layer]}})
+    data = soil_properties(results, layer_names=["sable"]).data
+    assert list(data["layers"].value) == ["sable"]
+    assert data["k"].value[0] == pytest.approx(1e-12) and data["k"].unit == "m²"
+    assert data["K"].value[0] == pytest.approx(1e-12 * 1000.0 * 9.81 / 1.0e-3) and data["K"].unit == "m/s"
+    assert (data["n"].value[0], data["lambda_s"].value[0], data["rhos_cs"].value[0]) == (0.15, 3.4, 5e6)
+    assert data["k"].interval is None and "k_median" not in data and "n_identifiability" not in data
+
+
+def test_samples_equal_to_the_prior_are_not_identifiable(direct):
+    samples = uniform_samples(kept=2000, chains=4)
+    data = soil_properties(with_posterior(direct, samples), level=0.9).data
+    for name in ("n", "lambda_s", "rhos_cs", "k", "K"):
+        assert data[f"{name}_identifiability"].value[0] == pytest.approx(1.0, abs=0.05), name
+    low, high = data["n"].interval
+    assert (high[0] - low[0]) / (0.25 - 0.01) == pytest.approx(0.9, abs=0.03)  # le HDI à 90 % d'une uniforme en couvre 90 %
+    assert data["n_median"].value[0] == pytest.approx(0.13, abs=0.01)
+
+
+def test_a_narrow_posterior_is_identifiable_and_k_bounds_are_ordered(direct):
+    rng = np.random.default_rng(3)
+    samples = uniform_samples(kept=500)
+    samples[..., 0] = rng.normal(13.0, 0.05, samples.shape[:3])  # −log₁₀ k = 13 ± 0,05
+    data = soil_properties(with_posterior(direct, samples, best=np.array([[13.0, 0.1, 3.0, 4e6]]))).data
+    assert data["k_identifiability"].value[0] < 0.05
+    low, high = data["k"].interval
+    assert low[0] < data["k"].value[0] < high[0] and data["k"].value[0] == pytest.approx(1e-13)  # la borne basse de k vient du haut de −log₁₀ k
+    assert data["K"].value[0] == pytest.approx(1e-13 * 9.81e6)
+
+
+def test_soil_level_is_checked(direct):
+    assert code_of(lambda: soil_properties(with_posterior(direct, uniform_samples()), level=1.0)) == "E_QUESTION_LEVEL"
+
+
+def test_posterior_samples_are_chain_first(direct):
+    samples = uniform_samples(kept=30, chains=5, layers=2)
+    results = with_posterior(direct, samples, best=samples[0, 0], layers=("a", "b"))
+    data = posterior_samples(results).data
+    assert data["samples"].value.shape == (5, 30, 2, 4) and data["space"].value == "prior"
+    np.testing.assert_array_equal(data["samples"].value[3, 7], samples[7, 3])
+    assert list(data["parameter"].value) == list(PARAMETERS) and list(data["layer"].value) == ["a", "b"]
+    selected = posterior_samples(results, chains=[4, 1], iterations=(5, 20), burn=2, thin=3).data
+    assert list(selected["chain"].value) == [4, 1]
+    assert list(selected["iteration"].value) == [5, 8, 11, 14, 17, 20]  # burn 2, puis une sur 3 (la 3ᵉ, la 6ᵉ…), puis 5 ≤ i ≤ 20
+    np.testing.assert_array_equal(selected["samples"].value[0, 0], samples[4, 4])
+    assert code_of(lambda: posterior_samples(results, chains=[9])) == "E_QUESTION_CHAINS"
+    assert code_of(lambda: posterior_samples(results, thin=0)) == "E_QUESTION_THIN"
+
+
+def test_posterior_samples_need_a_posterior(direct):
+    assert code_of(lambda: posterior_samples(direct)) == "E_QUESTION_NO_POSTERIOR"
+    assert code_of(lambda: convergence(direct)) == "E_QUESTION_NO_POSTERIOR"
+
+
+def test_convergence_of_independent_chains(direct):
+    results = with_posterior(direct, uniform_samples(kept=400, chains=5, layers=2), layers=("a", "b"))
+    data = convergence(results).data
+    for name in ("rhat", "ess_bulk", "ess_tail", "mcse_mean"):
+        assert data[name].value.shape == (2, 4), name
+    assert (data["rhat"].value < 1.05).all() and (data["ess_bulk"].value > 1000).all()
+    assert data["rhat_max"].value == pytest.approx(data["rhat_max_all"].value)
+    assert data["chain_ess_bulk"].value.shape == (5, 2, 4) and data["rhat_without_chain"].value.shape == (5,)
+    np.testing.assert_allclose(data["acceptance"].value, 0.2)
+    assert data["burn_in_converged"].value is True and data["burn_in_iterations"].value == 12
+
+
+def test_a_stray_chain_is_found_by_the_r_hat_without_it(direct):
+    samples = uniform_samples(kept=300, chains=5)
+    samples[:, 2] += 0.5 * (np.array(list(PRIOR.values()))[:, 1] - np.array(list(PRIOR.values()))[:, 0])  # chaîne 2 décalée
+    energy = np.zeros((300, 5))
+    energy[:, 2] = 7.0
+    data = convergence(with_posterior(direct, samples, energy=energy)).data
+    assert data["rhat_max"].value > 1.2
+    without = data["rhat_without_chain"].value
+    assert without[2] < 1.05 and (np.delete(without, 2) > 1.2).all()
+    assert data["mean_energy"].value[2] == 7.0 and data["mean_energy"].value[0] == 0.0
+
+
+def test_convergence_follows_the_selection(direct):
+    samples = uniform_samples(kept=300, chains=5)
+    samples[:, 2] += 1.0  # chaîne 2 aberrante
+    results = with_posterior(direct, samples)
+    everything = convergence(results).data
+    selected = convergence(results, chains=[0, 1, 3, 4]).data
+    assert selected["rhat_max"].value < 1.05 < everything["rhat_max"].value
+    assert selected["rhat_max_all"].value == pytest.approx(everything["rhat_max_all"].value)  # indépendant de la sélection
+    assert convergence(results, burn=100, thin=2).data["samples_per_chain"].value == 100
+    assert np.isnan(convergence(results, chains=[0, 1]).data["rhat_without_chain"].value).all()  # R̂ demande 2 chaînes
+
+
+def test_energy_terms_add_up_and_the_implicit_rmse_is_the_rms_residual(direct):
+    data = energy_breakdown(direct).data
+    _, measured, simulated = __import__("molonari_twin.questions.sensors", fromlist=["sensor_series"]).sensor_series(direct)
+    residual = simulated - measured
+    n, sigma = residual.size, 0.1
+    assert data["n_points"].value == n and data["reference"].value == n / 2
+    assert data["log_term"].value == pytest.approx(n * np.log(sigma**2))
+    assert data["residual_term"].value == pytest.approx(np.sum(residual**2) / (2 * sigma**2))
+    assert data["log_term"].value + data["residual_term"].value == pytest.approx(data["energy"].value)
+    assert data["implicit_rmse"].value == pytest.approx(np.sqrt(np.mean(residual**2)))
+    assert data["ratio"].value == pytest.approx(data["residual_term"].value / (n / 2))
+    assert energy_breakdown(direct, sigma=0.2).data["sigma"].value == 0.2
+
+
+def test_with_the_right_sigma_the_residual_term_is_near_its_reference(direct):
+    noise = np.random.default_rng(5).normal(0.0, 0.1, len(direct.residuals))
+    data = energy_breakdown(with_residuals(direct, noise)).data
+    assert data["ratio"].value == pytest.approx(1.0, abs=0.25)  # 240 résidus : écart-type du rapport √(2/240) ≈ 0,09
+
+
+@pytest.mark.slow
+def test_energy_breakdown_equals_the_energy_of_the_engine(tmp_path):
+    import jax
+    import jax.numpy as jnp
+    from molonari_twin.engine.jax.forward import build_geometry, energy, make_forward
+
+    inputs, layers = synthetic_inputs(nb_times=80), [LayerSpec("a", 0.4)]
+    forward = run_forward(inputs, ForwardConfig(layers, nb_cells=20))
+    results = results_of(tmp_path, forward)
+    geom = build_geometry(inputs, [0.4], 20)
+    fields = jax.jit(make_forward(geom))(jnp.asarray([layer.physical() for layer in layers], jnp.float64))
+    expected = float(energy(fields["temperature"], geom, inputs.sigma_temperature**2))
+    assert energy_breakdown(results).data["energy"].value == pytest.approx(expected, rel=1e-9)

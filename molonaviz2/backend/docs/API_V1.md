@@ -222,6 +222,21 @@ Aucun paramètre : le corps de la requête est vide (ou `{}`).
 
 Sorties : `twin_id`, `code_version`, `results_format`, `created_at`, `device`, `duration`, `data_file`, `data_sha256`, `reproduce`.
 
+### `soil_properties` (HN-42)
+
+**Which soil properties were estimated?** — *Quelles propriétés du sol ont été estimées ?*
+
+Per layer: permeability k (m²), hydraulic conductivity K (m/s, k·ρw·g/μ with water at 20 °C: an approximation), porosity n, solid thermal conductivity λs and heat capacity ρs·cs. In mcmc mode the best value, the median, the highest-density interval (computed in the space of the priors, −log₁₀ k for k) and the identifiability (posterior standard deviation over that of a uniform prior: near 1, the data teach nothing). In direct mode, the values of the configuration.
+
+- Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
+- Requête : `POST /v1/twins/{ref}/questions/soil_properties`
+
+| Paramètre | Type | Défaut | Bornes | Description |
+|---|---|---|---|---|
+| `level` | nombre | `0.9` | > 0, < 1 | Probability mass of the highest-density interval (HDI), e.g. 0.9 for 90 %. |
+
+Sorties : `layers`, `level`, `k`, `k_median`, `k_identifiability`, `K`, `K_median`, `K_identifiability`, `n`, `n_median`, `n_identifiability`, `lambda_s`, `lambda_s_median`, `lambda_s_identifiability`, `rhos_cs`, `rhos_cs_median`, `rhos_cs_identifiability`.
+
 ## Accès bruts aux résultats
 
 ### `residuals` (BN-31)
@@ -271,3 +286,55 @@ Chains, iterations per chain, burn-in, thin, total samples, fields per chain and
 Aucun paramètre : le corps de la requête est vide (ou `{}`).
 
 Sorties : `nb_chains`, `burn_in_max`, `nb_iter`, `thin`, `kept_per_chain`, `samples`, `fields_per_chain`, `fields_total`, `field_interval`, `nb_cells`, `field_cells`, `nb_times`, `field_times`, `space_step`, `time_step`, `store_fields`, `stored_bytes`.
+
+### `posterior_samples` (BN-32)
+
+**Posterior samples of the parameters** — *Échantillons a posteriori des paramètres*
+
+The posterior samples as an array (chain, iteration, layer, parameter) in the space of the priors (−log₁₀ k, n, λs, ρs·cs; k = 10^−x in m²), with its axes. Chains, range of computed iterations, burn (kept iterations skipped at the start) and thin choose the samples.
+
+- Modes : mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
+- Requête : `POST /v1/twins/{ref}/questions/posterior_samples`
+
+| Paramètre | Type | Défaut | Bornes | Description |
+|---|---|---|---|---|
+| `chains` | list[entier] ou null | — |  | Chains to read, numbered from 0. Default: all. |
+| `burn` | entier | `0` | ≥ 0 | Kept iterations to skip at the start of each chain (on top of the burn-in of the computation). |
+| `thin` | entier | `1` | ≥ 1 | Keep one kept iteration out of `thin`. |
+| `iter_range` | [entier ou null, entier ou null] ou null | — |  | (first, last) computed iteration, included; null: no bound. |
+
+Sorties : `samples`, `iteration`, `chain`, `layer`, `parameter`, `parameter_unit`, `space`.
+
+## Diagnostics
+
+### `convergence` (BN-40)
+
+**Have the chains converged?** — *Les chaînes ont-elles convergé ?*
+
+Per parameter and layer: R̂ (rank-normalized), bulk and tail ESS and MCSE of the mean. Per chain: acceptance, mean energy, bulk ESS and the largest R̂ without that chain. The statistics follow the selection (chains, burn, thin); `rhat_max_all` uses everything, to show the effect of the selection.
+
+- Modes : mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
+- Requête : `POST /v1/twins/{ref}/questions/convergence`
+
+| Paramètre | Type | Défaut | Bornes | Description |
+|---|---|---|---|---|
+| `chains` | list[entier] ou null | — |  | Chains to read, numbered from 0. Default: all. |
+| `burn` | entier | `0` | ≥ 0 | Kept iterations to skip at the start of each chain (on top of the burn-in of the computation). |
+| `thin` | entier | `1` | ≥ 1 | Keep one kept iteration out of `thin`. |
+
+Sorties : `rhat`, `ess_bulk`, `ess_tail`, `mcse_mean`, `rhat_max`, `rhat_max_all`, `chain`, `acceptance`, `mean_energy`, `chain_ess_bulk`, `rhat_without_chain`, `layer`, `parameter`, `samples_per_chain`, `burn_in_converged`, `burn_in_iterations`.
+
+### `energy_breakdown` (BN-43)
+
+**What is the energy made of?** — *De quoi l'énergie est-elle faite ?*
+
+The terms of the energy (negative Gaussian log-likelihood) of the recorded fit: N·ln σ², the residual term Σr²/(2σ²), the implicit RMSE and the reference N/2, the value the residual term takes when σ is right.
+
+- Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
+- Requête : `POST /v1/twins/{ref}/questions/energy_breakdown`
+
+| Paramètre | Type | Défaut | Bornes | Description |
+|---|---|---|---|---|
+| `sigma` | nombre ou null | — | > 0 | Measurement uncertainty of the thermometers (°C). Default: the one recorded with the results. |
+
+Sorties : `n_points`, `sigma`, `log_term`, `residual_term`, `energy`, `implicit_rmse`, `reference`, `ratio`.

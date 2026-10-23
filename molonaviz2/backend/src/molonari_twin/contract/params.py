@@ -87,3 +87,35 @@ class ChainParams(Params):
         if value is not None and any(c < 0 for c in value):
             raise ValueError("chains are numbered from 0")
         return value
+
+
+def _chains(value):
+    if value is not None and any(c < 0 for c in value):
+        raise ValueError("chains are numbered from 0")
+    return value
+
+
+class SelectionParams(Params):
+    """Chains and iterations kept: the burn-in of the display, then thinning, then the range of computed iterations."""
+
+    chains: list[int] | None = Field(default=None, description="Chains to read, numbered from 0. Default: all.")
+    burn: int = Field(default=0, ge=0, description="Kept iterations to skip at the start of each chain (on top of the burn-in of the computation).")
+    thin: int = Field(default=1, ge=1, description="Keep one kept iteration out of `thin`.")
+
+    _check_chains = field_validator("chains")(_chains)
+
+
+class PosteriorParams(SelectionParams):
+    iter_range: tuple[int | None, int | None] | None = Field(default=None, description="(first, last) computed iteration, included; null: no bound.")
+
+
+class ConvergenceParams(SelectionParams):
+    """The statistics are computed on the selection; `rhat_max_all` always uses every chain and iteration."""
+
+
+class SoilParams(Params):
+    level: float = Field(default=0.9, gt=0, lt=1, description="Probability mass of the highest-density interval (HDI), e.g. 0.9 for 90 %.")
+
+
+class SigmaParams(Params):
+    sigma: float | None = Field(default=None, gt=0, description="Measurement uncertainty of the thermometers (°C). Default: the one recorded with the results.")

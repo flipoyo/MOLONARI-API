@@ -26,14 +26,18 @@ from ..i18n import N_
 from ..questions import (
     Answer,
     chain_data,
+    convergence,
     describe,
     describe_sampling,
+    energy_breakdown,
     exchange_direction,
     fit_quality,
     heat_budget,
+    posterior_samples,
     provenance,
     residuals,
     sensor_report,
+    soil_properties,
     temperature_at,
     twin_exchanged_volume,
     water_flux,
@@ -71,6 +75,10 @@ class Question:
     def level(self) -> str:
         return "high" if self.ref.startswith("HN-") else "low"
 
+
+# Sorties de soil_properties : une par propriété ; médiane et identifiabilité en mode M seulement.
+SOIL_OUTPUTS = tuple(
+    f"{name}{suffix}" for name in ("k", "K", "n", "lambda_s", "rhos_cs") for suffix in ("", "_median", "_identifiability"))
 
 # Bandes du modèle, en mode M avec des champs stockés (questions.sensors.model_bands).
 BANDS = ("field_time", "credible", "predictive", "coverage", "coverage_per_sensor", "points")
@@ -193,5 +201,46 @@ CATALOG: tuple[Question, ...] = (
             "fields_total", "field_interval", "nb_cells", "field_cells", "nb_times", "field_times", "space_step",
             "time_step", "store_fields", "stored_bytes",
         ),
+    ),
+    Question(
+        "soil_properties", "HN-42", "reliability", N_("Which soil properties were estimated?"),
+        "Per layer: permeability k (m²), hydraulic conductivity K (m/s, k·ρw·g/μ with water at 20 °C: an "
+        "approximation), porosity n, solid thermal conductivity λs and heat capacity ρs·cs. In mcmc mode the best "
+        "value, the median, the highest-density interval (computed in the space of the priors, −log₁₀ k for k) and the "
+        "identifiability (posterior standard deviation over that of a uniform prior: near 1, the data teach nothing). "
+        "In direct mode, the values of the configuration.",
+        ("D", "M"), p.SoilParams, "results",
+        lambda twin, a: soil_properties(twin.results, a.level, [layer.name for layer in twin.config.layers]),
+        outputs=("layers", "level", *SOIL_OUTPUTS),
+    ),
+    Question(
+        "posterior_samples", "BN-32", "raw_results", N_("Posterior samples of the parameters"),
+        "The posterior samples as an array (chain, iteration, layer, parameter) in the space of the priors "
+        "(−log₁₀ k, n, λs, ρs·cs; k = 10^−x in m²), with its axes. Chains, range of computed iterations, burn "
+        "(kept iterations skipped at the start) and thin choose the samples.",
+        ("M",), p.PosteriorParams, "results",
+        lambda twin, a: posterior_samples(twin.results, a.chains, a.iter_range, a.burn, a.thin),
+        outputs=("samples", "iteration", "chain", "layer", "parameter", "parameter_unit", "space"),
+    ),
+    Question(
+        "convergence", "BN-40", "diagnostics", N_("Have the chains converged?"),
+        "Per parameter and layer: R̂ (rank-normalized), bulk and tail ESS and MCSE of the mean. Per chain: "
+        "acceptance, mean energy, bulk ESS and the largest R̂ without that chain. The statistics follow the "
+        "selection (chains, burn, thin); `rhat_max_all` uses everything, to show the effect of the selection.",
+        ("M",), p.ConvergenceParams, "results",
+        lambda twin, a: convergence(twin.results, a.chains, a.burn, a.thin),
+        outputs=(
+            "rhat", "ess_bulk", "ess_tail", "mcse_mean", "rhat_max", "rhat_max_all", "chain", "acceptance",
+            "mean_energy", "chain_ess_bulk", "rhat_without_chain", "layer", "parameter", "samples_per_chain",
+            "burn_in_converged", "burn_in_iterations",
+        ),
+    ),
+    Question(
+        "energy_breakdown", "BN-43", "diagnostics", N_("What is the energy made of?"),
+        "The terms of the energy (negative Gaussian log-likelihood) of the recorded fit: N·ln σ², the residual term "
+        "Σr²/(2σ²), the implicit RMSE and the reference N/2, the value the residual term takes when σ is right.",
+        ("D", "M"), p.SigmaParams, "results",
+        lambda twin, a: energy_breakdown(twin.results, a.sigma),
+        outputs=("n_points", "sigma", "log_term", "residual_term", "energy", "implicit_rmse", "reference", "ratio"),
     ),
 )
