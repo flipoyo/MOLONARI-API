@@ -39,6 +39,7 @@ from ...errors import Cancelled, UserError
 from ..column import ColumnInputs
 from ..layout import SamplingLayout, sampling_layout
 from ..results import InversionResult, QuantileResult
+from ..stats import split_rhat
 from .forward import build_geometry, energy, make_forward, rmse, to_forward_result
 
 N_PARAM = len(INVERTED_PARAMETERS)
@@ -62,21 +63,6 @@ class Progress:
 def to_physical(x):
     """(…, L, 4) espace des priors → (…, L, 4) paramètres physiques (k, n, λs, ρs·cs)."""
     return jnp.stack([10.0 ** (-x[..., 0]), x[..., 1], x[..., 2], x[..., 3]], axis=-1)
-
-
-def split_rhat(chains: np.ndarray) -> np.ndarray:
-    """R-hat « split » classique (Gelman et al., BDA3). chains : (N, n, ...) → (...)."""
-    chains = np.asarray(chains, np.float64)
-    n = chains.shape[1] // 2
-    if n < 2:
-        return np.full(chains.shape[2:], np.nan)
-    halves = np.concatenate([chains[:, :n], chains[:, -n:]], axis=0)
-    within = halves.var(axis=1, ddof=1).mean(axis=0)
-    between_over_n = halves.mean(axis=1).var(axis=0, ddof=1)
-    var_hat = (n - 1) / n * within + between_over_n
-    with np.errstate(divide="ignore", invalid="ignore"):
-        rhat = np.sqrt(var_hat / within)
-    return np.where(within > 0, rhat, np.inf)
 
 
 class DreamSampler:
