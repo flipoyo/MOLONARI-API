@@ -1,6 +1,7 @@
 """TwinAPI et catalogue des questions, sans HTTP : catalogue cohérent, paramètres validés, erreurs, réponses
 sur de vrais twins calculés, cache des résultats."""
 
+import dataclasses
 import re
 import shutil
 from pathlib import Path
@@ -50,7 +51,7 @@ def test_catalog_is_consistent():
         assert question.ref in PLAN_1_0_0, question.ref
         assert SEMVER.match(question.since)
         assert set(question.modes) <= {"D", "M"} and question.modes
-        assert question.requires in ("config", "results")
+        assert question.requires in ("none", "folder", "config", "results")
         assert question.label in french, question.label  # libellé traduit
         assert question.description.endswith("."), question.id
         assert question.level == ("high" if question.ref.startswith("HN-") else "low")
@@ -101,6 +102,74 @@ def test_questions_of_a_twin_follow_its_mode(api):
     mcmc = {q.id for q in api.questions("twin_03")}
     assert mcmc == {q.id for q in CATALOG}
     assert direct == mcmc - {"chain_data", "sampling_layout"}
+
+
+# Questions sans twin et sur un dossier ------------------------------------------------------------
+
+
+def probe_question(requires, run):
+    from molonari_twin.api import Question
+    from molonari_twin.contract import params as p
+
+    return Question("probe", "BN-10", "build", "probe", "Probe.", ("D", "M"), p.NoParams, requires, run)
+
+
+@pytest.fixture
+def probing(twins, tmp_path, monkeypatch):
+    """Un TwinAPI (sur une copie des twins) dont le catalogue a une question « none » (probe_global) et une
+    question « folder » (probe_folder)."""
+    from molonari_twin.api import service
+
+    shutil.copytree(twins, tmp_path / "twins")
+
+    seen = {}
+
+    def folder(twin, _):
+        seen.update(ref=twin.ref, folder=twin.folder, config=twin.config)
+        return Answer(data={}, provenance={"question": "probe_folder", "parameters": {}})
+
+    questions = (probe_question("none", lambda twin, _: Answer(data={}, provenance={"parameters": {}})),
+                 probe_question("folder", folder))
+    questions = (dataclasses.replace(questions[0], id="probe_global", ref="BN-10"),
+                 dataclasses.replace(questions[1], id="probe_folder", ref="BN-11"))
+    monkeypatch.setattr(service, "CATALOG", questions)
+    return TwinAPI(tmp_path / "twins"), seen
+
+
+def test_a_question_without_a_twin_is_asked_with_ask_global(probing):
+    api, _ = probing
+    answer = api.ask_global("probe_global")
+    assert answer.provenance == {"parameters": {}, "question": "probe_global", "ref": "BN-10"}  # sans twin
+    assert code_of(lambda: api.ask("twin_01", "probe_global")).code == "E_QUESTION_NO_TWIN"
+    assert code_of(lambda: api.ask_global("probe_folder")).code == "E_QUESTION_TWIN_REQUIRED"
+    assert code_of(lambda: api.ask_global("no_such_question")).code == "E_QUESTION_UNKNOWN"
+
+
+def test_parameters_are_validated_for_a_question_without_a_twin(probing):
+    api, _ = probing
+    error = code_of(lambda: api.ask_global("probe_global", {"bogus": 1}))
+    assert error.code == "E_QUESTION_PARAMS" and error.params["question"] == "probe_global"
+
+
+def test_a_question_on_a_folder_reads_no_configuration(probing):
+    api, seen = probing
+    answer = api.ask("twin_09", "probe_folder")
+    assert seen == {"ref": "twin_09", "folder": api.twins_folder / "twin_09", "config": None}
+    assert answer.provenance["twin"] == "twin_09" and "twin_id" not in answer.provenance
+    assert code_of(lambda: api.ask("twin_99", "probe_folder")).code == "E_TWIN_NOT_FOUND"
+
+
+def test_a_question_on_a_folder_is_asked_even_when_the_configuration_is_invalid(probing):
+    api, _ = probing
+    (api.twins_folder / "twin_09" / "twin.yaml").write_text("schema: [", encoding="utf-8")
+    assert api.ask("twin_09", "probe_folder").provenance["question"] == "probe_folder"
+    assert code_of(lambda: api._config("twin_09")).code == "E_TWIN_CONFIG_INVALID"
+
+
+def test_questions_of_a_twin_leave_out_the_questions_without_a_twin(probing):
+    api, _ = probing
+    assert [q.id for q in api.questions("twin_01")] == ["probe_folder"]
+    assert [q.id for q in api.questions()] == ["probe_global", "probe_folder"]
 
 
 # Erreurs ------------------------------------------------------------------------------------------

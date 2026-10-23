@@ -117,6 +117,8 @@ MESSAGES: dict[str, str] = {
     "E_QUESTION_CHAINS": "Unknown chain {chain}: this computation has {n} chains, numbered from 0.",
     "E_QUESTION_LEVEL": "The level must be strictly between 0 and 1 (got {level}).",
     "E_QUESTION_NO_FIELDS": "No temperature fields were stored with this computation (store_fields: none).",
+    "E_QUESTION_NO_TWIN": "Question \"{question}\" is not about a twin: ask it without one.",
+    "E_QUESTION_TWIN_REQUIRED": "Question \"{question}\" is about a twin: ask it of one.",
     "E_QUESTION_NOT_AVAILABLE": "Question \"{question}\" does not apply to {ref} ({mode} mode).",
     "E_QUESTION_OUT_OF_RANGE": "{name} = {value} is outside the results ({low} – {high}).",
     "E_QUESTION_PARAMS": "Invalid parameters for question \"{question}\":\n{issues}",

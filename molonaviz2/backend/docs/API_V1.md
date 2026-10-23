@@ -17,6 +17,7 @@ curl -X POST http://127.0.0.1:8765/v1/twins/twin_03/questions/HN-12 -H 'Accept: 
 Une question se désigne par son identifiant (`exchanged_volume`) ou par sa référence du plan (`HN-12`). Le
 corps de la requête contient ses paramètres ; un paramètre inconnu est refusé. Les questions lisent la
 configuration ou les résultats d'un twin : elles répondent tout de suite, sans tâche et sans charger le moteur.
+Celles qui n'ont pas besoin de twin (catalogue des paramètres) se posent à `POST /v1/questions/{id}`.
 Calculer un twin passe par `POST /v1/twins/{ref}/run`, puis par le suivi de la tâche (`/v1/tasks/…`).
 
 ## Réponse
@@ -46,6 +47,7 @@ et de `params`.
 | `E_QUESTION_NOT_AVAILABLE` | 409 |
 | `E_QUESTION_NO_FIELDS` | 422 |
 | `E_QUESTION_NO_POSTERIOR` | 422 |
+| `E_QUESTION_NO_TWIN` | 409 |
 | `E_QUESTION_OUT_OF_RANGE` | 422 |
 | `E_QUESTION_PARAMS` | 422 |
 | `E_QUESTION_PERIOD_EMPTY` | 422 |
@@ -54,6 +56,7 @@ et de `params`.
 | `E_QUESTION_SIGMA_REQUIRED` | 422 |
 | `E_QUESTION_THIN` | 422 |
 | `E_QUESTION_TIMES` | 422 |
+| `E_QUESTION_TWIN_REQUIRED` | 409 |
 | `E_QUESTION_UNKNOWN` | 404 |
 | `E_QUESTION_Z_OR_T` | 422 |
 | `E_REQUEST_INVALID` | 422 |

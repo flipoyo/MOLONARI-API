@@ -4,9 +4,10 @@
     answer = api.ask("twin_03", "exchanged_volume", {"start": "2016-06-28T00:00:00"})
 
 Étapes : la question existe (E_QUESTION_UNKNOWN), ses paramètres sont valides (E_QUESTION_PARAMS, avec un
-problème par champ), le twin existe (E_TWIN_NOT_FOUND), la question a un sens pour son mode
-(E_QUESTION_NOT_AVAILABLE), et ses résultats existent si elle en a besoin (E_TWIN_NOT_COMPUTED, ou E_TWIN_FROZEN
-si la configuration a changé après le calcul). Les résultats relus sont gardés en cache, tant que leur
+problème par champ), la question s'adresse à un twin (E_QUESTION_NO_TWIN sinon : voir ask_global), le twin existe
+(E_TWIN_NOT_FOUND), la question a un sens pour son mode (E_QUESTION_NOT_AVAILABLE), et ses résultats existent si
+elle en a besoin (E_TWIN_NOT_COMPUTED, ou E_TWIN_FROZEN si la configuration a changé après le calcul). Une question
+sur le dossier (`folder`) saute la lecture de la configuration : elle la lit elle-même, valide ou non. Les résultats relus sont gardés en cache, tant que leur
 metadata.json ne change pas. La provenance de la réponse nomme le twin, son twin_id et ses résultats.
 """
 
@@ -49,7 +50,7 @@ class TwinAPI:
         if twin is None:
             return list(CATALOG)
         mode = MODES[self._config(twin).mode]
-        return [q for q in CATALOG if mode in q.modes]
+        return [q for q in CATALOG if q.requires != "none" and mode in q.modes]
 
     # Twins -------------------------------------------------------------------------------------
 
@@ -95,12 +96,18 @@ class TwinAPI:
 
         question = self.question(question_id)
         arguments = self.parameters(question, params)
+        if question.requires == "none":
+            raise UserError("E_QUESTION_NO_TWIN", question=question.id)
+        folder = self.twin_folder(ref)
+        origin = {"twin": ref}
+        if question.requires == "folder":
+            answer = question.run(TwinContext(ref=ref, config=None, folder=folder), arguments)
+            return self._with_provenance(answer, question, origin)
         config = self._config(ref)
         mode = MODES[config.mode]
         if mode not in question.modes:
             raise UserError("E_QUESTION_NOT_AVAILABLE", question=question.id, ref=ref, mode=config.mode)
-        twin = TwinContext(ref=ref, config=config)
-        origin = {"twin": ref}
+        twin = TwinContext(ref=ref, config=config, folder=folder)
         if question.requires == "results":
             status = twin_status(config)
             if status.state == "modified":
@@ -109,6 +116,17 @@ class TwinAPI:
                 raise UserError("E_TWIN_NOT_COMPUTED", ref=ref)
             twin.results = self._results(status.results_dir)
             origin.update(twin_id=status.twin_id, results=str(status.results_dir))
-        answer = question.run(twin, arguments)
+        return self._with_provenance(question.run(twin, arguments), question, origin)
+
+    def ask_global(self, question_id: str, params: dict | None = None) -> Answer:
+        """Pose une question qui n'a pas besoin de twin (`requires="none"`) : E_QUESTION_TWIN_REQUIRED sinon."""
+        question = self.question(question_id)
+        arguments = self.parameters(question, params)
+        if question.requires != "none":
+            raise UserError("E_QUESTION_TWIN_REQUIRED", question=question.id)
+        return self._with_provenance(question.run(TwinContext(ref="", config=None), arguments), question, {})
+
+    @staticmethod
+    def _with_provenance(answer: Answer, question: Question, origin: dict) -> Answer:
         provenance = {**answer.provenance, "question": question.id, "ref": question.ref, **origin}
         return dataclasses.replace(answer, provenance=provenance)

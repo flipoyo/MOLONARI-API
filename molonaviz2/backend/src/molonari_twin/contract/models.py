@@ -107,7 +107,9 @@ class QuestionOut(BaseModel):
     description: str
     modes: list[Literal["D", "M"]] = Field(description="Twin modes: D (direct), M (mcmc).")
     since: str = Field(description="API version that introduced the question.")
-    requires: Literal["config", "results"] = Field(description="What the twin must have: a valid configuration, or computed results.")
+    requires: Literal["none", "folder", "config", "results"] = Field(description="What the question needs: no twin (none), "
+                                                                       "the folder of a twin even with an invalid configuration (folder), "
+                                                                       "a valid configuration (config), or computed results (results).")
     params_schema: dict[str, Any] = Field(description="JSON Schema of the parameters (request body).")
 
 

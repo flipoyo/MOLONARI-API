@@ -302,8 +302,10 @@
       "type": "string"
      },
      "requires": {
-      "description": "What the twin must have: a valid configuration, or computed results.",
+      "description": "What the question needs: no twin (none), the folder of a twin even with an invalid configuration (folder), a valid configuration (config), or computed results (results).",
       "enum": [
+       "none",
+       "folder",
        "config",
        "results"
       ],
@@ -644,6 +646,86 @@
      }
     },
     "summary": "List Questions"
+   }
+  },
+  "/v1/questions/{question_id}": {
+   "post": {
+    "description": "Ask a question that is about no twin (`requires: none` in GET /v1/questions). The body is its parameters.",
+    "operationId": "ask_global_v1_questions__question_id__post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "question_id",
+      "required": true,
+      "schema": {
+       "title": "Question Id",
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "anyOf": [
+         {
+          "additionalProperties": true,
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "Parameters of the question (see params_schema).",
+        "title": "Params"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AnswerOut"
+        }
+       },
+       "application/x-npz": {}
+      },
+      "description": "Answer, as JSON or as an npz archive."
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorOut"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "409": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorOut"
+        }
+       }
+      },
+      "description": "Conflict"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorOut"
+        }
+       }
+      },
+      "description": "Invalid request or parameters."
+     }
+    },
+    "summary": "Ask Global"
    }
   },
   "/v1/tasks/{task_id}": {

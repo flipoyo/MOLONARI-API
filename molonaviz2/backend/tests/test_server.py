@@ -244,7 +244,7 @@ def test_events_stream_waits_for_new_events(client, fake):
 
 def test_openapi_lists_the_v1_endpoints(client):
     paths = client.get("/openapi.json").json()["paths"]
-    assert set(paths) == {"/v1/info", "/v1/questions", "/v1/twins/{ref}/questions/{question_id}", "/v1/twins/{ref}/run",
+    assert set(paths) == {"/v1/info", "/v1/questions", "/v1/questions/{question_id}", "/v1/twins/{ref}/questions/{question_id}", "/v1/twins/{ref}/run",
                           "/v1/tasks/{task_id}", "/v1/tasks/{task_id}/result", "/v1/tasks/{task_id}/events"}
     assert set(paths["/v1/tasks/{task_id}"]) == {"get", "delete"}
 
@@ -448,3 +448,24 @@ def test_api_process_answers_questions_without_the_engine(tmp_path, computed_twi
     completed = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=300, check=False)
     assert completed.returncode == 0, completed.stderr[-3000:]
     assert completed.stdout.strip() == "[]"
+
+
+def test_questions_without_a_twin_have_their_own_endpoint(computed_twins, monkeypatch):
+    import dataclasses
+
+    from molonari_twin.api import CATALOG, service
+    from molonari_twin.questions import Answer, Quantity
+
+    ping = dataclasses.replace(CATALOG[0], id="ping", ref="BN-10", requires="none", modes=("D", "M"),
+                               run=lambda twin, _: Answer(data={"pong": Quantity(1, "1")}, provenance={"parameters": {}}))
+    monkeypatch.setattr(service, "CATALOG", (*CATALOG, ping))
+    client = TestClient(create_app(FakeTaskRunner(), computed_twins))
+    body = client.post("/v1/questions/ping").json()
+    assert body["data"]["pong"]["value"] == 1 and body["provenance"] == {"parameters": {}, "question": "ping", "ref": "BN-10"}
+    assert client.post("/v1/questions/ping", headers={"Accept": "application/x-npz"}).status_code == 200
+    assert_error(ask(client, "twin_01", "ping"), 409, "E_QUESTION_NO_TWIN")
+    assert_error(client.post("/v1/questions/describe"), 409, "E_QUESTION_TWIN_REQUIRED")
+    assert_error(client.post("/v1/questions/nothing"), 404, "E_QUESTION_UNKNOWN")
+    assert_error(client.post("/v1/questions/ping", json={"bogus": 1}), 422, "E_QUESTION_PARAMS")
+    assert "ping" in [q["id"] for q in client.get("/v1/questions").json()["questions"]]
+    assert "ping" not in [q["id"] for q in client.get("/v1/questions", params={"twin": "twin_01"}).json()["questions"]]

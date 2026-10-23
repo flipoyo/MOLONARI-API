@@ -41,6 +41,7 @@ from ..contract.models import (
     TaskResultOut,
 )
 from ..errors import Issue, UserError
+from ..questions import Answer
 from ..tasks.model import TERMINAL, TaskRecord, error_dict
 from ..tasks.runner import TaskRunner, task_key
 
@@ -53,6 +54,8 @@ HTTP_STATUS = {
     "E_TWIN_NOT_COMPUTED": 409,
     "E_TWIN_FROZEN": 409,
     "E_QUESTION_NOT_AVAILABLE": 409,
+    "E_QUESTION_NO_TWIN": 409,
+    "E_QUESTION_TWIN_REQUIRED": 409,
     "E_TASK_KIND_UNKNOWN": 422,
 }
 ERRORS = {404: {"model": ErrorOut}, 409: {"model": ErrorOut}}
@@ -75,7 +78,13 @@ def question_out(question: Question) -> QuestionOut:
 
 def questions_description() -> str:
     lines = ["Ask a question of the catalogue (GET /v1/questions) to a twin. The body is the question's parameters.", ""]
-    lines += [f"- `{q.id}` ({q.ref}, {'/'.join(q.modes)}): {q.description}" for q in CATALOG]
+    lines += [f"- `{q.id}` ({q.ref}, {'/'.join(q.modes)}): {q.description}" for q in CATALOG if q.requires != "none"]
+    return "\n".join(lines)
+
+
+def global_questions_description() -> str:
+    lines = ["Ask a question that is about no twin (`requires: none` in GET /v1/questions). The body is its parameters.", ""]
+    lines += [f"- `{q.id}` ({q.ref}): {q.description}" for q in CATALOG if q.requires == "none"]
     return "\n".join(lines)
 
 
@@ -118,16 +127,24 @@ def create_app(runner: TaskRunner, twins_folder: str | Path, events_poll_s: floa
         """The catalogue; with `twin`, only the questions that apply to its mode."""
         return QuestionsOut(api_version=API_VERSION, questions=[question_out(q) for q in questions.questions(twin)])
 
-    @app.post("/v1/twins/{ref}/questions/{question_id}", description=questions_description(),
-              responses={**ERRORS,
-                         200: {"content": {NPZ_MEDIA_TYPE: {}}, "description": "Answer, as JSON or as an npz archive."}})
-    def ask(ref: str, question_id: str, request: Request,
-            params: Annotated[dict[str, Any] | None, Body(description="Parameters of the question (see params_schema).")] = None,
-            ) -> AnswerOut:
-        answer = questions.ask(ref, question_id, params)
+    def reply(answer: Answer, request: Request) -> Response:
         if NPZ_MEDIA_TYPE in request.headers.get("accept", ""):
             return Response(answer_to_npz(answer), media_type=NPZ_MEDIA_TYPE)
         return JSONResponse(answer_to_json(answer))
+
+    answered = {**ERRORS, 200: {"content": {NPZ_MEDIA_TYPE: {}}, "description": "Answer, as JSON or as an npz archive."}}
+
+    @app.post("/v1/questions/{question_id}", description=global_questions_description(), responses=answered)
+    def ask_global(question_id: str, request: Request,
+                   params: Annotated[dict[str, Any] | None, Body(description="Parameters of the question (see params_schema).")] = None,
+                   ) -> AnswerOut:
+        return reply(questions.ask_global(question_id, params), request)
+
+    @app.post("/v1/twins/{ref}/questions/{question_id}", description=questions_description(), responses=answered)
+    def ask(ref: str, question_id: str, request: Request,
+            params: Annotated[dict[str, Any] | None, Body(description="Parameters of the question (see params_schema).")] = None,
+            ) -> AnswerOut:
+        return reply(questions.ask(ref, question_id, params), request)
 
     @app.post("/v1/twins/{ref}/run", status_code=202, responses=ERRORS)
     def run_twin(ref: str, body: RunIn | None = None) -> TaskOut:

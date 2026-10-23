@@ -6,6 +6,9 @@ elle a un sens (D : direct, M : mcmc), la version d'API qui l'a introduite, le m
 qu'elle exige du twin (sa configuration, ou ses résultats). Le catalogue complet, avec les lots suivants, est
 décrit dans docs/CATALOGUE_QUESTIONS.md (espace cgs).
 
+Ce qu'une question exige : `none` (aucun twin), `folder` (le dossier d'un twin, même à la configuration invalide),
+`config` (une configuration valide) ou `results` (des résultats calculés).
+
 Ajouter une question : une fonction pure dans questions/, un modèle de paramètres dans contract/params.py, une
 entrée ici. Le serveur, la documentation (docs/API_V1.md) et les tests la prennent alors en compte.
 """
@@ -14,6 +17,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Literal
 
 from ..contract import params as p
@@ -35,11 +39,15 @@ from ..questions import (
 
 @dataclass
 class TwinContext:
-    """Ce qu'une question peut lire d'un twin : sa configuration, et ses résultats s'il est calculé."""
+    """Ce qu'une question peut lire d'un twin : son dossier, sa configuration, et ses résultats s'il est calculé.
+
+    Une question « folder » ne reçoit que le dossier (`config` est None) : elle lit elle-même la configuration,
+    qui peut être invalide. Une question « none » n'a pas de twin : TwinAPI.ask_global ne crée pas de contexte."""
 
     ref: str
-    config: object  # TwinConfig
+    config: object | None  # TwinConfig
     results: object | None = None  # TwinResults
+    folder: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -51,7 +59,7 @@ class Question:
     description: str
     modes: tuple[str, ...]
     params: type[p.Params]
-    requires: Literal["config", "results"]
+    requires: Literal["none", "folder", "config", "results"]
     run: Callable[[TwinContext, p.Params], Answer] = field(repr=False)
     since: str = "1.0.0"
     outputs: tuple[str, ...] = ()  # noms des grandeurs de la réponse (certaines selon le mode ou les données)
