@@ -16,7 +16,7 @@ EXAMPLES = Path(__file__).resolve().parents[2] / "examples" / "twins"
 
 # Modules et paquets de premier niveau de molonari_twin ("__init__" : le paquet lui-même).
 MODULES = {"__init__", "__main__", "errors", "gitinfo", "i18n", "domain", "io", "processing", "engine", "twin", "storage", "questions", "facade",
-           "tasks"}
+           "tasks", "server"}
 
 # Imports interdits au backend (préfixes de noms de modules) : Qt, bibliothèques graphiques, frontend.
 FORBIDDEN = ["PySide6", "pyqtgraph", "matplotlib", "molonaviz2"]
@@ -197,7 +197,10 @@ def test_facade_exports_exist_and_are_the_original_objects():
     assert facade.Cancelled is dream.Cancelled
 
 
-# 5. Tâches -----------------------------------------------------------------------------------------
+# 5. Tâches et serveur ------------------------------------------------------------------------------
+
+# Seuls modules hors de server/ autorisés à importer le serveur (au moment de l'appel) : fichier → raison.
+SERVER_IMPORTERS = {"twin/cli.py": "commande `molonari-twin serve`"}
 
 
 def test_tasks_do_not_load_the_web_stack_or_the_engine():
@@ -209,3 +212,15 @@ def test_tasks_do_not_load_the_web_stack_or_the_engine():
     completed = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=300, check=False)
     assert completed.returncode == 0, completed.stderr[-4000:]
     assert completed.stdout.strip() == "[]", f"modules chargés par tasks/ : {completed.stdout.strip()}"
+
+
+def test_only_the_command_line_imports_the_server():
+    problems = []
+    for path in files():
+        relative = path.relative_to(SOURCE).as_posix()
+        if relative.startswith("server/") or relative in SERVER_IMPORTERS:
+            continue
+        for line, module in imported_modules(path):
+            if module == "molonari_twin.server" or module.startswith("molonari_twin.server."):
+                problems.append(f"{relative}:{line} importe le serveur")
+    assert not problems, "\n".join(problems)

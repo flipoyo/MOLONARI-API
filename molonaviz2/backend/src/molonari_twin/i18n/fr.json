@@ -95,6 +95,7 @@
  "This folder does not look like a laboratory: it should contain temperature_sensors, pressure_sensors and/or shafts.": "Ce dossier ne ressemble pas à un laboratoire : il devrait contenir temperature_sensors, pressure_sensors et/ou shafts.",
  "This laboratory is used by: {studies}. Delete these studies first.": "Ce laboratoire est utilisé par : {studies}. Supprimez d'abord ces études.",
  "Times must be strictly increasing.": "Les dates doivent être strictement croissantes.",
+ "Twin \"{ref}\" not found in {folder}.": "Twin « {ref} » introuvable dans {folder}.",
  "Twin folder not found: {path}": "Dossier twin introuvable : {path}",
  "Unknown chain {chain}: this computation has {n} chains, numbered from 0.": "Chaîne {chain} inconnue : ce calcul a {n} chaînes, numérotées à partir de 0.",
  "Unknown task type \"{kind}\" (available: {kinds}).": "Type de tâche inconnu « {kind} » (disponibles : {kinds}).",
