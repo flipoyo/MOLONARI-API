@@ -62,8 +62,8 @@ def run_forward(inputs: ColumnInputs, config: ForwardConfig) -> ForwardResult:
 
 
 def sampling_layout(config: InversionConfig, nb_times: int | None = None):
-    """Itérations et champs (T, q) par chaîne pour ces réglages : voir jax.dream.SamplingLayout."""
-    from .jax.dream import sampling_layout as _layout
+    """Itérations et champs (T, q) par chaîne pour ces réglages : voir layout.SamplingLayout (sans JAX)."""
+    from .layout import sampling_layout as _layout
 
     return _layout(config, nb_times)
 
