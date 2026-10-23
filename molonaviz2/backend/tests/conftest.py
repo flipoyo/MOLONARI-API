@@ -1,4 +1,5 @@
 import os
+import shutil
 from pathlib import Path
 
 import numpy as np
@@ -12,6 +13,7 @@ DATA_DIR = WORKSPACE_ROOT / "data"
 LAB_DIR = DATA_DIR / "Laboratory"
 POINT034_DIR = DATA_DIR / "SamplingPoints" / "Point034"
 FIXTURES = Path(__file__).parent / "fixtures"
+EXAMPLE_TWINS = Path(__file__).resolve().parents[2] / "examples" / "twins"
 
 
 def synthetic_inputs(nb_times=300, depths=(0.1, 0.2, 0.3, 0.4), offset=0.0, step_minutes=15, sigma_t=0.1):
@@ -95,3 +97,28 @@ def commit_file(repo, name, text):
     path.write_text(text)
     git_run(repo, "add", name)
     git_run(repo, "commit", "-q", "-m", f"modifie {name}")
+
+
+@pytest.fixture(scope="session")
+def computed_twins(tmp_path_factory):
+    """Dossier de twins : twin_01 (direct) et twin_03 (mcmc, raccourci) calculés, twin_09 jamais calculé."""
+    folder = tmp_path_factory.mktemp("workspace") / "twins"
+    folder.mkdir()
+    shutil.copytree(EXAMPLE_TWINS / "twin_01", folder / "twin_01")
+    shutil.copytree(EXAMPLE_TWINS / "twin_03", folder / "twin_03")
+    yaml = folder / "twin_03" / "twin.yaml"
+    text = yaml.read_text(encoding="utf-8")
+    for old, new in (("nb_iter: 300", "nb_iter: 40"), ("burn_in_max: 300", "burn_in_max: 20"), ("n_field_samples: 40", "n_field_samples: 16")):
+        assert old in text
+        text = text.replace(old, new)
+    yaml.write_text(text, encoding="utf-8")
+    shutil.copytree(EXAMPLE_TWINS / "twin_01", folder / "twin_09")
+    yaml = folder / "twin_09" / "twin.yaml"
+    # Un autre réglage (le nom seul ne change pas le twin_id : ce serait un doublon de twin_01, déjà calculé).
+    yaml.write_text(yaml.read_text(encoding="utf-8").replace("name: twin_01", "name: twin_09").replace("nb_cells: 100", "nb_cells: 80"),
+                    encoding="utf-8")
+    from molonari_twin.twin.run import run_twin
+
+    run_twin(folder / "twin_01")
+    run_twin(folder / "twin_03")
+    return folder

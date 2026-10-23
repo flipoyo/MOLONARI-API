@@ -37,6 +37,7 @@
  "Invalid YAML: {error}": "YAML invalide : {error}",
  "Invalid configuration:": "Config invalide :",
  "Invalid parameters for question \"{question}\":\n{issues}": "Paramètres invalides pour la question « {question} » :\n{issues}",
+ "Invalid request:\n{issues}": "Requête invalide :\n{issues}",
  "Laboratory \"{name}\" already exists: kept as is.": "Le laboratoire « {name} » existe déjà : conservé tel quel.",
  "Laboratory \"{name}\" does not exist.": "Le laboratoire « {name} » n'existe pas.",
  "Layer bottoms must be strictly increasing and positive.": "Les bas de couche doivent être positifs et strictement croissants.",

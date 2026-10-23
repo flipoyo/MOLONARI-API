@@ -13,7 +13,7 @@ from molonari_twin.errors import UserError
 from molonari_twin.i18n import load_catalog
 from molonari_twin.questions import Answer
 from molonari_twin.twin.results import load_results
-from molonari_twin.twin.run import run_twin, twin_status
+from molonari_twin.twin.run import twin_status
 
 EXAMPLES = Path(__file__).resolve().parents[2] / "examples" / "twins"
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
@@ -22,27 +22,9 @@ PLAN_1_0_0 = {f"HN-{n:02d}" for n in (1, 2, 10, 11, 12, 20, 30, 33, 40, 41, 42, 
     f"BN-{n:02d}" for n in (1, 2, 3, 4, 10, 11, 12, 13, 15, 20, 21, 22, 30, 31, 32, 34, 36, 40, 43, 60)}
 
 
-@pytest.fixture(scope="module")
-def twins(tmp_path_factory):
-    """Dossier de twins : twin_01 (direct) et twin_03 (mcmc, raccourci) calculés, twin_09 jamais calculé."""
-    folder = tmp_path_factory.mktemp("workspace") / "twins"
-    folder.mkdir()
-    shutil.copytree(EXAMPLES / "twin_01", folder / "twin_01")
-    shutil.copytree(EXAMPLES / "twin_03", folder / "twin_03")
-    yaml = folder / "twin_03" / "twin.yaml"
-    text = yaml.read_text(encoding="utf-8")
-    for old, new in (("nb_iter: 300", "nb_iter: 40"), ("burn_in_max: 300", "burn_in_max: 20"), ("n_field_samples: 40", "n_field_samples: 16")):
-        assert old in text
-        text = text.replace(old, new)
-    yaml.write_text(text, encoding="utf-8")
-    shutil.copytree(EXAMPLES / "twin_01", folder / "twin_09")
-    yaml = folder / "twin_09" / "twin.yaml"
-    # Un autre réglage (le nom seul ne change pas le twin_id : ce serait un doublon de twin_01, déjà calculé).
-    yaml.write_text(yaml.read_text(encoding="utf-8").replace("name: twin_01", "name: twin_09").replace("nb_cells: 100", "nb_cells: 80"),
-                    encoding="utf-8")
-    run_twin(folder / "twin_01")
-    run_twin(folder / "twin_03")
-    return folder
+@pytest.fixture
+def twins(computed_twins):
+    return computed_twins
 
 
 @pytest.fixture

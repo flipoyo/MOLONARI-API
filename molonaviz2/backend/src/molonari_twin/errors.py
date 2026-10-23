@@ -171,6 +171,7 @@ MESSAGES: dict[str, str] = {
     "W_PROVENANCE_NO_REMOTE": "The git repository of the {target} has no remote: its URL is not recorded.",
     # tasks, server, api
     "E_PARAM_INVALID": "{message}",
+    "E_REQUEST_INVALID": "Invalid request:\n{issues}",
     "E_DIAG_FAILURE": "The diagnostic task failed on purpose at block {block}.",
     "E_SERVER_EXTRA_MISSING": "The server needs optional dependencies: install molonari-twin[server].",
     "E_TASK_FINISHED": "Task {task_id} is already finished ({state}).",
