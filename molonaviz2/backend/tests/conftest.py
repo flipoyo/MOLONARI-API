@@ -101,14 +101,16 @@ def commit_file(repo, name, text):
 
 @pytest.fixture(scope="session")
 def computed_twins(tmp_path_factory):
-    """Dossier de twins : twin_01 (direct) et twin_03 (mcmc, raccourci) calculés, twin_09 jamais calculé."""
+    """Dossier de twins : twin_01 (direct) et twin_03 (mcmc, raccourci, champs complets) calculés, twin_09 jamais calculé."""
     folder = tmp_path_factory.mktemp("workspace") / "twins"
     folder.mkdir()
     shutil.copytree(EXAMPLE_TWINS / "twin_01", folder / "twin_01")
     shutil.copytree(EXAMPLE_TWINS / "twin_03", folder / "twin_03")
     yaml = folder / "twin_03" / "twin.yaml"
     text = yaml.read_text(encoding="utf-8")
-    for old, new in (("nb_iter: 300", "nb_iter: 40"), ("burn_in_max: 300", "burn_in_max: 20"), ("n_field_samples: 40", "n_field_samples: 16")):
+    for old, new in (("nb_iter: 300", "nb_iter: 40"), ("burn_in_max: 300", "burn_in_max: 20"), ("n_field_samples: 40", "n_field_samples: 16"),
+                     # champs complets (T et q) : nécessaires à P(q > 0) et à BN-30, qui n'existent pas aux capteurs seuls
+                     ("schema: molonaviz-twin/1", "schema: molonari-twin/1.1.0"), ("  time_step: 1", "  time_step: 1\n  store_fields: full")):
         assert old in text
         text = text.replace(old, new)
     yaml.write_text(text, encoding="utf-8")

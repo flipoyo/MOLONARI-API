@@ -15,7 +15,10 @@ from molonari_twin.questions import (
     chain_data,
     coverage,
     describe,
+    exchange_direction,
     exchanged_volume,
+    fit_quality,
+    heat_budget,
     observed_at,
     predictive_band,
     provenance,
@@ -489,3 +492,114 @@ def test_provenance_comes_from_the_metadata(direct):
     assert answer.data["duration"].value == 1.5 and answer.data["duration"].unit == "s"
     assert answer.data["reproduce"].value == "molonari-twin run twin_x"
     assert answer.provenance["repositories"] == {"twin": {"commit": "1234"}}
+
+
+# Sens des échanges, bilan de chaleur et qualité de l'ajustement (lot C3) --------------------------
+
+
+def with_flux(results, q):
+    return dataclasses.replace(results, flux=results.flux.assign(q_riverbed_m_per_s=q))
+
+
+def test_infiltration_everywhere_has_no_reversal(direct):
+    data = exchange_direction(with_flux(direct, 1e-6)).data
+    assert data["infiltration_share"].value == 1.0 and data["exfiltration_share"].value == 0.0
+    assert data["reversals"].value == 0 and data["dominant"].value == "infiltration"
+    data = exchange_direction(with_flux(direct, -1e-6)).data
+    assert (data["infiltration_share"].value, data["dominant"].value) == (0.0, "exfiltration")
+
+
+@pytest.mark.parametrize("periods", [1, 2, 3])
+def test_a_sinusoid_over_k_periods_reverses_about_twice_per_period(direct, periods):
+    n = len(direct.flux)
+    q = np.sin(2 * np.pi * periods * (np.arange(n) + 0.5) / n)
+    data = exchange_direction(with_flux(direct, q)).data
+    assert data["reversals"].value in (2 * periods - 1, 2 * periods)
+    assert data["infiltration_share"].value == pytest.approx(0.5, abs=0.02)
+    assert data["infiltration_share"].value + data["exfiltration_share"].value == pytest.approx(1.0)
+
+
+def test_shares_are_weighted_by_the_time_intervals(direct):
+    n = len(direct.flux)
+    dates = (np.datetime64("2016-06-27T00:00:00") + np.array([0, 1, 2, 3, 100]).astype("timedelta64[h]"))
+    flux = direct.flux.iloc[:5].assign(date=dates, q_riverbed_m_per_s=[1.0, 1.0, 1.0, -1.0, -1.0])
+    share = exchange_direction(dataclasses.replace(direct, flux=flux)).data["infiltration_share"].value
+    assert 0.0 < share < 0.1 and n > 5  # le long dernier intervalle compte pour presque tout
+
+
+def test_exchange_direction_in_direct_mode_has_no_probability(direct):
+    assert "p_infiltration" not in exchange_direction(direct).data
+
+
+def test_exchange_direction_period_is_checked(direct):
+    assert code_of(lambda: exchange_direction(direct, start=np.datetime64("2030-01-01"))) == "E_QUESTION_PERIOD_EMPTY"
+
+
+def constant_heat(results, advective, conductive):
+    shape = results.temperature.shape
+    return dataclasses.replace(results, heat_flux_advective=np.full(shape, advective), heat_flux_conductive=np.full(shape, conductive))
+
+
+def test_constant_heat_fluxes_have_exact_means_and_shares(direct):
+    answer = heat_budget(constant_heat(direct, -6.0, 2.0), z=0.2)
+    data = answer.data
+    assert (data["advective"].value, data["conductive"].value, data["total"].value) == (-6.0, 2.0, -4.0)
+    assert data["advective_share"].value == pytest.approx(0.75) and data["conductive_share"].value == pytest.approx(0.25)
+    assert data["dominant"].value == "advection" and data["advective"].unit == "W/m²"
+    assert data["lateral"].value == 0.0 and data["lateral_share"].value == 0.0
+    assert "W_LATERAL_NOT_MODELLED" in [w.code for w in answer.warnings]
+    assert heat_budget(constant_heat(direct, 1.0, -3.0)).data["dominant"].value == "conduction"
+
+
+def test_heat_budget_depth_and_period(direct):
+    results = dataclasses.replace(direct, heat_flux_advective=np.tile(direct.depths[:, None], (1, direct.temperature.shape[1])),
+                                  heat_flux_conductive=np.zeros_like(direct.temperature))
+    middle = float(direct.depths[2] + direct.depths[3]) / 2
+    assert heat_budget(results, z=middle).data["advective"].value == pytest.approx(middle)
+    assert heat_budget(results, z=0.0).data["advective"].value == pytest.approx(float(direct.depths[0]))  # première cellule
+    assert code_of(lambda: heat_budget(results, z=99.0)) == "E_QUESTION_OUT_OF_RANGE"
+    times = direct.times.astype("datetime64[s]")
+    assert heat_budget(results, start=times[10], end=times[19]).data["points"].value == 10
+    assert code_of(lambda: heat_budget(results, start=times[-1] + np.timedelta64(1, "D"))) == "E_QUESTION_PERIOD_EMPTY"
+
+
+def test_heat_budget_needs_format_2(direct):
+    old = dataclasses.replace(direct, heat_flux_advective=None, heat_flux_conductive=None)
+    assert code_of(lambda: heat_budget(old)) == "E_QUESTION_NO_FIELDS"
+
+
+def with_residuals(results, residual):
+    """Résultats dont le simulé vaut le mesuré + `residual` (°C), à chaque capteur."""
+    frame = results.residuals.copy()
+    for i in (1, 2, 3):
+        frame[f"t{i}_simulated"] = frame[f"t{i}_measured"] + residual
+        frame[f"t{i}_residual"] = residual
+    return dataclasses.replace(results, residuals=frame)
+
+
+def test_zero_residuals_have_zero_rmse_and_bias(direct):
+    data = fit_quality(with_residuals(direct, 0.0)).data
+    np.testing.assert_array_equal(data["rmse"].value, np.zeros(3))
+    np.testing.assert_array_equal(data["bias"].value, np.zeros(3))
+    np.testing.assert_array_equal(data["rmse_over_sigma"].value, np.zeros(3))
+
+
+def test_a_constant_offset_gives_bias_and_rmse_equal_to_the_offset(direct):
+    data = fit_quality(with_residuals(direct, 0.2)).data
+    np.testing.assert_allclose(data["bias"].value, 0.2)
+    np.testing.assert_allclose(data["rmse"].value, 0.2)
+    np.testing.assert_allclose(data["rmse_over_sigma"].value, 2.0)  # σ = 0,1
+    assert np.isnan(data["lag1_autocorrelation"].value).all()  # résidu constant : autocorrélation indéfinie
+    assert fit_quality(with_residuals(direct, 0.2), sigma=0.4).data["rmse_over_sigma"].value[0] == pytest.approx(0.5)
+
+
+def test_residual_autocorrelation_separates_noise_from_structure(direct):
+    n = len(direct.residuals)
+    noise = np.random.default_rng(0).normal(0, 0.1, n)
+    assert abs(fit_quality(with_residuals(direct, noise)).data["lag1_autocorrelation"].value[0]) < 0.3
+    wave = 0.1 * np.sin(np.arange(n) / 30)
+    assert fit_quality(with_residuals(direct, wave)).data["lag1_autocorrelation"].value[0] > 0.9
+
+
+def test_fit_quality_in_direct_mode_has_no_coverage(direct):
+    assert "coverage_per_sensor" not in fit_quality(direct).data

@@ -28,6 +28,9 @@ from ..questions import (
     chain_data,
     describe,
     describe_sampling,
+    exchange_direction,
+    fit_quality,
+    heat_budget,
     provenance,
     residuals,
     sensor_report,
@@ -92,12 +95,37 @@ CATALOG: tuple[Question, ...] = (
         outputs=("mean", "median", "p5", "p95", "points", "start", "end"),
     ),
     Question(
+        "exchange_direction", "HN-11", "water", N_("Does the river feed the aquifer?"),
+        "Share of the time in infiltration (q ≥ 0, the river feeds the aquifer) and in exfiltration, weighted by the "
+        "time intervals, dominant regime and number of reversals of q at the riverbed over the period. In mcmc mode "
+        "with stored water-flux fields (`store_fields: full`), the probability that q ≥ 0 over the posterior samples, "
+        "as a series and averaged over time.",
+        ("D", "M"), p.PeriodParams, "results",
+        lambda twin, a: exchange_direction(twin.results, a.start, a.end),
+        outputs=(
+            "infiltration_share", "exfiltration_share", "dominant", "reversals", "points", "start", "end",
+            "p_infiltration", "p_infiltration_series", "field_time", "samples",
+        ),
+    ),
+    Question(
         "exchanged_volume", "HN-12", "water", N_("What volume of water crossed 1 m² of riverbed?"),
         "Infiltrated, exfiltrated and net volumes over the period, integrated by trapezoids with the sign change cut "
         "at the zero crossing: m³/m², or m³ when an area is given.",
         ("D", "M"), p.VolumeParams, "results",
         lambda twin, a: twin_exchanged_volume(twin.results, a.start, a.end, a.area),
         outputs=("infiltration", "exfiltration", "net"),
+    ),
+    Question(
+        "heat_budget", "HN-20", "heat", N_("Which processes carry the heat?"),
+        "Mean advective, conductive and total heat fluxes (W/m², positive downwards) at a depth over the period, "
+        "their shares (absolute value of the mean) and the dominant process. The lateral exchange is not modelled: "
+        "it is zero, with a warning. Needs results of format 2.0.0.",
+        ("D", "M"), p.HeatBudgetParams, "results",
+        lambda twin, a: heat_budget(twin.results, a.z, a.start, a.end),
+        outputs=(
+            "advective", "conductive", "lateral", "total", "advective_share", "conductive_share", "lateral_share",
+            "dominant", "depth", "points", "start", "end",
+        ),
     ),
     Question(
         "temperature", "HN-30", "temperature", N_("What is the temperature at a depth and a date?"),
@@ -115,6 +143,14 @@ CATALOG: tuple[Question, ...] = (
         ("D", "M"), p.IntervalParams, "results",
         lambda twin, a: sensor_report(twin.results, a.level, a.sigma, a.seed),
         outputs=("time", "measured", "simulated", "level", "z", "sigma") + BANDS,
+    ),
+    Question(
+        "fit_quality", "HN-40", "reliability", N_("Does the model reproduce the measurements?"),
+        "Per sensor: RMSE, bias, RMSE/σT, lag-1 autocorrelation of the residuals and, in mcmc mode with stored "
+        "fields, the share of measurements the predictive band covers. Arrays are sensor first: (3,).",
+        ("D", "M"), p.IntervalParams, "results",
+        lambda twin, a: fit_quality(twin.results, a.level, a.sigma, a.seed),
+        outputs=("rmse", "bias", "rmse_over_sigma", "lag1_autocorrelation", "sigma", "level", "coverage_per_sensor"),
     ),
     Question(
         "provenance", "HN-43", "reliability", N_("Where does this result come from?"),

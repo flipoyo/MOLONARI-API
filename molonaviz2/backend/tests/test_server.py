@@ -355,15 +355,15 @@ def ask(client, ref, question, params=None, npz=False):
 def test_question_catalog(asking):
     body = asking.get("/v1/questions").json()
     assert body["api_version"] == API_VERSION
-    assert [q["id"] for q in body["questions"]] == ["describe", "water_flux", "exchanged_volume", "temperature",
-                                                     "sensor_intervals", "provenance", "residuals", "chain_data",
-                                                     "sampling_layout"]
+    assert [q["id"] for q in body["questions"]] == ["describe", "water_flux", "exchange_direction", "exchanged_volume",
+                                                     "heat_budget", "temperature", "sensor_intervals", "fit_quality",
+                                                     "provenance", "residuals", "chain_data", "sampling_layout"]
     volume = next(q for q in body["questions"] if q["id"] == "exchanged_volume")
     assert volume["ref"] == "HN-12" and volume["level"] == "high" and volume["modes"] == ["D", "M"]
     assert volume["label_en"] == "What volume of water crossed 1 m² of riverbed?"
     assert set(volume["params_schema"]["properties"]) == {"start", "end", "area"}
     assert volume["params_schema"]["additionalProperties"] is False
-    assert len(asking.get("/v1/questions", params={"twin": "twin_01"}).json()["questions"]) == 7
+    assert len(asking.get("/v1/questions", params={"twin": "twin_01"}).json()["questions"]) == 10
     assert_error(asking.get("/v1/questions", params={"twin": "twin_99"}), 404, "E_TWIN_NOT_FOUND")
 
 

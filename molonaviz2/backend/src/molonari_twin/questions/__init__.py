@@ -6,7 +6,9 @@ Partie du cœur : ni Qt, ni HTTP, ni phrase traduite. Chaque question renvoie un
 
 from .answer import Answer, Quantity
 from .chains import chain_data
-from .flux import twin_exchanged_volume, water_flux
+from .fit import fit_quality, lag1_autocorrelation
+from .flux import exchange_direction, twin_exchanged_volume, water_flux
+from .heat import heat_budget
 from .intervals import (
     MEASUREMENT_LEVELS,
     measurement_interval,
@@ -27,7 +29,11 @@ __all__ = [
     "coverage",
     "describe",
     "describe_sampling",
+    "exchange_direction",
     "exchanged_volume",
+    "fit_quality",
+    "heat_budget",
+    "lag1_autocorrelation",
     "measurement_interval",
     "observed_at",
     "predictive_band",

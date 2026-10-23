@@ -45,6 +45,12 @@ class VolumeParams(PeriodParams):
     area: float | None = Field(default=None, gt=0, description="Riverbed area represented by the point (m²). Without it, volumes are per m² (m³/m²).")
 
 
+class HeatBudgetParams(PeriodParams):
+    z: float = Field(default=0.0, ge=0, description="Depth (m, positive downwards) where the heat fluxes are read. "
+                     "From 0 to the centre of the first cell, the first cell is used (like the flux at the riverbed); "
+                     "deeper, the fluxes are interpolated linearly.")
+
+
 class TemperatureParams(Params):
     z: float | None = Field(default=None, ge=0, description="Depth (m, positive downwards) between the centres of the first and last "
                             "computed cells, e.g. 0.004 to 0.396 m for 50 cells over 0.4 m (the error gives the range). "

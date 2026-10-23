@@ -103,6 +103,22 @@ Mean, median, 5th and 95th percentiles of the flux q at the riverbed (z = 0) ove
 
 Sorties : `mean`, `median`, `p5`, `p95`, `points`, `start`, `end`.
 
+### `exchange_direction` (HN-11)
+
+**Does the river feed the aquifer?** — *La rivière alimente-t-elle la nappe ?*
+
+Share of the time in infiltration (q ≥ 0, the river feeds the aquifer) and in exfiltration, weighted by the time intervals, dominant regime and number of reversals of q at the riverbed over the period. In mcmc mode with stored water-flux fields (`store_fields: full`), the probability that q ≥ 0 over the posterior samples, as a series and averaged over time.
+
+- Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
+- Requête : `POST /v1/twins/{ref}/questions/exchange_direction`
+
+| Paramètre | Type | Défaut | Bornes | Description |
+|---|---|---|---|---|
+| `start` | date ou null | — |  | First date of the period, included (ISO 8601, no time zone). Default: start of the results. |
+| `end` | date ou null | — |  | Last date of the period, included (ISO 8601, no time zone). Default: end of the results. |
+
+Sorties : `infiltration_share`, `exfiltration_share`, `dominant`, `reversals`, `points`, `start`, `end`, `p_infiltration`, `p_infiltration_series`, `field_time`, `samples`.
+
 ### `exchanged_volume` (HN-12)
 
 **What volume of water crossed 1 m² of riverbed?** — *Quel volume d'eau a traversé 1 m² de lit ?*
@@ -119,6 +135,25 @@ Infiltrated, exfiltrated and net volumes over the period, integrated by trapezoi
 | `area` | nombre ou null | — | > 0 | Riverbed area represented by the point (m²). Without it, volumes are per m² (m³/m²). |
 
 Sorties : `infiltration`, `exfiltration`, `net`.
+
+## Chaleur
+
+### `heat_budget` (HN-20)
+
+**Which processes carry the heat?** — *Quels processus transportent la chaleur ?*
+
+Mean advective, conductive and total heat fluxes (W/m², positive downwards) at a depth over the period, their shares (absolute value of the mean) and the dominant process. The lateral exchange is not modelled: it is zero, with a warning. Needs results of format 2.0.0.
+
+- Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
+- Requête : `POST /v1/twins/{ref}/questions/heat_budget`
+
+| Paramètre | Type | Défaut | Bornes | Description |
+|---|---|---|---|---|
+| `start` | date ou null | — |  | First date of the period, included (ISO 8601, no time zone). Default: start of the results. |
+| `end` | date ou null | — |  | Last date of the period, included (ISO 8601, no time zone). Default: end of the results. |
+| `z` | nombre | `0.0` | ≥ 0 | Depth (m, positive downwards) where the heat fluxes are read. From 0 to the centre of the first cell, the first cell is used (like the flux at the riverbed); deeper, the fluxes are interpolated linearly. |
+
+Sorties : `advective`, `conductive`, `lateral`, `total`, `advective_share`, `conductive_share`, `lateral_share`, `dominant`, `depth`, `points`, `start`, `end`.
 
 ## Températures
 
@@ -156,6 +191,23 @@ Per sensor: the measurement with its instrument interval (± z·σ), the simulat
 Sorties : `time`, `measured`, `simulated`, `level`, `z`, `sigma`, `field_time`, `credible`, `predictive`, `coverage`, `coverage_per_sensor`, `points`.
 
 ## Fiabilité
+
+### `fit_quality` (HN-40)
+
+**Does the model reproduce the measurements?** — *Le modèle reproduit-il les mesures ?*
+
+Per sensor: RMSE, bias, RMSE/σT, lag-1 autocorrelation of the residuals and, in mcmc mode with stored fields, the share of measurements the predictive band covers. Arrays are sensor first: (3,).
+
+- Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
+- Requête : `POST /v1/twins/{ref}/questions/fit_quality`
+
+| Paramètre | Type | Défaut | Bornes | Description |
+|---|---|---|---|---|
+| `level` | nombre | `0.9` | > 0, < 1 | Level of the intervals, e.g. 0.9 for 90 %. |
+| `sigma` | nombre ou null | — | ≥ 0 | Measurement uncertainty of the thermometers (°C). Default: the one recorded with the results. |
+| `seed` | entier | `0` | ≥ 0 | Seed of the measurement noise drawn for the predictive band (same seed, same band). |
+
+Sorties : `rmse`, `bias`, `rmse_over_sigma`, `lag1_autocorrelation`, `sigma`, `level`, `coverage_per_sensor`.
 
 ### `provenance` (HN-43)
 

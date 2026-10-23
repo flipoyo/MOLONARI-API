@@ -131,6 +131,7 @@ MESSAGES: dict[str, str] = {
     "E_QUESTION_SIGMA": "The measurement uncertainty σ must be positive or zero (got {sigma}).",
     "E_QUESTION_THIN": "The display thinning must be a whole number of at least 1 (got {thin}).",
     "E_QUESTION_TIMES": "Times must be strictly increasing.",
+    "W_LATERAL_NOT_MODELLED": "Lateral heat exchange is not modelled by this version: it is taken as zero.",
     "W_COVERAGE_NO_POINTS": "No measurement can be compared with the band: coverage is undefined.",
     # twin
     "E_NO_CLEANED_MEASURES": "No cleaned measurements yet: apply a cleaning first.",
