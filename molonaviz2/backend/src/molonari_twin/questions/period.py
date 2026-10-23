@@ -32,3 +32,17 @@ def _text(value) -> str:
 
 def period_parameters(start=None, end=None) -> dict:
     return {"start": None if start is None else _text(start), "end": None if end is None else _text(end)}
+
+
+def time_weights(times) -> np.ndarray:
+    """Poids de chaque date dans une moyenne sur le temps : la moitié des intervalles qui l'entourent (trapèzes).
+
+    Des dates régulières donnent des poids égaux, sauf aux deux extrémités (moitié). Une seule date pèse 1."""
+    seconds = as_seconds(times).astype("datetime64[s]").astype(np.int64).astype(float)
+    if seconds.size < 2:
+        return np.ones(seconds.size)
+    steps = np.diff(seconds)
+    weights = np.zeros(seconds.size)
+    weights[:-1] += steps / 2
+    weights[1:] += steps / 2
+    return weights

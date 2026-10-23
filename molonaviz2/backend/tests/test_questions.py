@@ -13,16 +13,26 @@ from molonari_twin.questions import (
     Answer,
     Quantity,
     chain_data,
+    check_twin,
+    convergence,
     coverage,
     describe,
+    energy_breakdown,
+    exchange_direction,
     exchanged_volume,
+    fit_quality,
+    heat_budget,
     observed_at,
+    parameters_catalog,
+    posterior_samples,
     predictive_band,
     provenance,
     residuals,
+    result_fields,
     sensor_intervals,
     sensor_report,
     sensor_samples,
+    soil_properties,
     temperature_at,
     twin_exchanged_volume,
     water_flux,
@@ -489,3 +499,407 @@ def test_provenance_comes_from_the_metadata(direct):
     assert answer.data["duration"].value == 1.5 and answer.data["duration"].unit == "s"
     assert answer.data["reproduce"].value == "molonari-twin run twin_x"
     assert answer.provenance["repositories"] == {"twin": {"commit": "1234"}}
+
+
+# Sens des échanges, bilan de chaleur et qualité de l'ajustement (lot C3) --------------------------
+
+
+def with_flux(results, q):
+    return dataclasses.replace(results, flux=results.flux.assign(q_riverbed_m_per_s=q))
+
+
+def test_infiltration_everywhere_has_no_reversal(direct):
+    data = exchange_direction(with_flux(direct, 1e-6)).data
+    assert data["infiltration_share"].value == 1.0 and data["exfiltration_share"].value == 0.0
+    assert data["reversals"].value == 0 and data["dominant"].value == "infiltration"
+    data = exchange_direction(with_flux(direct, -1e-6)).data
+    assert (data["infiltration_share"].value, data["dominant"].value) == (0.0, "exfiltration")
+
+
+@pytest.mark.parametrize("periods", [1, 2, 3])
+def test_a_sinusoid_over_k_periods_reverses_about_twice_per_period(direct, periods):
+    n = len(direct.flux)
+    q = np.sin(2 * np.pi * periods * (np.arange(n) + 0.5) / n)
+    data = exchange_direction(with_flux(direct, q)).data
+    assert data["reversals"].value in (2 * periods - 1, 2 * periods)
+    assert data["infiltration_share"].value == pytest.approx(0.5, abs=0.02)
+    assert data["infiltration_share"].value + data["exfiltration_share"].value == pytest.approx(1.0)
+
+
+def test_shares_are_weighted_by_the_time_intervals(direct):
+    n = len(direct.flux)
+    dates = (np.datetime64("2016-06-27T00:00:00") + np.array([0, 1, 2, 3, 100]).astype("timedelta64[h]"))
+    flux = direct.flux.iloc[:5].assign(date=dates, q_riverbed_m_per_s=[1.0, 1.0, 1.0, -1.0, -1.0])
+    share = exchange_direction(dataclasses.replace(direct, flux=flux)).data["infiltration_share"].value
+    assert 0.0 < share < 0.1 and n > 5  # le long dernier intervalle compte pour presque tout
+
+
+def test_exchange_direction_in_direct_mode_has_no_probability(direct):
+    assert "p_infiltration" not in exchange_direction(direct).data
+
+
+def test_exchange_direction_period_is_checked(direct):
+    assert code_of(lambda: exchange_direction(direct, start=np.datetime64("2030-01-01"))) == "E_QUESTION_PERIOD_EMPTY"
+
+
+def constant_heat(results, advective, conductive):
+    shape = results.temperature.shape
+    return dataclasses.replace(results, heat_flux_advective=np.full(shape, advective), heat_flux_conductive=np.full(shape, conductive))
+
+
+def test_constant_heat_fluxes_have_exact_means_and_shares(direct):
+    answer = heat_budget(constant_heat(direct, -6.0, 2.0), z=0.2)
+    data = answer.data
+    assert (data["advective"].value, data["conductive"].value, data["total"].value) == (-6.0, 2.0, -4.0)
+    assert data["advective_share"].value == pytest.approx(0.75) and data["conductive_share"].value == pytest.approx(0.25)
+    assert data["dominant"].value == "advection" and data["advective"].unit == "W/m²"
+    assert data["lateral"].value == 0.0 and data["lateral_share"].value == 0.0
+    assert "W_LATERAL_NOT_MODELLED" in [w.code for w in answer.warnings]
+    assert heat_budget(constant_heat(direct, 1.0, -3.0)).data["dominant"].value == "conduction"
+
+
+def test_heat_budget_depth_and_period(direct):
+    results = dataclasses.replace(direct, heat_flux_advective=np.tile(direct.depths[:, None], (1, direct.temperature.shape[1])),
+                                  heat_flux_conductive=np.zeros_like(direct.temperature))
+    middle = float(direct.depths[2] + direct.depths[3]) / 2
+    assert heat_budget(results, z=middle).data["advective"].value == pytest.approx(middle)
+    assert heat_budget(results, z=0.0).data["advective"].value == pytest.approx(float(direct.depths[0]))  # première cellule
+    assert code_of(lambda: heat_budget(results, z=99.0)) == "E_QUESTION_OUT_OF_RANGE"
+    times = direct.times.astype("datetime64[s]")
+    assert heat_budget(results, start=times[10], end=times[19]).data["points"].value == 10
+    assert code_of(lambda: heat_budget(results, start=times[-1] + np.timedelta64(1, "D"))) == "E_QUESTION_PERIOD_EMPTY"
+
+
+def test_heat_budget_needs_format_2(direct):
+    old = dataclasses.replace(direct, heat_flux_advective=None, heat_flux_conductive=None)
+    assert code_of(lambda: heat_budget(old)) == "E_QUESTION_NO_FIELDS"
+
+
+def with_residuals(results, residual):
+    """Résultats dont le simulé vaut le mesuré + `residual` (°C), à chaque capteur."""
+    frame = results.residuals.copy()
+    for i in (1, 2, 3):
+        frame[f"t{i}_simulated"] = frame[f"t{i}_measured"] + residual
+        frame[f"t{i}_residual"] = residual
+    return dataclasses.replace(results, residuals=frame)
+
+
+def test_zero_residuals_have_zero_rmse_and_bias(direct):
+    data = fit_quality(with_residuals(direct, 0.0)).data
+    np.testing.assert_array_equal(data["rmse"].value, np.zeros(3))
+    np.testing.assert_array_equal(data["bias"].value, np.zeros(3))
+    np.testing.assert_array_equal(data["rmse_over_sigma"].value, np.zeros(3))
+
+
+def test_a_constant_offset_gives_bias_and_rmse_equal_to_the_offset(direct):
+    data = fit_quality(with_residuals(direct, 0.2)).data
+    np.testing.assert_allclose(data["bias"].value, 0.2)
+    np.testing.assert_allclose(data["rmse"].value, 0.2)
+    np.testing.assert_allclose(data["rmse_over_sigma"].value, 2.0)  # σ = 0,1
+    assert np.isnan(data["lag1_autocorrelation"].value).all()  # résidu constant : autocorrélation indéfinie
+    assert fit_quality(with_residuals(direct, 0.2), sigma=0.4).data["rmse_over_sigma"].value[0] == pytest.approx(0.5)
+
+
+def test_residual_autocorrelation_separates_noise_from_structure(direct):
+    n = len(direct.residuals)
+    noise = np.random.default_rng(0).normal(0, 0.1, n)
+    assert abs(fit_quality(with_residuals(direct, noise)).data["lag1_autocorrelation"].value[0]) < 0.3
+    wave = 0.1 * np.sin(np.arange(n) / 30)
+    assert fit_quality(with_residuals(direct, wave)).data["lag1_autocorrelation"].value[0] > 0.9
+
+
+def test_fit_quality_in_direct_mode_has_no_coverage(direct):
+    assert "coverage_per_sensor" not in fit_quality(direct).data
+
+
+# Propriétés du sol, échantillons, convergence et énergie (lot C3) ---------------------------------
+
+PRIOR = {"neg_log10_k": (11.0, 15.0), "porosity": (0.01, 0.25), "lambda_s": (1.0, 5.0), "rhos_cs": (1e6, 1e7)}
+PARAMETERS = tuple(PRIOR)
+
+
+def with_posterior(results, samples, energy=None, acceptance=None, best=None, layers=("a",)):
+    """Résultats mcmc synthétiques : `samples` (I, N, L, 4), priors uniformes de PRIOR, meilleurs paramètres `best`."""
+    kept, chains = samples.shape[:2]
+    best = best if best is not None else samples.reshape(-1, *samples.shape[2:])[0]
+    posterior = {
+        "samples": samples,
+        "energy": np.zeros((kept, chains)) if energy is None else energy,
+        "acceptance": np.full(chains, 0.2) if acceptance is None else acceptance,
+        "resets": np.zeros(chains, np.int64),
+        "iteration": np.arange(1, kept + 1),
+        "layer": np.array(layers),
+        "parameter": np.array(PARAMETERS),
+    }
+    mcmc = {"best_parameters": {layer: dict(zip(PARAMETERS, map(float, best[i]), strict=True)) for i, layer in enumerate(layers)},
+            "burn_in_converged": True, "burn_in_iterations": 12}
+    config = {"mcmc": {"priors": [{name: list(bounds) for name, bounds in PRIOR.items()} for _ in layers]}}
+    metadata = {**direct_metadata(results), "mode": "mcmc", "mcmc": mcmc, "config": config}
+    return dataclasses.replace(results, posterior=posterior, metadata=metadata)
+
+
+def direct_metadata(results):
+    return {key: value for key, value in results.metadata.items() if key not in ("mcmc", "config")}
+
+
+def uniform_samples(kept=400, chains=4, layers=1, seed=0):
+    rng = np.random.default_rng(seed)
+    columns = [rng.uniform(low, high, (kept, chains, layers)) for low, high in PRIOR.values()]
+    return np.stack(columns, axis=-1)
+
+
+def test_direct_soil_properties_are_the_configuration_values(direct):
+    layer = {"z_low": 0.4, "neg_log10_k": 12.0, "porosity": 0.15, "lambda_s": 3.4, "rhos_cs": 5e6}
+    results = dataclasses.replace(direct, metadata={**direct.metadata, "config": {"layers": [layer]}})
+    data = soil_properties(results, layer_names=["sable"]).data
+    assert list(data["layers"].value) == ["sable"]
+    assert data["k"].value[0] == pytest.approx(1e-12) and data["k"].unit == "m²"
+    assert data["K"].value[0] == pytest.approx(1e-12 * 1000.0 * 9.81 / 1.0e-3) and data["K"].unit == "m/s"
+    assert (data["n"].value[0], data["lambda_s"].value[0], data["rhos_cs"].value[0]) == (0.15, 3.4, 5e6)
+    assert data["k"].interval is None and "k_median" not in data and "n_identifiability" not in data
+
+
+def test_samples_equal_to_the_prior_are_not_identifiable(direct):
+    samples = uniform_samples(kept=2000, chains=4)
+    data = soil_properties(with_posterior(direct, samples), level=0.9).data
+    for name in ("n", "lambda_s", "rhos_cs", "k", "K"):
+        assert data[f"{name}_identifiability"].value[0] == pytest.approx(1.0, abs=0.05), name
+    low, high = data["n"].interval
+    assert (high[0] - low[0]) / (0.25 - 0.01) == pytest.approx(0.9, abs=0.03)  # le HDI à 90 % d'une uniforme en couvre 90 %
+    assert data["n_median"].value[0] == pytest.approx(0.13, abs=0.01)
+
+
+def test_a_narrow_posterior_is_identifiable_and_k_bounds_are_ordered(direct):
+    rng = np.random.default_rng(3)
+    samples = uniform_samples(kept=500)
+    samples[..., 0] = rng.normal(13.0, 0.05, samples.shape[:3])  # −log₁₀ k = 13 ± 0,05
+    data = soil_properties(with_posterior(direct, samples, best=np.array([[13.0, 0.1, 3.0, 4e6]]))).data
+    assert data["k_identifiability"].value[0] < 0.05
+    low, high = data["k"].interval
+    assert low[0] < data["k"].value[0] < high[0] and data["k"].value[0] == pytest.approx(1e-13)  # la borne basse de k vient du haut de −log₁₀ k
+    assert data["K"].value[0] == pytest.approx(1e-13 * 9.81e6)
+
+
+def test_soil_level_is_checked(direct):
+    assert code_of(lambda: soil_properties(with_posterior(direct, uniform_samples()), level=1.0)) == "E_QUESTION_LEVEL"
+
+
+def test_posterior_samples_are_chain_first(direct):
+    samples = uniform_samples(kept=30, chains=5, layers=2)
+    results = with_posterior(direct, samples, best=samples[0, 0], layers=("a", "b"))
+    data = posterior_samples(results).data
+    assert data["samples"].value.shape == (5, 30, 2, 4) and data["space"].value == "prior"
+    np.testing.assert_array_equal(data["samples"].value[3, 7], samples[7, 3])
+    assert list(data["parameter"].value) == list(PARAMETERS) and list(data["layer"].value) == ["a", "b"]
+    selected = posterior_samples(results, chains=[4, 1], iterations=(5, 20), burn=2, thin=3).data
+    assert list(selected["chain"].value) == [4, 1]
+    assert list(selected["iteration"].value) == [5, 8, 11, 14, 17, 20]  # burn 2, puis une sur 3 (la 3ᵉ, la 6ᵉ…), puis 5 ≤ i ≤ 20
+    np.testing.assert_array_equal(selected["samples"].value[0, 0], samples[4, 4])
+    assert code_of(lambda: posterior_samples(results, chains=[9])) == "E_QUESTION_CHAINS"
+    assert code_of(lambda: posterior_samples(results, thin=0)) == "E_QUESTION_THIN"
+
+
+def test_posterior_samples_need_a_posterior(direct):
+    assert code_of(lambda: posterior_samples(direct)) == "E_QUESTION_NO_POSTERIOR"
+    assert code_of(lambda: convergence(direct)) == "E_QUESTION_NO_POSTERIOR"
+
+
+def test_convergence_of_independent_chains(direct):
+    results = with_posterior(direct, uniform_samples(kept=400, chains=5, layers=2), layers=("a", "b"))
+    data = convergence(results).data
+    for name in ("rhat", "ess_bulk", "ess_tail", "mcse_mean"):
+        assert data[name].value.shape == (2, 4), name
+    assert (data["rhat"].value < 1.05).all() and (data["ess_bulk"].value > 1000).all()
+    assert data["rhat_max"].value == pytest.approx(data["rhat_max_all"].value)
+    assert data["chain_ess_bulk"].value.shape == (5, 2, 4) and data["rhat_without_chain"].value.shape == (5,)
+    np.testing.assert_allclose(data["acceptance"].value, 0.2)
+    assert data["burn_in_converged"].value is True and data["burn_in_iterations"].value == 12
+
+
+def test_a_stray_chain_is_found_by_the_r_hat_without_it(direct):
+    samples = uniform_samples(kept=300, chains=5)
+    samples[:, 2] += 0.5 * (np.array(list(PRIOR.values()))[:, 1] - np.array(list(PRIOR.values()))[:, 0])  # chaîne 2 décalée
+    energy = np.zeros((300, 5))
+    energy[:, 2] = 7.0
+    data = convergence(with_posterior(direct, samples, energy=energy)).data
+    assert data["rhat_max"].value > 1.2
+    without = data["rhat_without_chain"].value
+    assert without[2] < 1.05 and (np.delete(without, 2) > 1.2).all()
+    assert data["mean_energy"].value[2] == 7.0 and data["mean_energy"].value[0] == 0.0
+
+
+def test_convergence_follows_the_selection(direct):
+    samples = uniform_samples(kept=300, chains=5)
+    samples[:, 2] += 1.0  # chaîne 2 aberrante
+    results = with_posterior(direct, samples)
+    everything = convergence(results).data
+    selected = convergence(results, chains=[0, 1, 3, 4]).data
+    assert selected["rhat_max"].value < 1.05 < everything["rhat_max"].value
+    assert selected["rhat_max_all"].value == pytest.approx(everything["rhat_max_all"].value)  # indépendant de la sélection
+    assert convergence(results, burn=100, thin=2).data["samples_per_chain"].value == 100
+    assert np.isnan(convergence(results, chains=[0, 1]).data["rhat_without_chain"].value).all()  # R̂ demande 2 chaînes
+
+
+def test_energy_terms_add_up_and_the_implicit_rmse_is_the_rms_residual(direct):
+    data = energy_breakdown(direct).data
+    _, measured, simulated = __import__("molonari_twin.questions.sensors", fromlist=["sensor_series"]).sensor_series(direct)
+    residual = simulated - measured
+    n, sigma = residual.size, 0.1
+    assert data["n_points"].value == n and data["reference"].value == n / 2
+    assert data["log_term"].value == pytest.approx(n * np.log(sigma**2))
+    assert data["residual_term"].value == pytest.approx(np.sum(residual**2) / (2 * sigma**2))
+    assert data["log_term"].value + data["residual_term"].value == pytest.approx(data["energy"].value)
+    assert data["implicit_rmse"].value == pytest.approx(np.sqrt(np.mean(residual**2)))
+    assert data["ratio"].value == pytest.approx(data["residual_term"].value / (n / 2))
+    assert energy_breakdown(direct, sigma=0.2).data["sigma"].value == 0.2
+
+
+def test_with_the_right_sigma_the_residual_term_is_near_its_reference(direct):
+    noise = np.random.default_rng(5).normal(0.0, 0.1, len(direct.residuals))
+    data = energy_breakdown(with_residuals(direct, noise)).data
+    assert data["ratio"].value == pytest.approx(1.0, abs=0.25)  # 240 résidus : écart-type du rapport √(2/240) ≈ 0,09
+
+
+@pytest.mark.slow
+def test_energy_breakdown_equals_the_energy_of_the_engine(tmp_path):
+    import jax
+    import jax.numpy as jnp
+    from molonari_twin.engine.jax.forward import build_geometry, energy, make_forward
+
+    inputs, layers = synthetic_inputs(nb_times=80), [LayerSpec("a", 0.4)]
+    forward = run_forward(inputs, ForwardConfig(layers, nb_cells=20))
+    results = results_of(tmp_path, forward)
+    geom = build_geometry(inputs, [0.4], 20)
+    fields = jax.jit(make_forward(geom))(jnp.asarray([layer.physical() for layer in layers], jnp.float64))
+    expected = float(energy(fields["temperature"], geom, inputs.sigma_temperature**2))
+    assert energy_breakdown(results).data["energy"].value == pytest.approx(expected, rel=1e-9)
+
+
+# Catalogue des paramètres, vérification d'une configuration et champs (lot C3) --------------------
+
+
+def test_parameters_catalog_covers_every_setting_key_and_prior():
+    from molonari_twin.domain.compute import (
+        DEFAULT_PRIORS,
+        INVERTED_PARAMETERS,
+        SETTING_LIMITS,
+        STORE_FIELDS,
+        InversionConfig,
+    )
+    from molonari_twin.twin.config import LAYER_KEYS, MCMC_KEYS
+
+    data = parameters_catalog().data
+    assert list(data["settings.name"].value) == list(SETTING_LIMITS)
+    count = len(SETTING_LIMITS)
+    for name in ("minimum", "maximum", "default", "unit", "description"):
+        assert data[f"settings.{name}"].value.shape == (count,), name
+    index = list(data["settings.name"].value).index("nb_iter")
+    assert (data["settings.minimum"].value[index], data["settings.maximum"].value[index]) == (1, 1_000_000)
+    assert data["settings.default"].value[index] == InversionConfig(layers=[]).nb_iter
+    unbounded = list(data["settings.name"].value).index("sigma_t")
+    assert np.isnan(data["settings.maximum"].value[unbounded])  # sans borne : nan
+    assert list(data["store_fields.values"].value) == list(STORE_FIELDS) and data["store_fields.default"].value == "sensors"
+    assert list(data["priors.parameter"].value) == list(INVERTED_PARAMETERS)
+    np.testing.assert_array_equal(data["priors.low"].value, [DEFAULT_PRIORS[n].low for n in INVERTED_PARAMETERS])
+    assert (data["priors.physical_low"].value < data["priors.low"].value).all() and (data["priors.high"].value < data["priors.physical_high"].value).all()
+    assert set(data["layer_keys.name"].value) == LAYER_KEYS and set(data["mcmc_keys.name"].value) == MCMC_KEYS
+    for name in ("mcmc_keys", "layer_keys", "settings"):
+        assert all(len(text) > 10 for text in data[f"{name}.description"].value), name
+
+
+def test_parameters_catalog_mentions_the_fields_to_store_for_the_mcmc_run():
+    data = parameters_catalog().data
+    keys = list(data["mcmc_keys.name"].value)
+    assert {"thin", "fields_per_chain", "store_fields", "nb_iter"} <= set(keys)
+
+
+def twin_folder(tmp_path, name="twin_01", edit=None):
+    import shutil
+
+    folder = tmp_path / "twins" / name
+    shutil.copytree(EXAMPLES / name, folder)
+    if edit:
+        yaml = folder / "twin.yaml"
+        yaml.write_text(edit(yaml.read_text(encoding="utf-8")), encoding="utf-8")
+    return folder
+
+
+def test_check_of_a_valid_direct_twin(tmp_path):
+    from molonari_twin.engine.api import release_version
+
+    answer = check_twin(twin_folder(tmp_path))
+    data = answer.data
+    assert data["valid"].value is True and data["state"].value == "new" and data["mode"].value == "direct"
+    from molonari_twin.twin.config import load_twin
+
+    assert data["twin_id"].value == load_twin(tmp_path / "twins" / "twin_01").twin_id(release_version())
+    assert data["issue_codes"].value.size == 0 and answer.warnings == [] and "samples" not in data
+
+
+def test_check_of_an_mcmc_twin_gives_its_cost(tmp_path):
+    from molonari_twin.questions import describe_sampling
+    from molonari_twin.twin.config import load_twin
+
+    folder = twin_folder(tmp_path, "twin_03")
+    data = check_twin(folder).data
+    layout = describe_sampling(load_twin(folder)).data
+    assert data["samples"].value == layout["samples"].value and data["stored_bytes"].value == layout["stored_bytes"].value
+    assert data["max_evaluations"].value == layout["nb_chains"].value * (layout["burn_in_max"].value + layout["nb_iter"].value)
+    assert data["stored_bytes"].unit == "B" and data["store_fields"].value == "sensors"
+
+
+def test_stored_size_depends_on_store_fields(tmp_path):
+    def sizes(store):
+        folder = twin_folder(tmp_path / store, "twin_03", lambda text: text.replace("schema: molonaviz-twin/1", "schema: molonari-twin/1.1.0")
+                             .replace("  time_step: 1", f"  time_step: 1\n  store_fields: {store}"))
+        return check_twin(folder).data["stored_bytes"].value
+
+    none, sensors, full = sizes("none"), sizes("sensors"), sizes("full")
+    assert none == 0 and 0 < sensors < full
+
+
+def test_check_of_an_invalid_twin_is_an_answer_not_an_error(tmp_path):
+    folder = twin_folder(tmp_path, edit=lambda text: text.replace("mode: direct", "mode: sideways").replace("nb_cells: 100", "nb_cells: x"))
+    answer = check_twin(folder)
+    assert answer.data["valid"].value is False and "twin_id" not in answer.data
+    codes = list(answer.data["issue_codes"].value)
+    assert "E_TWIN_MODE" in codes and len(codes) >= 2
+    assert list(answer.data["issue_fields"].value)[codes.index("E_TWIN_MODE")] == "mode"
+    assert [w.code for w in answer.warnings] == codes and len(answer.data["issue_messages"].value) == len(codes)
+
+
+@pytest.mark.parametrize("text", ["schema: [", "", "- a\n"])
+def test_check_of_an_unreadable_twin_file(tmp_path, text):
+    folder = twin_folder(tmp_path, edit=lambda _: text)
+    answer = check_twin(folder)
+    assert answer.data["valid"].value is False and answer.data["issue_codes"].value.size >= 1
+
+
+def test_fields_have_axes_units_and_shapes(direct):
+    data = result_fields(direct).data
+    nz, nt = direct.temperature.shape
+    assert data["depth"].value.shape == (nz,) and data["time"].value.shape == (nt,)
+    for name, unit in (("temperature", "°C"), ("water_flux", "m/s"), ("heat_flux_advective", "W/m²"), ("heat_flux_conductive", "W/m²")):
+        assert data[name].value.shape == (nz, nt) and data[name].unit == unit, name
+    np.testing.assert_array_equal(data["temperature"].value, direct.temperature)
+    np.testing.assert_array_equal(data["water_flux"].value, direct.water_flux_field)
+
+
+def test_fields_selection(direct):
+    times = direct.times.astype("datetime64[s]")
+    depths = direct.depths
+    data = result_fields(direct, ["temperature"], start=times[10], end=times[29], depth_range=(float(depths[2]), float(depths[5])), time_step=4).data
+    assert set(data) == {"depth", "time", "temperature"}
+    np.testing.assert_array_equal(data["depth"].value, depths[2:6])
+    np.testing.assert_array_equal(data["time"].value, times[10:30:4])
+    np.testing.assert_array_equal(data["temperature"].value, direct.temperature[2:6, 10:30:4])
+    assert result_fields(direct, ["temperature", "temperature"]).data.keys() == {"depth", "time", "temperature"}
+
+
+def test_fields_errors(direct):
+    assert code_of(lambda: result_fields(direct, ["pressure"])) == "E_QUESTION_VARIABLE"
+    assert code_of(lambda: result_fields(direct, depth_range=(50.0, 60.0))) == "E_QUESTION_OUT_OF_RANGE"
+    assert code_of(lambda: result_fields(direct, start=np.datetime64("2030-01-01"))) == "E_QUESTION_PERIOD_EMPTY"
+    old = dataclasses.replace(direct, heat_flux_advective=None, water_flux_field=None)
+    assert code_of(lambda: result_fields(old)) == "E_QUESTION_NO_FIELDS"
+    assert result_fields(old, ["temperature"]).data["temperature"].value.shape == direct.temperature.shape  # 1.x : la température seule

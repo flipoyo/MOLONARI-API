@@ -17,9 +17,18 @@ OUTPUT = WORKSPACE / "backend" / "docs" / "API_V1.md"
 CATEGORIES = {
     "discovery": "Découverte",
     "water": "Échanges d'eau",
+    "heat": "Chaleur",
     "temperature": "Températures",
     "reliability": "Fiabilité",
+    "build": "Construire",
     "raw_results": "Accès bruts aux résultats",
+    "diagnostics": "Diagnostics",
+}
+REQUIRES = {
+    "none": "aucun twin.",
+    "folder": "le dossier d'un twin, dont la configuration peut être invalide.",
+    "config": "la configuration du twin.",
+    "results": "ses résultats (twin calculé).",
 }
 MODES = {"D": "direct", "M": "mcmc"}
 
@@ -87,6 +96,7 @@ def render() -> str:
         "Une question se désigne par son identifiant (`exchanged_volume`) ou par sa référence du plan (`HN-12`). Le",
         "corps de la requête contient ses paramètres ; un paramètre inconnu est refusé. Les questions lisent la",
         "configuration ou les résultats d'un twin : elles répondent tout de suite, sans tâche et sans charger le moteur.",
+        "Celles qui n'ont pas besoin de twin (catalogue des paramètres) se posent à `POST /v1/questions/{id}`.",
         "Calculer un twin passe par `POST /v1/twins/{ref}/run`, puis par le suivi de la tâche (`/v1/tasks/…`).",
         "",
         "## Réponse",
@@ -129,8 +139,8 @@ def render() -> str:
                 question.description,
                 "",
                 f"- Modes : {', '.join(MODES[m] for m in question.modes)} ; depuis l'API {question.since} ; exige "
-                + ("la configuration du twin." if question.requires == "config" else "ses résultats (twin calculé)."),
-                f"- Requête : `POST /v1/twins/{{ref}}/questions/{question.id}`",
+                + REQUIRES[question.requires],
+                f"- Requête : `POST /v1/{'' if question.requires == 'none' else 'twins/{ref}/'}questions/{question.id}`",
                 "",
                 *_parameters(question),
                 "",

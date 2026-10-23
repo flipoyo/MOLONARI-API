@@ -14,6 +14,33 @@ Jusqu'à 0.6.0-alpha.1, le backend faisait partie du paquet molonaviz2 : son his
 - Tags : `molonari-twin-vX.Y.Z`, posés sur `CGS-MOLO` après la fusion. La CI (`molonaviz2-version`) vérifie que le tag correspond à `pyproject.toml`.
 - La version entre dans `engine_version()` (`molonari-twin X.Y.Z · jax …`), donc dans chaque `twin_id`. Une nouvelle version du backend donne de nouveaux identifiants ; une version du seul frontend n'en change aucun.
 
+## [0.7.0-alpha.3] - 2026-10-23
+
+Lot C3, suite de la phase 3 du plan twin : fiabilité, diagnostics et accès bruts aux résultats. 11 questions de plus (20 au total), sans charger JAX ni ArviZ. **Les seuils du verdict de fiabilité sont provisoires : ils doivent être validés par un hydrogéologue avant l'API 1.0.0 (choix C9).**
+
+### Ajouté
+- `engine/stats.py`, en numpy et scipy : R̂ (split, puis rank-normalized), ESS bulk et tail, MCSE de la moyenne et HDI. Égaux à ArviZ à 1e-6 près (les tests comparent aux deux).
+- Questions de lecture des résultats :
+  - `exchange_direction` (HN-11) : parts d'infiltration et d'exfiltration, régime dominant, inversions ; en mode M avec `store_fields: full`, P(q ≥ 0) ;
+  - `heat_budget` (HN-20) : flux de chaleur advectif, conductif et total à une profondeur, parts, processus dominant ; le flux latéral n'est pas modélisé : il vaut 0 (`W_LATERAL_NOT_MODELLED`) ;
+  - `fit_quality` (HN-40), `reliability` (HN-41), `soil_properties` (HN-42) ;
+  - `fields` (BN-30), `posterior_samples` (BN-32), `convergence` (BN-40), `energy_breakdown` (BN-43).
+- Questions de configuration : `parameters_catalog` (BN-10, sans twin) et `check` (BN-11, sur le dossier d'un twin, même invalide : une configuration invalide est une réponse avec `valid: false`).
+- `requires` accepte `none` et `folder`. `POST /v1/questions/{id}` pose une question sans twin ; `TwinAPI.ask_global`.
+- `reliability` : verdict vert, orange ou rouge (le pire de six critères : convergence, ajustement, identifiabilité, couverture, données, provenance), avec une raison `W_RELIABILITY_*` par critère. Seuils dans `questions/thresholds.py`, surchargeables par le paramètre `thresholds` et par la variable `MOLONARI_THRESHOLDS` (un YAML) ; la réponse donne les seuils utilisés et `thresholds_validated: false`.
+- `GET /v1/info` donne aussi `twin_schema`, `results_format`, `data_release` (null jusqu'au lot C4) et `device`. `serve` lance au démarrage la tâche `diag.device` : un worker importe JAX, pas le processus de l'API ; `device` vaut null tant qu'elle n'a pas fini.
+- Codes : `W_LATERAL_NOT_MODELLED`, `W_RELIABILITY_CONVERGENCE`, `_FIT`, `_IDENTIFIABILITY`, `_COVERAGE`, `_DATA`, `_PROVENANCE`, `E_QUESTION_VARIABLE`, `E_QUESTION_NO_TWIN`, `E_QUESTION_TWIN_REQUIRED` et `E_THRESHOLDS_INVALID`, traduits.
+
+### Modifié
+- `API_VERSION = 1.0.0-alpha.3`. `InfoOut` et `QuestionOut.requires` s'élargissent.
+- `split_rhat` passe de `engine/jax/dream.py` à `engine/stats.py`, que `dream.py` réimporte (même fonction).
+- `chain_data` partage sa sélection des chaînes et des itérations avec `posterior_samples` (`select_samples`), sans changer de comportement.
+- La conductivité hydraulique K de `soil_properties` suppose l'eau à 20 °C (μ = 1,0e-3 Pa·s) : c'est une approximation.
+
+### Identifiants de référence (0.7.0-alpha.3)
+- `twin_01` et `twin_02` : `7501fd11570bbe5c` ; `twin_03` : `ab5eaa6782784ab4` ; `twin_04` : `50cde3108f8f26ea`.
+- Calculés avec la version publiée (`release_version()`, sans suffixe local).
+
 ## [0.7.0-alpha.2] - 2026-10-23
 
 Lot C2, suite de la phase 3 du plan twin : le contrat de l'API et les questions par HTTP. Les questions lisent la configuration ou les résultats d'un twin ; elles répondent tout de suite, sans tâche et sans charger JAX.

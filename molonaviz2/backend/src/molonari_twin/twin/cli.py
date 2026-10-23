@@ -133,6 +133,7 @@ def serve(args) -> int:
     except ImportError:
         raise UserError("E_SERVER_EXTRA_MISSING") from None
     from ..tasks.local import LocalTaskRunner, default_db_path
+    from ..tasks.runner import task_key
 
     db = Path(args.tasks_db) if args.tasks_db else default_db_path()
     folder = Path(args.twins_folder).resolve()
@@ -140,7 +141,9 @@ def serve(args) -> int:
     print(tr("Local server: http://{host}:{port} (twins: {folder}, tasks: {db})").format(
         host=args.host, port=args.port, folder=folder, db=db))
     try:
-        uvicorn.run(create_app(runner, folder), host=args.host, port=args.port)
+        # L'appareil de calcul est lu par un worker (qui importe JAX) : l'API, elle, ne charge pas le moteur.
+        device = runner.submit("diag.device", {}, key=task_key("diag.device", {}))
+        uvicorn.run(create_app(runner, folder, device_task=device.id), host=args.host, port=args.port)
     finally:
         runner.close()
     return 0

@@ -22,6 +22,7 @@ from molonari_twin.errors import UserError
 from molonari_twin.server.app import create_app
 from molonari_twin.tasks.local import LocalTaskRunner
 from molonari_twin.tasks.model import TaskEvent, TaskRecord, now
+from molonari_twin.twin.results import RESULTS_FORMAT
 
 EXAMPLES = Path(__file__).resolve().parents[2] / "examples" / "twins"
 ERROR_KEYS = {"code", "field", "params", "message_en"}
@@ -136,7 +137,22 @@ def assert_error(response, status, code):
 
 def test_info(client):
     assert client.get("/v1/info").json() == {"api_version": API_VERSION, "backend_version": __version__,
-                                             "runner": "fake", "max_workers": 2}
+                                             "runner": "fake", "max_workers": 2, "twin_schema": "molonari-twin/1.1.0",
+                                             "results_format": RESULTS_FORMAT, "data_release": None, "device": None}
+
+
+def test_info_gives_the_device_once_the_diagnostic_task_succeeded(fake, twins):
+    client = TestClient(create_app(fake, twins, device_task=fake.submit("diag.device", {}).id))
+    assert client.get("/v1/info").json()["device"] is None  # en file
+    fake.finish("t1", "succeeded", {"device": "CPU · float64"})
+    assert client.get("/v1/info").json()["device"] == "CPU · float64"
+    assert TestClient(create_app(fake, twins, device_task="t99")).get("/v1/info").json()["device"] is None  # tâche inconnue
+
+
+def test_info_leaves_the_device_empty_when_the_diagnostic_task_failed(fake, twins):
+    client = TestClient(create_app(fake, twins, device_task=fake.submit("diag.device", {}).id))
+    fake.finish("t1", "failed")
+    assert client.get("/v1/info").json()["device"] is None
 
 
 def test_run_creates_a_task(client, fake, twins):
@@ -244,7 +260,7 @@ def test_events_stream_waits_for_new_events(client, fake):
 
 def test_openapi_lists_the_v1_endpoints(client):
     paths = client.get("/openapi.json").json()["paths"]
-    assert set(paths) == {"/v1/info", "/v1/questions", "/v1/twins/{ref}/questions/{question_id}", "/v1/twins/{ref}/run",
+    assert set(paths) == {"/v1/info", "/v1/questions", "/v1/questions/{question_id}", "/v1/twins/{ref}/questions/{question_id}", "/v1/twins/{ref}/run",
                           "/v1/tasks/{task_id}", "/v1/tasks/{task_id}/result", "/v1/tasks/{task_id}/events"}
     assert set(paths["/v1/tasks/{task_id}"]) == {"get", "delete"}
 
@@ -257,6 +273,19 @@ def local(tmp_path, twins):
     runner = LocalTaskRunner(tmp_path / "tasks.sqlite", cancel_grace_s=1.0, poll_s=0.02)
     yield runner, TestClient(create_app(runner, twins, events_poll_s=0.02))
     runner.close()
+
+
+def test_device_is_filled_in_by_a_worker_that_loads_jax(tmp_path, twins):
+    runner = LocalTaskRunner(tmp_path / "tasks.sqlite", poll_s=0.02)
+    try:
+        task = runner.submit("diag.device", {})
+        client = TestClient(create_app(runner, twins, device_task=task.id))
+        assert client.get("/v1/info").json()["device"] in (None, "CPU · float64")  # le worker démarre
+        assert runner.wait(task.id, timeout_s=120).state == "succeeded"
+        info = client.get("/v1/info").json()
+        assert info["device"].endswith("float64") and info["twin_schema"] == "molonari-twin/1.1.0"
+    finally:
+        runner.close()
 
 
 def test_api_answers_while_a_task_runs(local):
@@ -355,15 +384,17 @@ def ask(client, ref, question, params=None, npz=False):
 def test_question_catalog(asking):
     body = asking.get("/v1/questions").json()
     assert body["api_version"] == API_VERSION
-    assert [q["id"] for q in body["questions"]] == ["describe", "water_flux", "exchanged_volume", "temperature",
-                                                     "sensor_intervals", "provenance", "residuals", "chain_data",
-                                                     "sampling_layout"]
+    assert [q["id"] for q in body["questions"]] == ["describe", "water_flux", "exchange_direction", "exchanged_volume",
+                                                     "heat_budget", "temperature", "sensor_intervals", "fit_quality",
+                                                     "reliability", "provenance", "residuals", "chain_data", "sampling_layout",
+                                                     "soil_properties", "posterior_samples", "convergence",
+                                                     "energy_breakdown", "parameters_catalog", "check", "fields"]
     volume = next(q for q in body["questions"] if q["id"] == "exchanged_volume")
     assert volume["ref"] == "HN-12" and volume["level"] == "high" and volume["modes"] == ["D", "M"]
     assert volume["label_en"] == "What volume of water crossed 1 m² of riverbed?"
     assert set(volume["params_schema"]["properties"]) == {"start", "end", "area"}
     assert volume["params_schema"]["additionalProperties"] is False
-    assert len(asking.get("/v1/questions", params={"twin": "twin_01"}).json()["questions"]) == 7
+    assert len(asking.get("/v1/questions", params={"twin": "twin_01"}).json()["questions"]) == 15
     assert_error(asking.get("/v1/questions", params={"twin": "twin_99"}), 404, "E_TWIN_NOT_FOUND")
 
 
@@ -448,3 +479,69 @@ def test_api_process_answers_questions_without_the_engine(tmp_path, computed_twi
     completed = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=300, check=False)
     assert completed.returncode == 0, completed.stderr[-3000:]
     assert completed.stdout.strip() == "[]"
+
+
+def test_questions_without_a_twin_have_their_own_endpoint(computed_twins, monkeypatch):
+    import dataclasses
+
+    from molonari_twin.api import CATALOG, service
+    from molonari_twin.questions import Answer, Quantity
+
+    ping = dataclasses.replace(CATALOG[0], id="ping", ref="BN-10", requires="none", modes=("D", "M"),
+                               run=lambda twin, _: Answer(data={"pong": Quantity(1, "1")}, provenance={"parameters": {}}))
+    monkeypatch.setattr(service, "CATALOG", (*CATALOG, ping))
+    client = TestClient(create_app(FakeTaskRunner(), computed_twins))
+    body = client.post("/v1/questions/ping").json()
+    assert body["data"]["pong"]["value"] == 1 and body["provenance"] == {"parameters": {}, "question": "ping", "ref": "BN-10"}
+    assert client.post("/v1/questions/ping", headers={"Accept": "application/x-npz"}).status_code == 200
+    assert_error(ask(client, "twin_01", "ping"), 409, "E_QUESTION_NO_TWIN")
+    assert_error(client.post("/v1/questions/describe"), 409, "E_QUESTION_TWIN_REQUIRED")
+    assert_error(client.post("/v1/questions/nothing"), 404, "E_QUESTION_UNKNOWN")
+    assert_error(client.post("/v1/questions/ping", json={"bogus": 1}), 422, "E_QUESTION_PARAMS")
+    assert "ping" in [q["id"] for q in client.get("/v1/questions").json()["questions"]]
+    assert "ping" not in [q["id"] for q in client.get("/v1/questions", params={"twin": "twin_01"}).json()["questions"]]
+
+
+def test_parameters_catalog_has_its_endpoint(asking):
+    response = asking.post("/v1/questions/parameters_catalog")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provenance"]["question"] == "parameters_catalog" and "twin" not in body["provenance"]
+    assert body["data"]["settings.name"]["value"]["data"][0] == "nb_cells"
+    assert body["data"]["settings.maximum"]["value"]["data"].count(None) >= 1  # sans borne : null
+    assert asking.post("/v1/questions/BN-10", json={}).status_code == 200
+    binary = asking.post("/v1/questions/parameters_catalog", headers={"Accept": "application/x-npz"})
+    assert binary.status_code == 200 and binary.headers["content-type"] == "application/x-npz"
+    assert_error(ask(asking, "twin_01", "parameters_catalog"), 409, "E_QUESTION_NO_TWIN")
+    parameters = next(q for q in asking.get("/v1/questions").json()["questions"] if q["id"] == "parameters_catalog")
+    assert parameters["requires"] == "none" and parameters["ref"] == "BN-10" and parameters["level"] == "low"
+
+
+def test_check_of_an_invalid_twin_is_a_200(computed_twins, tmp_path):
+    shutil.copytree(computed_twins, tmp_path / "twins")
+    (tmp_path / "twins" / "twin_09" / "twin.yaml").write_text("schema: [", encoding="utf-8")
+    client = TestClient(create_app(FakeTaskRunner(), tmp_path / "twins"))
+    response = ask(client, "twin_09", "check")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data"]["valid"]["value"] is False
+    assert body["data"]["issue_codes"]["value"]["data"] == ["E_TWIN_INVALID_YAML"]
+    assert [w["code"] for w in body["warnings"]] == ["E_TWIN_INVALID_YAML"]
+    assert ask(client, "twin_99", "check").status_code == 404
+
+
+def test_fields_as_npz_are_the_size_of_the_arrays(asking):
+    from molonari_twin.contract.codec import answer_from_npz
+
+    params = {"variables": ["temperature", "water_flux"]}
+    binary = ask(asking, "twin_01", "fields", params, npz=True)
+    assert binary.status_code == 200
+    answer = answer_from_npz(binary.content)
+    nz, nt = answer.data["temperature"].value.shape
+    assert (nz, nt) == (answer.data["depth"].value.size, answer.data["time"].value.size)
+    raw = 2 * nz * nt * 8  # deux champs en float64
+    assert answer.data["temperature"].value.nbytes + answer.data["water_flux"].value.nbytes == raw
+    assert 0.3 * raw < len(binary.content) <= raw * 1.1  # archive compressée : de l'ordre de la taille brute
+    as_json = ask(asking, "twin_01", "fields", params)
+    assert as_json.status_code == 200 and len(as_json.content) > len(binary.content)  # le JSON est plus lourd
+    assert_error(ask(asking, "twin_01", "fields", {"variables": ["pressure"]}), 422, "E_QUESTION_VARIABLE")

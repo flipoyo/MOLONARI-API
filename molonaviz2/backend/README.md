@@ -61,6 +61,10 @@ answer = TwinAPI("examples/twins").ask("twin_03", "exchanged_volume", {"start": 
 answer.data["net"]   # Quantity(value, unit="m³/m²", interval=None)
 ```
 
+Vingt questions, dont des diagnostics (`fit_quality`, `convergence`, `energy_breakdown`), un verdict de fiabilité (`reliability`) et des accès bruts (`fields`, `posterior_samples`). Deux sortes de questions n'ont pas besoin d'un twin calculé : `check` lit le dossier d'un twin, même invalide (la réponse dit `valid: false`), et `parameters_catalog` ne porte sur aucun twin (`POST /v1/questions/parameters_catalog`).
+
+**Les seuils de `reliability` sont provisoires et n'ont pas été validés par un hydrogéologue** : la réponse donne `thresholds_validated: false` et les seuils utilisés. Ils se surchargent par le paramètre `thresholds` ou par un fichier YAML dont le chemin est dans `MOLONARI_THRESHOLDS`. Le flux de chaleur latéral n'est pas modélisé : `heat_budget` le dit par un avertissement. Les champs complets sont volumineux : demander `Accept: application/x-npz`.
+
 Le contrat (`molonari_twin.contract`) contient les modèles pydantic de l'API, les modèles des paramètres et le codec des réponses (JSON, npz). Il ne contient aucune logique métier, et n'importe ni FastAPI ni JAX. Tout changement du contrat se voit dans `tests/fixtures/openapi_v1.json`.
 
 ## Façade

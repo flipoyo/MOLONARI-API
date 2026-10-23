@@ -111,12 +111,46 @@
       "title": "Backend Version",
       "type": "string"
      },
+     "data_release": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Version of the data the twins are built on; null until the raw-data pipeline (lot C4).",
+      "title": "Data Release"
+     },
+     "device": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Computing device, e.g. \"CPU · float64\"; null until the startup diagnostic task (diag.device) is over.",
+      "title": "Device"
+     },
      "max_workers": {
       "title": "Max Workers",
       "type": "integer"
      },
+     "results_format": {
+      "description": "Format of the results written by this backend (results/<twin_id>/metadata.json).",
+      "title": "Results Format",
+      "type": "string"
+     },
      "runner": {
       "title": "Runner",
+      "type": "string"
+     },
+     "twin_schema": {
+      "description": "Schema written for new twins (twin.yaml); the older names are still read.",
+      "title": "Twin Schema",
       "type": "string"
      }
     },
@@ -124,7 +158,9 @@
      "api_version",
      "backend_version",
      "runner",
-     "max_workers"
+     "max_workers",
+     "twin_schema",
+     "results_format"
     ],
     "title": "InfoOut",
     "type": "object"
@@ -302,8 +338,10 @@
       "type": "string"
      },
      "requires": {
-      "description": "What the twin must have: a valid configuration, or computed results.",
+      "description": "What the question needs: no twin (none), the folder of a twin even with an invalid configuration (folder), a valid configuration (config), or computed results (results).",
       "enum": [
+       "none",
+       "folder",
        "config",
        "results"
       ],
@@ -557,7 +595,7 @@
  },
  "info": {
   "title": "molonari-twin",
-  "version": "1.0.0-alpha.2"
+  "version": "1.0.0-alpha.3"
  },
  "openapi": "3.1.0",
  "paths": {
@@ -644,6 +682,86 @@
      }
     },
     "summary": "List Questions"
+   }
+  },
+  "/v1/questions/{question_id}": {
+   "post": {
+    "description": "Ask a question that is about no twin (`requires: none` in GET /v1/questions). The body is its parameters.\n\n- `parameters_catalog` (BN-10): The settings with their bounds, defaults and units, the values of `store_fields`, the default priors and the physical bounds of the inverted parameters, and the keys of the layers and of the mcmc section of twin.yaml. It is about no twin.",
+    "operationId": "ask_global_v1_questions__question_id__post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "question_id",
+      "required": true,
+      "schema": {
+       "title": "Question Id",
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "anyOf": [
+         {
+          "additionalProperties": true,
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "Parameters of the question (see params_schema).",
+        "title": "Params"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AnswerOut"
+        }
+       },
+       "application/x-npz": {}
+      },
+      "description": "Answer, as JSON or as an npz archive."
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorOut"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "409": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorOut"
+        }
+       }
+      },
+      "description": "Conflict"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorOut"
+        }
+       }
+      },
+      "description": "Invalid request or parameters."
+     }
+    },
+    "summary": "Ask Global"
    }
   },
   "/v1/tasks/{task_id}": {
@@ -886,7 +1004,7 @@
   },
   "/v1/twins/{ref}/questions/{question_id}": {
    "post": {
-    "description": "Ask a question of the catalogue (GET /v1/questions) to a twin. The body is the question's parameters.\n\n- `describe` (HN-02, D/M): Layers, sensors, period, mode and main settings, read from the configuration (no computation needed).\n- `water_flux` (HN-10, D/M): Mean, median, 5th and 95th percentiles of the flux q at the riverbed (z = 0) over the period, in m/s, positive downwards (infiltration: the river feeds the aquifer).\n- `exchanged_volume` (HN-12, D/M): Infiltrated, exfiltrated and net volumes over the period, integrated by trapezoids with the sign change cut at the zero crossing: m³/m², or m³ when an area is given.\n- `temperature` (HN-30, D/M): Simulated temperature in °C, linearly interpolated: one value (z and t), a profile T(z) (t alone) or a series T(t) (z alone).\n- `sensor_intervals` (HN-33, D/M): Per sensor: the measurement with its instrument interval (± z·σ), the simulation and, in mcmc mode with stored fields, the credible band (model) and the predictive band (a new measurement), with the share of measurements the predictive band covers. Arrays are sensor first: (3, T).\n- `provenance` (HN-43, D/M): Versions, data fingerprint, platform and duration of the computation, the command that reproduces it; the commits and state of each repository are in the provenance of the answer.\n- `residuals` (BN-31, D/M): Measured, simulated and residual (simulated − measured) temperatures per sensor, with the RMSE; option `intervals`: the credible and predictive bands.\n- `chain_data` (BN-34, M): Parameters, energies, acceptance and burn-in resets of the chosen chains, with the computed iteration of each kept sample; read thinning and iteration range as in the computation.\n- `sampling_layout` (BN-36, M): Chains, iterations per chain, burn-in, thin, total samples, fields per chain and the interval between them, space and time steps, store_fields and stored size; from the configuration, before or after the run.",
+    "description": "Ask a question of the catalogue (GET /v1/questions) to a twin. The body is the question's parameters.\n\n- `describe` (HN-02, D/M): Layers, sensors, period, mode and main settings, read from the configuration (no computation needed).\n- `water_flux` (HN-10, D/M): Mean, median, 5th and 95th percentiles of the flux q at the riverbed (z = 0) over the period, in m/s, positive downwards (infiltration: the river feeds the aquifer).\n- `exchange_direction` (HN-11, D/M): Share of the time in infiltration (q ≥ 0, the river feeds the aquifer) and in exfiltration, weighted by the time intervals, dominant regime and number of reversals of q at the riverbed over the period. In mcmc mode with stored water-flux fields (`store_fields: full`), the probability that q ≥ 0 over the posterior samples, as a series and averaged over time.\n- `exchanged_volume` (HN-12, D/M): Infiltrated, exfiltrated and net volumes over the period, integrated by trapezoids with the sign change cut at the zero crossing: m³/m², or m³ when an area is given.\n- `heat_budget` (HN-20, D/M): Mean advective, conductive and total heat fluxes (W/m², positive downwards) at a depth over the period, their shares (absolute value of the mean) and the dominant process. The lateral exchange is not modelled: it is zero, with a warning. Needs results of format 2.0.0.\n- `temperature` (HN-30, D/M): Simulated temperature in °C, linearly interpolated: one value (z and t), a profile T(z) (t alone) or a series T(t) (z alone).\n- `sensor_intervals` (HN-33, D/M): Per sensor: the measurement with its instrument interval (± z·σ), the simulation and, in mcmc mode with stored fields, the credible band (model) and the predictive band (a new measurement), with the share of measurements the predictive band covers. Arrays are sensor first: (3, T).\n- `fit_quality` (HN-40, D/M): Per sensor: RMSE, bias, RMSE/σT, lag-1 autocorrelation of the residuals and, in mcmc mode with stored fields, the share of measurements the predictive band covers. Arrays are sensor first: (3,).\n- `reliability` (HN-41, D/M): A green, orange or red verdict, the worst of the criteria, each with its level and its reason: convergence (R̂, ESS) in mcmc mode, fit (RMSE/σT), identifiability and predictive coverage in mcmc mode, gaps in the data and provenance. **The thresholds are provisional and not validated by a hydrogeologist** (`thresholds_validated` is false): the response gives those it used, and they can be overridden.\n- `provenance` (HN-43, D/M): Versions, data fingerprint, platform and duration of the computation, the command that reproduces it; the commits and state of each repository are in the provenance of the answer.\n- `residuals` (BN-31, D/M): Measured, simulated and residual (simulated − measured) temperatures per sensor, with the RMSE; option `intervals`: the credible and predictive bands.\n- `chain_data` (BN-34, M): Parameters, energies, acceptance and burn-in resets of the chosen chains, with the computed iteration of each kept sample; read thinning and iteration range as in the computation.\n- `sampling_layout` (BN-36, M): Chains, iterations per chain, burn-in, thin, total samples, fields per chain and the interval between them, space and time steps, store_fields and stored size; from the configuration, before or after the run.\n- `soil_properties` (HN-42, D/M): Per layer: permeability k (m²), hydraulic conductivity K (m/s, k·ρw·g/μ with water at 20 °C: an approximation), porosity n, solid thermal conductivity λs and heat capacity ρs·cs. In mcmc mode the best value, the median, the highest-density interval (computed in the space of the priors, −log₁₀ k for k) and the identifiability (posterior standard deviation over that of a uniform prior: near 1, the data teach nothing). In direct mode, the values of the configuration.\n- `posterior_samples` (BN-32, M): The posterior samples as an array (chain, iteration, layer, parameter) in the space of the priors (−log₁₀ k, n, λs, ρs·cs; k = 10^−x in m²), with its axes. Chains, range of computed iterations, burn (kept iterations skipped at the start) and thin choose the samples.\n- `convergence` (BN-40, M): Per parameter and layer: R̂ (rank-normalized), bulk and tail ESS and MCSE of the mean. Per chain: acceptance, mean energy, bulk ESS and the largest R̂ without that chain. The statistics follow the selection (chains, burn, thin); `rhat_max_all` uses everything, to show the effect of the selection.\n- `energy_breakdown` (BN-43, D/M): The terms of the energy (negative Gaussian log-likelihood) of the recorded fit: N·ln σ², the residual term Σr²/(2σ²), the implicit RMSE and the reference N/2, the value the residual term takes when σ is right.\n- `check` (BN-11, D/M): Whether the configuration of a twin folder is valid, with its problems (also given as warnings); if so, the twin_id expected for the published code, the state (new, computed, duplicate or modified) and, in mcmc mode, the number of samples, the evaluations and the stored size, which depends on `store_fields`. An invalid configuration is an answer (`valid` is false), not an error.\n- `fields` (BN-30, D/M): Temperature (°C), water flux (m/s) and advective and conductive heat fluxes (W/m², positive downwards) as arrays (depth, time) of the best fit, with their axes. Choose the variables, period, depth range and time step. They are large: prefer Accept: application/x-npz.",
     "operationId": "ask_v1_twins__ref__questions__question_id__post",
     "parameters": [
      {
