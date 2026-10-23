@@ -23,12 +23,12 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from .. import __version__
+from ..contract import API_VERSION
+from ..contract.models import ErrorOut, InfoOut, RunIn, TaskOut, TaskResultOut
 from ..errors import UserError
-from ..tasks.model import TERMINAL, error_dict
+from ..tasks.model import TERMINAL, TaskRecord, error_dict
 from ..tasks.runner import TaskRunner, task_key
-from .schemas import ErrorOut, InfoOut, RunIn, TaskOut, TaskResultOut
 
-API_VERSION = "1.0.0-alpha.1"
 HTTP_STATUS = {
     "E_TASK_NOT_FOUND": 404,
     "E_TWIN_NOT_FOUND": 404,
@@ -38,6 +38,17 @@ HTTP_STATUS = {
 }
 TWIN_REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 ERRORS = {404: {"model": ErrorOut}, 409: {"model": ErrorOut}}
+
+
+def task_out(record: TaskRecord) -> TaskOut:
+    return TaskOut(task_id=record.id, kind=record.kind, state=record.state, created_at=record.created_at,
+                   started_at=record.started_at, finished_at=record.finished_at, duration_s=record.duration_s,
+                   backend_version=record.backend_version, platform=record.platform, error=record.error,
+                   reused=record.reused)
+
+
+def task_result_out(record: TaskRecord) -> TaskResultOut:
+    return TaskResultOut(task_id=record.id, state=record.state, result=record.result, error=record.error)
 
 
 def create_app(runner: TaskRunner, twins_folder: str | Path, events_poll_s: float = 0.1) -> FastAPI:
@@ -60,19 +71,19 @@ def create_app(runner: TaskRunner, twins_folder: str | Path, events_poll_s: floa
             raise UserError("E_TWIN_NOT_FOUND", ref=ref, folder=str(twins_folder))
         params = {"path": str(folder.resolve()), "strict": (body or RunIn()).strict}
         record = runner.submit("twin.run", params, key=task_key("twin.run", params, twin=ref))
-        return TaskOut.from_record(record)
+        return task_out(record)
 
     @app.get("/v1/tasks/{task_id}", responses=ERRORS)
     def get_task(task_id: str) -> TaskOut:
-        return TaskOut.from_record(runner.get(task_id))
+        return task_out(runner.get(task_id))
 
     @app.delete("/v1/tasks/{task_id}", status_code=202, responses=ERRORS)
     def cancel_task(task_id: str) -> TaskOut:
-        return TaskOut.from_record(runner.cancel(task_id))
+        return task_out(runner.cancel(task_id))
 
     @app.get("/v1/tasks/{task_id}/result", responses=ERRORS)
     def task_result(task_id: str) -> TaskResultOut:
-        return TaskResultOut.from_record(runner.result(task_id))
+        return task_result_out(runner.result(task_id))
 
     @app.get("/v1/tasks/{task_id}/events", responses={404: {"model": ErrorOut}})
     def task_events(task_id: str, request: Request,

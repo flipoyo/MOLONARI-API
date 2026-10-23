@@ -15,8 +15,9 @@ import pytest
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 from molonari_twin import __version__
+from molonari_twin.contract import API_VERSION
 from molonari_twin.errors import UserError
-from molonari_twin.server.app import API_VERSION, create_app
+from molonari_twin.server.app import create_app
 from molonari_twin.tasks.local import LocalTaskRunner
 from molonari_twin.tasks.model import TaskEvent, TaskRecord, now
 
