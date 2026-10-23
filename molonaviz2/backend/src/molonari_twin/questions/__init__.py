@@ -1,10 +1,12 @@
-"""Questions : réponses calculées à partir d'un résultat (volumes, intervalles, bande prédictive, chaînes).
+"""Questions : réponses calculées à partir d'un résultat (volumes, intervalles, bande prédictive, chaînes, flux,
+températures, capteurs, description et provenance d'un twin).
 
 Partie du cœur : ni Qt, ni HTTP, ni phrase traduite. Chaque question renvoie une `Answer`.
 """
 
 from .answer import Answer, Quantity
 from .chains import chain_data
+from .flux import twin_exchanged_volume, water_flux
 from .intervals import (
     MEASUREMENT_LEVELS,
     measurement_interval,
@@ -12,6 +14,9 @@ from .intervals import (
     z_score,
 )
 from .predictive import coverage, observed_at, predictive_band, sensor_samples
+from .sensors import residuals, sensor_report
+from .temperature import temperature_at
+from .twin_info import describe, provenance
 from .volumes import exchanged_volume
 
 __all__ = [
@@ -20,11 +25,18 @@ __all__ = [
     "Quantity",
     "chain_data",
     "coverage",
+    "describe",
     "exchanged_volume",
     "measurement_interval",
     "observed_at",
     "predictive_band",
+    "provenance",
+    "residuals",
     "sensor_intervals",
+    "sensor_report",
     "sensor_samples",
+    "temperature_at",
+    "twin_exchanged_volume",
+    "water_flux",
     "z_score",
 ]
