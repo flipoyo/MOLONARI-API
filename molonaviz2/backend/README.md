@@ -25,6 +25,22 @@ python -m molonari_twin …                              # équivalent
 
 Messages en français par défaut ; `MOLONARI_LANG=en` les affiche en anglais (l'ancien nom `MOLONAVIZ_LANG` est encore lu).
 
+## API HTTP locale
+
+```bash
+uv sync --package molonari-twin --extra server   # FastAPI et uvicorn (extra optionnel)
+uv run molonari-twin serve --local --twins-folder examples/twins   # http://127.0.0.1:8765
+curl -X POST http://127.0.0.1:8765/v1/twins/twin_03/run         # 202 + task_id
+curl -N http://127.0.0.1:8765/v1/tasks/<task_id>/events         # progression (SSE)
+curl -X DELETE http://127.0.0.1:8765/v1/tasks/<task_id>         # annulation
+```
+
+L'API ne calcule jamais dans son processus. Elle confie chaque calcul à un `TaskRunner` (`molonari_twin.tasks`). En local, `LocalTaskRunner` exécute chaque tâche dans un sous-processus. Son état est gardé dans une base SQLite, par défaut `$XDG_CACHE_HOME/molonari-twin/tasks.sqlite`.
+
+L'annulation est d'abord coopérative : le DREAM la lit à chaque bloc. Si elle n'est pas honorée, le worker est terminé après un délai de grâce. Un timeout dur s'applique de la même façon.
+
+Le flux SSE reprend après `Last-Event-ID`. Seule l'adresse `127.0.0.1` est acceptée tant que l'authentification n'existe pas (phase 5, avec Celery). Schéma OpenAPI : `/openapi.json`.
+
 ## Façade
 
 Le frontend n'importe que `molonari_twin.facade`. Elle réexporte tels quels les types, constantes et fonctions dont il a besoin (modèles, projet `.molo`, imports de fichiers, nettoyage, calcul, twins, questions, erreurs, traduction pure) ; l'importer ne charge ni JAX, ni ArviZ, ni Qt. Aucun autre module du backend ne l'importe.
