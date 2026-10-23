@@ -152,9 +152,25 @@ def test_ignored_cancel_terminates_the_worker_and_cleans_up(make_runner, tmp_pat
     asked = time.monotonic()
     runner.cancel(task.id)
     done = runner.wait(task.id, 20)
+    assert not partial.exists()  # nettoyé avant l'état terminal, pas après
     assert done.state == "cancelled"
     assert time.monotonic() - asked >= 0.5  # le job n'a pas coopéré : arrêt après le délai de grâce
     wait_dead(done.pid)
+
+
+@pytest.mark.parametrize("options, state", [
+    ({"blocks": 1000}, "cancelled"),  # annulation coopérative
+    ({"blocks": 2, "fail": "user"}, "failed"),
+    ({"blocks": 2, "fail": "crash"}, "failed"),
+])
+def test_worker_cleans_up_before_concluding(runner, tmp_path, options, state):
+    partial = tmp_path / "results" / "z.partial"
+    task = runner.submit("diag.sleep", sleep(block_s=0.05, partial=str(partial), **options))
+    wait_progress(runner, task.id)
+    if state == "cancelled":
+        runner.cancel(task.id)
+    done = runner.wait(task.id, 20)
+    assert done.state == state
     assert not partial.exists()
 
 
@@ -163,11 +179,11 @@ def test_timeout_fails_the_task_and_cleans_up(runner, tmp_path):
     task = runner.submit("diag.sleep", sleep(blocks=1000, block_s=0.05, ignore_cancel=True, partial=str(partial)),
                          timeout_s=0.5)
     done = runner.wait(task.id, 20)
+    assert not partial.exists()  # nettoyé avant l'état terminal, pas après
     assert done.state == "failed"
     assert done.error["code"] == "E_TASK_TIMEOUT"
     assert done.error["params"] == {"timeout_s": 0.5}
     wait_dead(done.pid)
-    assert not partial.exists()
 
 
 def test_queued_task_waits_for_a_free_worker_and_cancels_at_once(make_runner):

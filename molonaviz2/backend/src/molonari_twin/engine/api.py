@@ -5,6 +5,7 @@ from __future__ import annotations
 import functools
 import sys
 from collections.abc import Callable
+from importlib import metadata
 from pathlib import Path
 
 from .. import __version__
@@ -14,21 +15,23 @@ from .column import ColumnInputs
 from .results import ForwardResult, InversionResult
 
 
+def jax_version() -> str:
+    """Version installée de jax, lue dans les métadonnées du paquet : jax n'est pas importé, donc un processus
+    qui ne calcule pas (l'API qui lit des résultats) peut identifier un twin sans le charger."""
+    return metadata.version("jax")
+
+
 @functools.cache
 def engine_version() -> str:
     """Version du code chargé : `molonari-twin X.Y.Z[+g<commit>[.dirty]] · jax A.B.C`.
 
     Elle entre dans chaque twin_id. Calculée une fois par processus : elle décrit le code chargé."""
-    import jax
-
-    return f"molonari-twin {__version__}{local_suffix()} · jax {jax.__version__}"
+    return f"molonari-twin {__version__}{local_suffix()} · jax {jax_version()}"
 
 
 def release_version() -> str:
     """Version publiée du code chargé, sans suffixe local (celle qu'il aura une fois tagué)."""
-    import jax
-
-    return f"molonari-twin {__version__} · jax {jax.__version__}"
+    return f"molonari-twin {__version__} · jax {jax_version()}"
 
 
 def local_suffix() -> str:
@@ -59,8 +62,8 @@ def run_forward(inputs: ColumnInputs, config: ForwardConfig) -> ForwardResult:
 
 
 def sampling_layout(config: InversionConfig, nb_times: int | None = None):
-    """Itérations et champs (T, q) par chaîne pour ces réglages : voir jax.dream.SamplingLayout."""
-    from .jax.dream import sampling_layout as _layout
+    """Itérations et champs (T, q) par chaîne pour ces réglages : voir layout.SamplingLayout (sans JAX)."""
+    from .layout import sampling_layout as _layout
 
     return _layout(config, nb_times)
 

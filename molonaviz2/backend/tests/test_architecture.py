@@ -16,7 +16,7 @@ EXAMPLES = Path(__file__).resolve().parents[2] / "examples" / "twins"
 
 # Modules et paquets de premier niveau de molonari_twin ("__init__" : le paquet lui-même).
 MODULES = {"__init__", "__main__", "errors", "gitinfo", "i18n", "domain", "io", "processing", "engine", "twin", "storage", "questions", "facade",
-           "tasks", "server"}
+           "tasks", "server", "contract", "api"}
 
 # Imports interdits au backend (préfixes de noms de modules) : Qt, bibliothèques graphiques, frontend.
 FORBIDDEN = ["PySide6", "pyqtgraph", "matplotlib", "molonaviz2"]

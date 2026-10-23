@@ -1,6 +1,6 @@
 [project]
 name = "molonari-twin"
-version = "0.7.0-alpha.1"
+version = "0.7.0-alpha.2"
 description = "Backend des twins MOLONARI : données, nettoyage, calcul (JAX, DREAM), twins et questions, sans interface."
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
@@ -13,6 +13,7 @@ dependencies = [
     "h5netcdf>=1.3",
     "h5py>=3.11",
     "pyyaml>=6.0",
+    "pydantic>=2.7",  # contrat de l'API (molonari_twin.contract)
 ]
 
 [project.optional-dependencies]
@@ -32,6 +33,7 @@ dev = [
     "fastapi>=0.115",  # tests de l'API (extra server)
     "uvicorn>=0.30",
     "httpx2>=2.16",  # TestClient de FastAPI (starlette 1.x)
+    "jsonschema>=4.22",  # validité des schémas de paramètres des questions
 ]
 
 [build-system]

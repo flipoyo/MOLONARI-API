@@ -29,7 +29,8 @@ CODE_ARGUMENT = {"UserError": 0, "Issue": 1}
 CODE_METHODS = {"twin/config.py": {"add": 1}}
 # Fonctions qui relaient un code reçu en paramètre (code non littéral admis) : fichier → noms.
 FORWARDERS = {"errors.py": {"__init__", "__new__", "_rebuild_error", "from_error"}, "twin/config.py": {"add"},
-              "twin/provenance.py": {"provenance_warnings"}}  # avertissements relus de metadata.json
+              "twin/provenance.py": {"provenance_warnings"},  # avertissements relus de metadata.json
+              "contract/codec.py": {"answer_from_out"}}  # avertissements relus d'une réponse de l'API
 
 
 def fields(template: str) -> set[str]:

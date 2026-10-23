@@ -5,7 +5,7 @@ Un thread de distribution démarre les tâches « queued » dans l'ordre de soum
 - un worker terminé sans conclure sa tâche la laisse « failed » (E_TASK_INTERRUPTED) ;
 - au-delà de `timeout_s`, le worker est terminé et la tâche « failed » (E_TASK_TIMEOUT) ;
 - une annulation que le job n'a pas honorée après `cancel_grace_s` termine le worker (« cancelled »).
-Toute tâche qui ne réussit pas passe ensuite par le nettoyage de son job (fichiers partiels).
+Toute tâche qui ne réussit pas est nettoyée (fichiers partiels) avant de passer à son état terminal.
 
 Les workers démarrent en mode « spawn » : un processus neuf, qui n'hérite ni des threads du serveur ni de
 son état, et qu'on peut terminer sans arrêter l'API.
@@ -24,7 +24,7 @@ from pathlib import Path
 
 from ..errors import UserError
 from . import worker
-from .jobs import get_job
+from .jobs import cleanup, get_job
 from .model import TaskEvent, TaskRecord, error_dict, now, platform_info
 from .runner import default_environment, task_key
 from .store import TaskStore
@@ -150,8 +150,7 @@ class LocalTaskRunner:
         """Une tâche « running » sans worker vivant (runner arrêté brutalement) passe « failed »."""
         for record in self.store.with_state("running"):
             if not pid_alive(record.pid):
-                self.store.set_state(record.id, "failed", ["running"],
-                                     error=error_dict(UserError("E_TASK_INTERRUPTED")))
+                self._conclude(record.id, "failed", error=error_dict(UserError("E_TASK_INTERRUPTED")))
 
     def _loop(self) -> None:
         while not self._stop.is_set():
@@ -198,16 +197,13 @@ class LocalTaskRunner:
                     self._conclude(task_id, "cancelled")
 
     def _conclude(self, task_id: str, state: str, **fields) -> None:
-        """Conclut la tâche si le worker ne l'a pas fait, puis nettoie si elle n'a pas réussi."""
-        self.store.set_state(task_id, state, ["running"], **fields)
+        """Conclut une tâche que son worker n'a pas conclue (terminé de force, ou mort) : le nettoyage d'abord,
+        l'état terminal ensuite. Une tâche déjà conclue par son worker y a déjà été nettoyée."""
         record = self.store.get(task_id)
-        if record is not None and record.state != "succeeded":
-            cleanup = get_job(record.kind).cleanup
-            if cleanup is not None:
-                try:
-                    cleanup(record.params)
-                except OSError:
-                    log.exception("Cleanup failed for task %s", task_id)
+        if record is None or record.state != "running":
+            return
+        cleanup(record.kind, record.params)
+        self.store.set_state(task_id, state, ["running"], **fields)
 
 
 def _terminate(process) -> None:

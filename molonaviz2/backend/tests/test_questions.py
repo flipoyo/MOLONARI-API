@@ -1,6 +1,7 @@
 """Questions : réponses typées calculées à partir d'un résultat, sans Qt."""
 
 import dataclasses
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -13,11 +14,18 @@ from molonari_twin.questions import (
     Quantity,
     chain_data,
     coverage,
+    describe,
     exchanged_volume,
     observed_at,
     predictive_band,
+    provenance,
+    residuals,
     sensor_intervals,
+    sensor_report,
     sensor_samples,
+    temperature_at,
+    twin_exchanged_volume,
+    water_flux,
 )
 from molonari_twin.twin.results import load_results, write_results
 
@@ -336,3 +344,148 @@ def test_results_without_posterior(tmp_path, inversions):
     with pytest.raises(UserError) as error:
         chain_data(results)
     assert error.value.code == "E_QUESTION_NO_POSTERIOR"
+
+
+# Questions sur les résultats d'un twin (lot C2) ---------------------------------------------------
+
+EXAMPLES = Path(__file__).resolve().parents[2] / "examples" / "twins"
+
+
+def results_of(folder, forward, inversion=None, mode="direct", sigma=0.1):
+    """Résultats écrits puis relus, avec les métadonnées que lisent les questions (mode, σ de l'instrument)."""
+    metadata = {"results_format": "2.0.0", "mode": mode, "name": "twin_x", "twin_id": "abc", "code_version": "v",
+                "created_at": "2026-10-23T10:00:00", "device": "cpu", "duration_s": 1.5,
+                "data": {"file": "m.csv", "sha256": "f00"}, "provenance": {"twin": {"commit": "1234"}},
+                "sensor_cell_depths": [float(d) for d in forward.sensor_depths]}
+    if sigma is not None:
+        metadata["instruments"] = {"sigma_temperature_C": sigma, "sigma_pressure_m": 0.01}
+    write_results(folder, forward, inversion, ["a"], metadata)
+    return load_results(folder)
+
+
+@pytest.fixture(scope="module")
+def direct(tmp_path_factory):
+    forward = run_forward(synthetic_inputs(nb_times=80), ForwardConfig([LayerSpec("a", 0.4)], nb_cells=20))
+    return results_of(tmp_path_factory.mktemp("direct"), forward)
+
+
+def code_of(call):
+    with pytest.raises(UserError) as error:
+        call()
+    return error.value.code
+
+
+def test_water_flux_statistics_over_the_period(direct):
+    q = direct.flux["q_riverbed_m_per_s"].to_numpy(float)
+    data = water_flux(direct).data
+    assert data["mean"].value == pytest.approx(q.mean())
+    assert data["median"].value == pytest.approx(np.median(q))
+    assert (data["p5"].value, data["p95"].value) == pytest.approx(tuple(np.percentile(q, [5, 95])))
+    assert data["points"].value == q.size and data["mean"].unit == "m/s"
+    times = direct.flux["date"].to_numpy().astype("datetime64[s]")
+    part = water_flux(direct, start=times[10], end=times[19]).data
+    assert part["points"].value == 10 and part["mean"].value == pytest.approx(q[10:20].mean())
+    assert (part["start"].value, part["end"].value) == (times[10], times[19])
+    assert code_of(lambda: water_flux(direct, start=times[-1] + np.timedelta64(1, "D"))) == "E_QUESTION_PERIOD_EMPTY"
+
+
+def test_volume_of_a_constant_flux_through_the_bed(direct):
+    results = dataclasses.replace(direct, flux=direct.flux.assign(q_riverbed_m_per_s=2e-6))
+    times = results.flux["date"].to_numpy().astype("datetime64[s]")
+    duration = (times[-1] - times[0]) / np.timedelta64(1, "s")
+    data = twin_exchanged_volume(results).data
+    assert data["infiltration"].value == pytest.approx(2e-6 * duration)
+    assert data["exfiltration"].value == 0.0
+    assert twin_exchanged_volume(results, area=3.0).data["net"].value == pytest.approx(6e-6 * duration)
+
+
+def test_temperature_value_profile_and_series(direct):
+    depths, times, field = direct.depths, direct.times.astype("datetime64[s]"), direct.temperature
+    value = temperature_at(direct, z=float(depths[3]), t=times[5]).data["temperature"].value
+    assert value == pytest.approx(field[3, 5])
+    profile = temperature_at(direct, t=times[5]).data
+    assert profile["temperature"].value.shape == depths.shape and profile["depth"].value.shape == depths.shape
+    np.testing.assert_allclose(profile["temperature"].value, field[:, 5])
+    series = temperature_at(direct, z=float(depths[3])).data
+    np.testing.assert_allclose(series["temperature"].value, field[3])
+    middle = (float(depths[3]) + float(depths[4])) / 2
+    np.testing.assert_allclose(temperature_at(direct, z=middle).data["temperature"].value, (field[3] + field[4]) / 2)
+
+
+def test_temperature_needs_a_point_inside_the_results(direct):
+    assert code_of(lambda: temperature_at(direct)) == "E_QUESTION_Z_OR_T"
+    assert code_of(lambda: temperature_at(direct, z=99.0)) == "E_QUESTION_OUT_OF_RANGE"
+    assert code_of(lambda: temperature_at(direct, t=np.datetime64("1990-01-01"))) == "E_QUESTION_OUT_OF_RANGE"
+
+
+def test_sensor_report_in_direct_mode_is_the_measurement_interval(direct):
+    answer = sensor_report(direct, level=0.9)
+    data = answer.data
+    low, high = data["measured"].interval
+    np.testing.assert_allclose(high - data["measured"].value, 1.645 * 0.1, rtol=1e-3)
+    np.testing.assert_allclose(data["measured"].value - low, 1.645 * 0.1, rtol=1e-3)
+    assert data["measured"].value.shape == (3, len(data["time"].value)) == data["simulated"].value.shape
+    assert data["sigma"].value == 0.1
+    assert "credible" not in data and "predictive" not in data and answer.warnings == []
+    assert sensor_report(direct, sigma=0.3).data["sigma"].value == 0.3
+
+
+def test_sensor_report_needs_sigma_when_results_do_not_record_it(tmp_path, direct):
+    forward = run_forward(synthetic_inputs(nb_times=40), ForwardConfig([LayerSpec("a", 0.4)], nb_cells=20))
+    results = results_of(tmp_path, forward, sigma=None)
+    assert code_of(lambda: sensor_report(results)) == "E_QUESTION_SIGMA_REQUIRED"
+    assert sensor_report(results, sigma=0.2).data["sigma"].value == 0.2
+
+
+def test_sensor_report_in_mcmc_mode_has_both_bands_and_the_coverage(tmp_path, inversions):
+    inversion = inversions["sensors"]
+    results = results_of(tmp_path, inversion.best, inversion, mode="mcmc", sigma=0.1)
+    data = sensor_report(results, level=0.9).data
+    credible, predictive = data["credible"], data["predictive"]
+    assert credible.value.shape == predictive.value.shape == (3, len(data["field_time"].value))
+    width = lambda band: float(np.mean(band.interval[1] - band.interval[0]))
+    assert width(predictive) > width(credible)  # le bruit de mesure élargit la bande, en moyenne
+    # Même calcul que l'application (molonaviz2.ui.predictive) : même graine, même bande, même couverture.
+    samples = sensor_samples(results).data
+    band = predictive_band(samples["temperature"].value, 0.1, 0.9, seed=0).data["temperature"]
+    times, measured = results.residuals["date"].to_numpy(), np.stack([results.residuals[f"t{i}_measured"].to_numpy(float) for i in (1, 2, 3)], 1)
+    expected = coverage(observed_at(times, measured, samples["time"].value).data["temperature"].value, band).data
+    np.testing.assert_array_equal(predictive.interval[0], band.interval[0])
+    assert data["coverage"].value == expected["coverage"].value and data["points"].value == expected["points"].value
+
+
+def test_sensor_report_without_stored_fields_warns(tmp_path, inversions):
+    inversion = inversions["none"]
+    answer = sensor_report(results_of(tmp_path, inversion.best, inversion, mode="mcmc"))
+    assert "predictive" not in answer.data
+    assert [w.code for w in answer.warnings] == ["E_QUESTION_NO_FIELDS"]
+
+
+def test_residuals_and_their_intervals(tmp_path, direct, inversions):
+    data = residuals(direct).data
+    np.testing.assert_allclose(data["residual"].value, data["simulated"].value - data["measured"].value)
+    np.testing.assert_allclose(data["rmse"].value, np.sqrt(np.mean(data["residual"].value ** 2, axis=1)))
+    assert "predictive" not in data
+    inversion = inversions["sensors"]
+    with_bands = residuals(results_of(tmp_path, inversion.best, inversion, mode="mcmc"), intervals=True).data
+    assert {"credible", "predictive", "coverage"} <= set(with_bands)
+
+
+@pytest.mark.parametrize("name", ["twin_01", "twin_03"])
+def test_describe_reads_the_configuration(name):
+    from molonari_twin.twin.config import load_twin
+
+    config = load_twin(EXAMPLES / name)
+    data = describe(config).data
+    assert data["name"].value == name and data["mode"].value == config.mode
+    np.testing.assert_allclose(data["sensor_depths"].value, config.depths)
+    assert list(data["layers"].value) == [layer.name for layer in config.layers]
+    assert ("nb_chains" in data) == (config.mode == "mcmc")
+
+
+def test_provenance_comes_from_the_metadata(direct):
+    answer = provenance(direct)
+    assert answer.data["twin_id"].value == "abc" and answer.data["data_sha256"].value == "f00"
+    assert answer.data["duration"].value == 1.5 and answer.data["duration"].unit == "s"
+    assert answer.data["reproduce"].value == "molonari-twin run twin_x"
+    assert answer.provenance["repositories"] == {"twin": {"commit": "1234"}}

@@ -2,6 +2,7 @@
 jamais exécuté dans le processus de l'API."""
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -10,13 +11,15 @@ import threading
 import time
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 from molonari_twin import __version__
+from molonari_twin.contract import API_VERSION
 from molonari_twin.errors import UserError
-from molonari_twin.server.app import API_VERSION, create_app
+from molonari_twin.server.app import create_app
 from molonari_twin.tasks.local import LocalTaskRunner
 from molonari_twin.tasks.model import TaskEvent, TaskRecord, now
 
@@ -241,8 +244,8 @@ def test_events_stream_waits_for_new_events(client, fake):
 
 def test_openapi_lists_the_v1_endpoints(client):
     paths = client.get("/openapi.json").json()["paths"]
-    assert set(paths) == {"/v1/info", "/v1/twins/{ref}/run", "/v1/tasks/{task_id}", "/v1/tasks/{task_id}/result",
-                          "/v1/tasks/{task_id}/events"}
+    assert set(paths) == {"/v1/info", "/v1/questions", "/v1/twins/{ref}/questions/{question_id}", "/v1/twins/{ref}/run",
+                          "/v1/tasks/{task_id}", "/v1/tasks/{task_id}/result", "/v1/tasks/{task_id}/events"}
     assert set(paths["/v1/tasks/{task_id}"]) == {"get", "delete"}
 
 
@@ -332,3 +335,116 @@ def test_running_a_real_twin_through_the_api(tmp_path, twins):
     assert Path(body["result"]["results_dir"], "metadata.json").is_file()
     assert output["jax"] is False
     assert not list((tmp_path / "results").glob("*.partial"))
+
+
+# Questions (lot C2) -------------------------------------------------------------------------------
+
+OPENAPI_SNAPSHOT = Path(__file__).parent / "fixtures" / "openapi_v1.json"
+
+
+@pytest.fixture
+def asking(computed_twins):
+    return TestClient(create_app(FakeTaskRunner(), computed_twins))
+
+
+def ask(client, ref, question, params=None, npz=False):
+    headers = {"Accept": "application/x-npz"} if npz else {}
+    return client.post(f"/v1/twins/{ref}/questions/{question}", json=params, headers=headers)
+
+
+def test_question_catalog(asking):
+    body = asking.get("/v1/questions").json()
+    assert body["api_version"] == API_VERSION
+    assert [q["id"] for q in body["questions"]] == ["describe", "water_flux", "exchanged_volume", "temperature",
+                                                     "sensor_intervals", "provenance", "residuals", "chain_data",
+                                                     "sampling_layout"]
+    volume = next(q for q in body["questions"] if q["id"] == "exchanged_volume")
+    assert volume["ref"] == "HN-12" and volume["level"] == "high" and volume["modes"] == ["D", "M"]
+    assert volume["label_en"] == "What volume of water crossed 1 m² of riverbed?"
+    assert set(volume["params_schema"]["properties"]) == {"start", "end", "area"}
+    assert volume["params_schema"]["additionalProperties"] is False
+    assert len(asking.get("/v1/questions", params={"twin": "twin_01"}).json()["questions"]) == 7
+    assert_error(asking.get("/v1/questions", params={"twin": "twin_99"}), 404, "E_TWIN_NOT_FOUND")
+
+
+@pytest.mark.parametrize("ref", ["twin_01", "twin_03"])
+def test_every_question_answers_in_json_and_npz(asking, ref):
+    from molonari_twin.contract.codec import answer_from_json, answer_from_npz
+    from molonari_twin.contract.models import AnswerOut
+
+    for question in asking.get("/v1/questions", params={"twin": ref}).json()["questions"]:
+        params = {"z": 0.2} if question["id"] == "temperature" else None
+        response = ask(asking, ref, question["id"], params)
+        assert response.status_code == 200, (question["id"], response.text)
+        AnswerOut.model_validate(response.json())
+        assert response.json()["provenance"]["twin"] == ref
+        binary = ask(asking, ref, question["id"], params, npz=True)
+        assert binary.status_code == 200 and binary.headers["content-type"] == "application/x-npz"
+        from_json, from_npz = answer_from_json(response.content), answer_from_npz(binary.content)
+        assert from_json.data.keys() == from_npz.data.keys()
+        for name, quantity in from_json.data.items():
+            np.testing.assert_array_equal(np.asarray(from_npz.data[name].value), np.asarray(quantity.value), err_msg=name)
+
+
+def test_answer_values_through_http(asking):
+    body = ask(asking, "twin_01", "HN-12", {"start": "2016-06-28T00:00:00", "area": 2.0}).json()
+    assert body["data"]["net"]["unit"] == "m³"
+    assert body["provenance"]["parameters"] == {"start": "2016-06-28T00:00:00", "end": None, "area": 2.0}
+    assert body["provenance"]["question"] == "exchanged_volume" and body["provenance"]["ref"] == "HN-12"
+    temperature = ask(asking, "twin_01", "temperature", {"z": 0.2}).json()["data"]["temperature"]["value"]
+    assert temperature["dtype"] == "float64" and len(temperature["shape"]) == 1
+
+
+@pytest.mark.parametrize("ref, question, params, status, code", [
+    ("twin_01", "no_such_question", None, 404, "E_QUESTION_UNKNOWN"),
+    ("twin_99", "describe", None, 404, "E_TWIN_NOT_FOUND"),
+    ("twin_01", "water_flux", {"bogus": 1}, 422, "E_QUESTION_PARAMS"),
+    ("twin_01", "sensor_intervals", {"level": 2}, 422, "E_QUESTION_PARAMS"),
+    ("twin_01", "temperature", {"z": 9.0}, 422, "E_QUESTION_OUT_OF_RANGE"),
+    ("twin_01", "water_flux", {"start": "2030-01-01T00:00:00"}, 422, "E_QUESTION_PERIOD_EMPTY"),
+    ("twin_09", "water_flux", None, 409, "E_TWIN_NOT_COMPUTED"),
+    ("twin_01", "chain_data", None, 409, "E_QUESTION_NOT_AVAILABLE"),
+])
+def test_question_errors(asking, ref, question, params, status, code):
+    body = assert_error(ask(asking, ref, question, params), status, code)
+    if code == "E_QUESTION_PARAMS":
+        assert all(set(issue) == ERROR_KEYS and issue["code"] == "E_PARAM_INVALID" for issue in body["params"]["issues"])
+
+
+def test_malformed_requests_use_the_error_format(asking, client):
+    response = asking.post("/v1/twins/twin_01/questions/describe", content=b"[1, 2]", headers={"Content-Type": "application/json"})
+    body = assert_error(response, 422, "E_REQUEST_INVALID")
+    assert body["params"]["issues"][0]["code"] == "E_PARAM_INVALID"
+    assert_error(client.post("/v1/twins/twin_01/run", json={"strict": True, "bogus": 1}), 422, "E_REQUEST_INVALID")
+
+
+def test_openapi_matches_the_snapshot(asking):
+    """Tout changement du contrat se voit ici. S'il est voulu : régénérer le fichier
+    (MOLONARI_UPDATE_SNAPSHOTS=1 uv run pytest tests/test_server.py -k snapshot) et monter API_VERSION."""
+    schema = asking.get("/openapi.json").json()
+    text = json.dumps(schema, indent=1, ensure_ascii=False, sort_keys=True) + "\n"
+    if os.environ.get("MOLONARI_UPDATE_SNAPSHOTS") == "1":
+        OPENAPI_SNAPSHOT.write_text(text, encoding="utf-8")
+    assert schema["info"]["version"] == API_VERSION
+    assert "HTTPValidationError" not in schema["components"]["schemas"]  # nos 422 ont le format ErrorOut
+    assert text == OPENAPI_SNAPSHOT.read_text(encoding="utf-8"), "le contrat OpenAPI a changé : voir la docstring"
+
+
+def test_api_process_answers_questions_without_the_engine(tmp_path, computed_twins):
+    code = textwrap.dedent(f"""
+        import sys
+        from fastapi.testclient import TestClient
+        from molonari_twin.server.app import create_app
+        from molonari_twin.tasks.local import LocalTaskRunner
+        runner = LocalTaskRunner({str(tmp_path / "tasks.sqlite")!r}, poll_s=0.05)
+        client = TestClient(create_app(runner, {str(computed_twins)!r}))
+        for ref in ("twin_01", "twin_03"):
+            for question in client.get("/v1/questions", params={{"twin": ref}}).json()["questions"]:
+                body = {{"z": 0.2}} if question["id"] == "temperature" else None
+                assert client.post(f"/v1/twins/{{ref}}/questions/{{question['id']}}", json=body).status_code == 200
+        runner.close()
+        print(sorted({{m.split(".")[0] for m in sys.modules}} & {{"jax", "jaxlib", "arviz", "PySide6"}}))
+    """)
+    completed = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=300, check=False)
+    assert completed.returncode == 0, completed.stderr[-3000:]
+    assert completed.stdout.strip() == "[]"

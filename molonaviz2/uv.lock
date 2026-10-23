@@ -863,7 +863,7 @@ wheels = [
 
 [[package]]
 name = "molonari-twin"
-version = "0.7.0a1"
+version = "0.7.0a2"
 source = { editable = "backend" }
 dependencies = [
     { name = "arviz" },
@@ -872,6 +872,7 @@ dependencies = [
     { name = "jax" },
     { name = "numpy" },
     { name = "pandas" },
+    { name = "pydantic" },
     { name = "pyyaml" },
     { name = "scipy" },
 ]
@@ -886,6 +887,7 @@ server = [
 dev = [
     { name = "fastapi" },
     { name = "httpx2" },
+    { name = "jsonschema" },
     { name = "pyheatmy" },
     { name = "pytest" },
     { name = "uvicorn" },
@@ -900,6 +902,7 @@ requires-dist = [
     { name = "jax", specifier = ">=0.4.30" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "pandas", specifier = ">=2.2" },
+    { name = "pydantic", specifier = ">=2.7" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "scipy", specifier = ">=1.13" },
     { name = "uvicorn", marker = "extra == 'server'", specifier = ">=0.30" },
@@ -910,6 +913,7 @@ provides-extras = ["server"]
 dev = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx2", specifier = ">=2.16" },
+    { name = "jsonschema", specifier = ">=4.22" },
     { name = "pyheatmy", editable = "../../pyheatmy" },
     { name = "pytest", specifier = ">=8" },
     { name = "uvicorn", specifier = ">=0.30" },

@@ -334,3 +334,24 @@ def test_single_energy_matches_the_direct_model():
     fields = make_forward(geom)(jnp.asarray([LayerSpec("a", 0.4, *x[0]).physical()]))
     expected = float(energy(fields["temperature"], geom, 0.01))
     assert single_energy(inputs, config, x) == pytest.approx(expected, rel=1e-12)
+
+
+def test_sampling_layout_does_not_load_jax():
+    """La disposition de l'échantillonnage (BN-36) se calcule sans charger le moteur : l'API la lit."""
+    import subprocess
+    import sys
+
+    code = (
+        "import sys\n"
+        "from molonari_twin.domain.compute import InversionConfig, LayerSpec\n"
+        "from molonari_twin.engine.api import sampling_layout\n"
+        "print(sampling_layout(InversionConfig(layers=[LayerSpec('a', 0.4)]), 100).parameter_sets)\n"
+        "print('jax' in sys.modules)"
+    )
+    completed = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=300, check=False)
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.split()[-1] == "False"
+    from molonari_twin.engine import layout
+    from molonari_twin.engine.jax import dream
+
+    assert dream.SamplingLayout is layout.SamplingLayout and dream.sampling_layout is layout.sampling_layout
