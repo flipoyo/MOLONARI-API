@@ -26,6 +26,7 @@ from ..i18n import N_
 from ..questions import (
     Answer,
     chain_data,
+    check_twin,
     convergence,
     describe,
     describe_sampling,
@@ -33,10 +34,12 @@ from ..questions import (
     exchange_direction,
     fit_quality,
     heat_budget,
+    parameters_catalog,
     posterior_samples,
     provenance,
     reliability,
     residuals,
+    result_fields,
     sensor_report,
     soil_properties,
     temperature_at,
@@ -255,5 +258,41 @@ CATALOG: tuple[Question, ...] = (
         ("D", "M"), p.SigmaParams, "results",
         lambda twin, a: energy_breakdown(twin.results, a.sigma),
         outputs=("n_points", "sigma", "log_term", "residual_term", "energy", "implicit_rmse", "reference", "ratio"),
+    ),
+    Question(
+        "parameters_catalog", "BN-10", "build", N_("Which parameters can be set?"),
+        "The settings with their bounds, defaults and units, the values of `store_fields`, the default priors and the "
+        "physical bounds of the inverted parameters, and the keys of the layers and of the mcmc section of twin.yaml. "
+        "It is about no twin.",
+        ("D", "M"), p.NoParams, "none",
+        lambda twin, _: parameters_catalog(),
+        outputs=(
+            "settings.name", "settings.minimum", "settings.maximum", "settings.default", "settings.unit",
+            "settings.description", "store_fields.values", "store_fields.default", "store_fields.description",
+            "priors.parameter", "priors.label", "priors.low", "priors.high", "priors.physical_low", "priors.physical_high",
+            "layer_keys.name", "layer_keys.description", "mcmc_keys.name", "mcmc_keys.description",
+        ),
+    ),
+    Question(
+        "check", "BN-11", "build", N_("Is this configuration valid, and what will it cost?"),
+        "Whether the configuration of a twin folder is valid, with its problems (also given as warnings); if so, the "
+        "twin_id expected for the published code, the state (new, computed, duplicate or modified) and, in mcmc mode, "
+        "the number of samples, the evaluations and the stored size, which depends on `store_fields`. An invalid "
+        "configuration is an answer (`valid` is false), not an error.",
+        ("D", "M"), p.NoParams, "folder",
+        lambda twin, _: check_twin(twin.folder),
+        outputs=(
+            "valid", "name", "mode", "twin_id", "twin_id_local", "state", "duplicate_of", "samples", "max_evaluations",
+            "stored_bytes", "store_fields", "issue_codes", "issue_fields", "issue_messages",
+        ),
+    ),
+    Question(
+        "fields", "BN-30", "raw_results", N_("Complete fields"),
+        "Temperature (°C), water flux (m/s) and advective and conductive heat fluxes (W/m², positive downwards) as "
+        "arrays (depth, time) of the best fit, with their axes. Choose the variables, period, depth range and time "
+        "step. They are large: prefer Accept: application/x-npz.",
+        ("D", "M"), p.FieldsParams, "results",
+        lambda twin, a: result_fields(twin.results, a.variables, a.start, a.end, a.depth_range, a.time_step),
+        outputs=("depth", "time", "temperature", "water_flux", "heat_flux_advective", "heat_flux_conductive"),
     ),
 )

@@ -127,3 +127,10 @@ class ReliabilityParams(IntervalParams):
         description="Override of the reliability thresholds (a partial object), on top of the MOLONARI_THRESHOLDS file. "
                     "Keys: rhat, ess, fit, coverage, identifiability and gaps, each with `_green` and `_orange` "
                     "(e.g. `rhat_green`). The defaults are provisional and not validated by a hydrogeologist.")
+
+
+class FieldsParams(PeriodParams):
+    variables: list[str] | None = Field(default=None, description="Fields to return, among temperature, water_flux, "
+                                        "heat_flux_advective and heat_flux_conductive. Default: all four.")
+    depth_range: tuple[float | None, float | None] | None = Field(default=None, description="(shallowest, deepest) depth in m, included; null: no bound.")
+    time_step: int = Field(default=1, ge=1, description="Keep one date out of `time_step`. The fields are large: prefer Accept: application/x-npz.")

@@ -359,13 +359,13 @@ def test_question_catalog(asking):
                                                      "heat_budget", "temperature", "sensor_intervals", "fit_quality",
                                                      "reliability", "provenance", "residuals", "chain_data", "sampling_layout",
                                                      "soil_properties", "posterior_samples", "convergence",
-                                                     "energy_breakdown"]
+                                                     "energy_breakdown", "parameters_catalog", "check", "fields"]
     volume = next(q for q in body["questions"] if q["id"] == "exchanged_volume")
     assert volume["ref"] == "HN-12" and volume["level"] == "high" and volume["modes"] == ["D", "M"]
     assert volume["label_en"] == "What volume of water crossed 1 m² of riverbed?"
     assert set(volume["params_schema"]["properties"]) == {"start", "end", "area"}
     assert volume["params_schema"]["additionalProperties"] is False
-    assert len(asking.get("/v1/questions", params={"twin": "twin_01"}).json()["questions"]) == 13
+    assert len(asking.get("/v1/questions", params={"twin": "twin_01"}).json()["questions"]) == 15
     assert_error(asking.get("/v1/questions", params={"twin": "twin_99"}), 404, "E_TWIN_NOT_FOUND")
 
 
@@ -471,3 +471,48 @@ def test_questions_without_a_twin_have_their_own_endpoint(computed_twins, monkey
     assert_error(client.post("/v1/questions/ping", json={"bogus": 1}), 422, "E_QUESTION_PARAMS")
     assert "ping" in [q["id"] for q in client.get("/v1/questions").json()["questions"]]
     assert "ping" not in [q["id"] for q in client.get("/v1/questions", params={"twin": "twin_01"}).json()["questions"]]
+
+
+def test_parameters_catalog_has_its_endpoint(asking):
+    response = asking.post("/v1/questions/parameters_catalog")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provenance"]["question"] == "parameters_catalog" and "twin" not in body["provenance"]
+    assert body["data"]["settings.name"]["value"]["data"][0] == "nb_cells"
+    assert body["data"]["settings.maximum"]["value"]["data"].count(None) >= 1  # sans borne : null
+    assert asking.post("/v1/questions/BN-10", json={}).status_code == 200
+    binary = asking.post("/v1/questions/parameters_catalog", headers={"Accept": "application/x-npz"})
+    assert binary.status_code == 200 and binary.headers["content-type"] == "application/x-npz"
+    assert_error(ask(asking, "twin_01", "parameters_catalog"), 409, "E_QUESTION_NO_TWIN")
+    parameters = next(q for q in asking.get("/v1/questions").json()["questions"] if q["id"] == "parameters_catalog")
+    assert parameters["requires"] == "none" and parameters["ref"] == "BN-10" and parameters["level"] == "low"
+
+
+def test_check_of_an_invalid_twin_is_a_200(computed_twins, tmp_path):
+    shutil.copytree(computed_twins, tmp_path / "twins")
+    (tmp_path / "twins" / "twin_09" / "twin.yaml").write_text("schema: [", encoding="utf-8")
+    client = TestClient(create_app(FakeTaskRunner(), tmp_path / "twins"))
+    response = ask(client, "twin_09", "check")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data"]["valid"]["value"] is False
+    assert body["data"]["issue_codes"]["value"]["data"] == ["E_TWIN_INVALID_YAML"]
+    assert [w["code"] for w in body["warnings"]] == ["E_TWIN_INVALID_YAML"]
+    assert ask(client, "twin_99", "check").status_code == 404
+
+
+def test_fields_as_npz_are_the_size_of_the_arrays(asking):
+    from molonari_twin.contract.codec import answer_from_npz
+
+    params = {"variables": ["temperature", "water_flux"]}
+    binary = ask(asking, "twin_01", "fields", params, npz=True)
+    assert binary.status_code == 200
+    answer = answer_from_npz(binary.content)
+    nz, nt = answer.data["temperature"].value.shape
+    assert (nz, nt) == (answer.data["depth"].value.size, answer.data["time"].value.size)
+    raw = 2 * nz * nt * 8  # deux champs en float64
+    assert answer.data["temperature"].value.nbytes + answer.data["water_flux"].value.nbytes == raw
+    assert 0.3 * raw < len(binary.content) <= raw * 1.1  # archive compressée : de l'ordre de la taille brute
+    as_json = ask(asking, "twin_01", "fields", params)
+    assert as_json.status_code == 200 and len(as_json.content) > len(binary.content)  # le JSON est plus lourd
+    assert_error(ask(asking, "twin_01", "fields", {"variables": ["pressure"]}), 422, "E_QUESTION_VARIABLE")

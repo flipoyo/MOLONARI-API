@@ -123,6 +123,7 @@ MESSAGES: dict[str, str] = {
     "W_RELIABILITY_FIT": "Fit: largest RMSE/σT {ratio:.3g} (green: at most {green:g}; orange: at most {orange:g}).",
     "W_RELIABILITY_IDENTIFIABILITY": "Identifiability: largest posterior over prior standard-deviation ratio {ratio:.3g}, for {parameter} in layer {layer} (green: at most {green:g}; orange: at most {orange:g}).",
     "W_RELIABILITY_PROVENANCE": "Provenance: {count} problem(s) recorded (green: none; otherwise orange).",
+    "E_QUESTION_VARIABLE": "Unknown field \"{variable}\" (available: {known}).",
     "E_QUESTION_NO_FIELDS": "No temperature fields were stored with this computation (store_fields: none).",
     "E_QUESTION_NO_TWIN": "Question \"{question}\" is not about a twin: ask it without one.",
     "E_QUESTION_TWIN_REQUIRED": "Question \"{question}\" is about a twin: ask it of one.",

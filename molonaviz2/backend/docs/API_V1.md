@@ -58,6 +58,7 @@ et de `params`.
 | `E_QUESTION_TIMES` | 422 |
 | `E_QUESTION_TWIN_REQUIRED` | 409 |
 | `E_QUESTION_UNKNOWN` | 404 |
+| `E_QUESTION_VARIABLE` | 422 |
 | `E_QUESTION_Z_OR_T` | 422 |
 | `E_REQUEST_INVALID` | 422 |
 | `E_TASK_FINISHED` | 409 |
@@ -255,6 +256,34 @@ Per layer: permeability k (m²), hydraulic conductivity K (m/s, k·ρw·g/μ wit
 
 Sorties : `layers`, `level`, `k`, `k_median`, `k_identifiability`, `K`, `K_median`, `K_identifiability`, `n`, `n_median`, `n_identifiability`, `lambda_s`, `lambda_s_median`, `lambda_s_identifiability`, `rhos_cs`, `rhos_cs_median`, `rhos_cs_identifiability`.
 
+## Construire
+
+### `parameters_catalog` (BN-10)
+
+**Which parameters can be set?** — *Quels paramètres peut-on régler ?*
+
+The settings with their bounds, defaults and units, the values of `store_fields`, the default priors and the physical bounds of the inverted parameters, and the keys of the layers and of the mcmc section of twin.yaml. It is about no twin.
+
+- Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige aucun twin.
+- Requête : `POST /v1/questions/parameters_catalog`
+
+Aucun paramètre : le corps de la requête est vide (ou `{}`).
+
+Sorties : `settings.name`, `settings.minimum`, `settings.maximum`, `settings.default`, `settings.unit`, `settings.description`, `store_fields.values`, `store_fields.default`, `store_fields.description`, `priors.parameter`, `priors.label`, `priors.low`, `priors.high`, `priors.physical_low`, `priors.physical_high`, `layer_keys.name`, `layer_keys.description`, `mcmc_keys.name`, `mcmc_keys.description`.
+
+### `check` (BN-11)
+
+**Is this configuration valid, and what will it cost?** — *Cette configuration est-elle valide, et que coûtera-t-elle ?*
+
+Whether the configuration of a twin folder is valid, with its problems (also given as warnings); if so, the twin_id expected for the published code, the state (new, computed, duplicate or modified) and, in mcmc mode, the number of samples, the evaluations and the stored size, which depends on `store_fields`. An invalid configuration is an answer (`valid` is false), not an error.
+
+- Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige le dossier d'un twin, dont la configuration peut être invalide.
+- Requête : `POST /v1/twins/{ref}/questions/check`
+
+Aucun paramètre : le corps de la requête est vide (ou `{}`).
+
+Sorties : `valid`, `name`, `mode`, `twin_id`, `twin_id_local`, `state`, `duplicate_of`, `samples`, `max_evaluations`, `stored_bytes`, `store_fields`, `issue_codes`, `issue_fields`, `issue_messages`.
+
 ## Accès bruts aux résultats
 
 ### `residuals` (BN-31)
@@ -322,6 +351,25 @@ The posterior samples as an array (chain, iteration, layer, parameter) in the sp
 | `iter_range` | [entier ou null, entier ou null] ou null | — |  | (first, last) computed iteration, included; null: no bound. |
 
 Sorties : `samples`, `iteration`, `chain`, `layer`, `parameter`, `parameter_unit`, `space`.
+
+### `fields` (BN-30)
+
+**Complete fields** — *Champs complets*
+
+Temperature (°C), water flux (m/s) and advective and conductive heat fluxes (W/m², positive downwards) as arrays (depth, time) of the best fit, with their axes. Choose the variables, period, depth range and time step. They are large: prefer Accept: application/x-npz.
+
+- Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
+- Requête : `POST /v1/twins/{ref}/questions/fields`
+
+| Paramètre | Type | Défaut | Bornes | Description |
+|---|---|---|---|---|
+| `start` | date ou null | — |  | First date of the period, included (ISO 8601, no time zone). Default: start of the results. |
+| `end` | date ou null | — |  | Last date of the period, included (ISO 8601, no time zone). Default: end of the results. |
+| `variables` | list[texte] ou null | — |  | Fields to return, among temperature, water_flux, heat_flux_advective and heat_flux_conductive. Default: all four. |
+| `depth_range` | [nombre ou null, nombre ou null] ou null | — |  | (shallowest, deepest) depth in m, included; null: no bound. |
+| `time_step` | entier | `1` | ≥ 1 | Keep one date out of `time_step`. The fields are large: prefer Accept: application/x-npz. |
+
+Sorties : `depth`, `time`, `temperature`, `water_flux`, `heat_flux_advective`, `heat_flux_conductive`.
 
 ## Diagnostics
 

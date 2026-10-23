@@ -44,7 +44,7 @@ def code_of(call):
 
 def test_catalog_is_consistent():
     ids, refs = [q.id for q in CATALOG], [q.ref for q in CATALOG]
-    assert len(set(ids)) == len(ids) == 17 and len(set(refs)) == len(refs)
+    assert len(set(ids)) == len(ids) == 20 and len(set(refs)) == len(refs)
     french = load_catalog("fr")
     for question in CATALOG:
         assert re.fullmatch(r"[a-z_]+", question.id)
@@ -100,7 +100,7 @@ def test_question_by_id_or_plan_reference(api):
 def test_questions_of_a_twin_follow_its_mode(api):
     direct = {q.id for q in api.questions("twin_01")}
     mcmc = {q.id for q in api.questions("twin_03")}
-    assert mcmc == {q.id for q in CATALOG}
+    assert mcmc == {q.id for q in CATALOG} - {"parameters_catalog"}  # une question sans twin n'est celle d'aucun twin
     assert direct == mcmc - {"chain_data", "sampling_layout", "posterior_samples", "convergence"}
 
 
@@ -170,6 +170,44 @@ def test_questions_of_a_twin_leave_out_the_questions_without_a_twin(probing):
     api, _ = probing
     assert [q.id for q in api.questions("twin_01")] == ["probe_folder"]
     assert [q.id for q in api.questions()] == ["probe_global", "probe_folder"]
+
+
+def test_check_reports_the_state_of_each_twin(api):
+    assert api.ask("twin_01", "check").data["state"].value == "computed"
+    assert api.ask("twin_09", "check").data["state"].value == "new"
+
+
+def test_check_of_a_duplicate_names_its_source(twins, tmp_path):
+    shutil.copytree(twins, tmp_path / "twins")
+    shutil.copytree(twins.parent / "results", tmp_path / "results")
+    shutil.copytree(tmp_path / "twins" / "twin_01", tmp_path / "twins" / "twin_10")
+    yaml = tmp_path / "twins" / "twin_10" / "twin.yaml"
+    yaml.write_text(yaml.read_text(encoding="utf-8").replace("name: twin_01", "name: twin_10"), encoding="utf-8")
+    data = TwinAPI(tmp_path / "twins").ask("twin_10", "check").data
+    assert data["state"].value == "duplicate" and data["duplicate_of"].value == "twin_01"
+    assert data["twin_id_local"].value == TwinAPI(tmp_path / "twins").ask("twin_01", "check").data["twin_id_local"].value
+
+
+def test_check_of_a_twin_modified_after_its_run(twins, tmp_path):
+    shutil.copytree(twins, tmp_path / "twins")
+    shutil.copytree(twins.parent / "results", tmp_path / "results")
+    yaml = tmp_path / "twins" / "twin_01" / "twin.yaml"
+    yaml.write_text(yaml.read_text(encoding="utf-8").replace("nb_cells: 100", "nb_cells: 90"), encoding="utf-8")
+    assert TwinAPI(tmp_path / "twins").ask("twin_01", "check").data["state"].value == "modified"
+
+
+def test_check_of_a_broken_twin_still_answers(twins, tmp_path):
+    shutil.copytree(twins, tmp_path / "twins")
+    (tmp_path / "twins" / "twin_09" / "twin.yaml").write_text("schema: nonsense\nname: x\n", encoding="utf-8")
+    answer = TwinAPI(tmp_path / "twins").ask("twin_09", "check")
+    assert answer.data["valid"].value is False and answer.provenance["twin"] == "twin_09"
+    assert "twin_id" not in answer.provenance and answer.warnings
+
+
+def test_parameters_catalog_needs_no_twin(api):
+    answer = api.ask_global("BN-10")
+    assert answer.provenance == {"question": "parameters_catalog", "ref": "BN-10", "parameters": {}}
+    assert code_of(lambda: api.ask("twin_01", "parameters_catalog")).code == "E_QUESTION_NO_TWIN"
 
 
 # Erreurs ------------------------------------------------------------------------------------------
@@ -277,6 +315,9 @@ def test_asking_every_question_loads_neither_jax_nor_arviz(twins):
         import sys
         from molonari_twin.api import TwinAPI
         api = TwinAPI({str(twins)!r})
+        for question in api.questions():
+            if question.requires == "none":
+                api.ask_global(question.id)
         for ref in ("twin_01", "twin_03"):
             for question in api.questions(ref):
                 api.ask(ref, question.id, {{"z": 0.2}} if question.id == "temperature" else {{}})
@@ -291,11 +332,13 @@ def test_declared_outputs_are_the_answers(api):
     """La documentation (docs/API_V1.md) liste les sorties déclarées : elles doivent être celles des réponses.
     Toute sortie apparaît pour au moins un des twins D et M ; aucune réponse n'a de sortie non déclarée."""
     seen = {q.id: set() for q in CATALOG}
+    answers = [(question, api.ask_global(question.id)) for question in CATALOG if question.requires == "none"]
     for ref in ("twin_01", "twin_03"):
         for question in api.questions(ref):
             params = {"temperature": {"z": 0.2}, "residuals": {"intervals": True}}.get(question.id, {})
-            answer = api.ask(ref, question.id, params)
-            assert set(answer.data) <= set(question.outputs), (question.id, set(answer.data) - set(question.outputs))
-            seen[question.id] |= set(answer.data)
+            answers.append((question, api.ask(ref, question.id, params)))
+    for question, answer in answers:
+        assert set(answer.data) <= set(question.outputs), (question.id, set(answer.data) - set(question.outputs))
+        seen[question.id] |= set(answer.data)
     for question in CATALOG:
         assert seen[question.id] == set(question.outputs), (question.id, set(question.outputs) - seen[question.id])

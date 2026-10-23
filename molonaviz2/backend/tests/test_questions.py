@@ -13,6 +13,7 @@ from molonari_twin.questions import (
     Answer,
     Quantity,
     chain_data,
+    check_twin,
     convergence,
     coverage,
     describe,
@@ -22,10 +23,12 @@ from molonari_twin.questions import (
     fit_quality,
     heat_budget,
     observed_at,
+    parameters_catalog,
     posterior_samples,
     predictive_band,
     provenance,
     residuals,
+    result_fields,
     sensor_intervals,
     sensor_report,
     sensor_samples,
@@ -770,3 +773,133 @@ def test_energy_breakdown_equals_the_energy_of_the_engine(tmp_path):
     fields = jax.jit(make_forward(geom))(jnp.asarray([layer.physical() for layer in layers], jnp.float64))
     expected = float(energy(fields["temperature"], geom, inputs.sigma_temperature**2))
     assert energy_breakdown(results).data["energy"].value == pytest.approx(expected, rel=1e-9)
+
+
+# Catalogue des paramètres, vérification d'une configuration et champs (lot C3) --------------------
+
+
+def test_parameters_catalog_covers_every_setting_key_and_prior():
+    from molonari_twin.domain.compute import (
+        DEFAULT_PRIORS,
+        INVERTED_PARAMETERS,
+        SETTING_LIMITS,
+        STORE_FIELDS,
+        InversionConfig,
+    )
+    from molonari_twin.twin.config import LAYER_KEYS, MCMC_KEYS
+
+    data = parameters_catalog().data
+    assert list(data["settings.name"].value) == list(SETTING_LIMITS)
+    count = len(SETTING_LIMITS)
+    for name in ("minimum", "maximum", "default", "unit", "description"):
+        assert data[f"settings.{name}"].value.shape == (count,), name
+    index = list(data["settings.name"].value).index("nb_iter")
+    assert (data["settings.minimum"].value[index], data["settings.maximum"].value[index]) == (1, 1_000_000)
+    assert data["settings.default"].value[index] == InversionConfig(layers=[]).nb_iter
+    unbounded = list(data["settings.name"].value).index("sigma_t")
+    assert np.isnan(data["settings.maximum"].value[unbounded])  # sans borne : nan
+    assert list(data["store_fields.values"].value) == list(STORE_FIELDS) and data["store_fields.default"].value == "sensors"
+    assert list(data["priors.parameter"].value) == list(INVERTED_PARAMETERS)
+    np.testing.assert_array_equal(data["priors.low"].value, [DEFAULT_PRIORS[n].low for n in INVERTED_PARAMETERS])
+    assert (data["priors.physical_low"].value < data["priors.low"].value).all() and (data["priors.high"].value < data["priors.physical_high"].value).all()
+    assert set(data["layer_keys.name"].value) == LAYER_KEYS and set(data["mcmc_keys.name"].value) == MCMC_KEYS
+    for name in ("mcmc_keys", "layer_keys", "settings"):
+        assert all(len(text) > 10 for text in data[f"{name}.description"].value), name
+
+
+def test_parameters_catalog_mentions_the_fields_to_store_for_the_mcmc_run():
+    data = parameters_catalog().data
+    keys = list(data["mcmc_keys.name"].value)
+    assert {"thin", "fields_per_chain", "store_fields", "nb_iter"} <= set(keys)
+
+
+def twin_folder(tmp_path, name="twin_01", edit=None):
+    import shutil
+
+    folder = tmp_path / "twins" / name
+    shutil.copytree(EXAMPLES / name, folder)
+    if edit:
+        yaml = folder / "twin.yaml"
+        yaml.write_text(edit(yaml.read_text(encoding="utf-8")), encoding="utf-8")
+    return folder
+
+
+def test_check_of_a_valid_direct_twin(tmp_path):
+    from molonari_twin.engine.api import release_version
+
+    answer = check_twin(twin_folder(tmp_path))
+    data = answer.data
+    assert data["valid"].value is True and data["state"].value == "new" and data["mode"].value == "direct"
+    from molonari_twin.twin.config import load_twin
+
+    assert data["twin_id"].value == load_twin(tmp_path / "twins" / "twin_01").twin_id(release_version())
+    assert data["issue_codes"].value.size == 0 and answer.warnings == [] and "samples" not in data
+
+
+def test_check_of_an_mcmc_twin_gives_its_cost(tmp_path):
+    from molonari_twin.questions import describe_sampling
+    from molonari_twin.twin.config import load_twin
+
+    folder = twin_folder(tmp_path, "twin_03")
+    data = check_twin(folder).data
+    layout = describe_sampling(load_twin(folder)).data
+    assert data["samples"].value == layout["samples"].value and data["stored_bytes"].value == layout["stored_bytes"].value
+    assert data["max_evaluations"].value == layout["nb_chains"].value * (layout["burn_in_max"].value + layout["nb_iter"].value)
+    assert data["stored_bytes"].unit == "B" and data["store_fields"].value == "sensors"
+
+
+def test_stored_size_depends_on_store_fields(tmp_path):
+    def sizes(store):
+        folder = twin_folder(tmp_path / store, "twin_03", lambda text: text.replace("schema: molonaviz-twin/1", "schema: molonari-twin/1.1.0")
+                             .replace("  time_step: 1", f"  time_step: 1\n  store_fields: {store}"))
+        return check_twin(folder).data["stored_bytes"].value
+
+    none, sensors, full = sizes("none"), sizes("sensors"), sizes("full")
+    assert none == 0 and 0 < sensors < full
+
+
+def test_check_of_an_invalid_twin_is_an_answer_not_an_error(tmp_path):
+    folder = twin_folder(tmp_path, edit=lambda text: text.replace("mode: direct", "mode: sideways").replace("nb_cells: 100", "nb_cells: x"))
+    answer = check_twin(folder)
+    assert answer.data["valid"].value is False and "twin_id" not in answer.data
+    codes = list(answer.data["issue_codes"].value)
+    assert "E_TWIN_MODE" in codes and len(codes) >= 2
+    assert list(answer.data["issue_fields"].value)[codes.index("E_TWIN_MODE")] == "mode"
+    assert [w.code for w in answer.warnings] == codes and len(answer.data["issue_messages"].value) == len(codes)
+
+
+@pytest.mark.parametrize("text", ["schema: [", "", "- a\n"])
+def test_check_of_an_unreadable_twin_file(tmp_path, text):
+    folder = twin_folder(tmp_path, edit=lambda _: text)
+    answer = check_twin(folder)
+    assert answer.data["valid"].value is False and answer.data["issue_codes"].value.size >= 1
+
+
+def test_fields_have_axes_units_and_shapes(direct):
+    data = result_fields(direct).data
+    nz, nt = direct.temperature.shape
+    assert data["depth"].value.shape == (nz,) and data["time"].value.shape == (nt,)
+    for name, unit in (("temperature", "°C"), ("water_flux", "m/s"), ("heat_flux_advective", "W/m²"), ("heat_flux_conductive", "W/m²")):
+        assert data[name].value.shape == (nz, nt) and data[name].unit == unit, name
+    np.testing.assert_array_equal(data["temperature"].value, direct.temperature)
+    np.testing.assert_array_equal(data["water_flux"].value, direct.water_flux_field)
+
+
+def test_fields_selection(direct):
+    times = direct.times.astype("datetime64[s]")
+    depths = direct.depths
+    data = result_fields(direct, ["temperature"], start=times[10], end=times[29], depth_range=(float(depths[2]), float(depths[5])), time_step=4).data
+    assert set(data) == {"depth", "time", "temperature"}
+    np.testing.assert_array_equal(data["depth"].value, depths[2:6])
+    np.testing.assert_array_equal(data["time"].value, times[10:30:4])
+    np.testing.assert_array_equal(data["temperature"].value, direct.temperature[2:6, 10:30:4])
+    assert result_fields(direct, ["temperature", "temperature"]).data.keys() == {"depth", "time", "temperature"}
+
+
+def test_fields_errors(direct):
+    assert code_of(lambda: result_fields(direct, ["pressure"])) == "E_QUESTION_VARIABLE"
+    assert code_of(lambda: result_fields(direct, depth_range=(50.0, 60.0))) == "E_QUESTION_OUT_OF_RANGE"
+    assert code_of(lambda: result_fields(direct, start=np.datetime64("2030-01-01"))) == "E_QUESTION_PERIOD_EMPTY"
+    old = dataclasses.replace(direct, heat_flux_advective=None, water_flux_field=None)
+    assert code_of(lambda: result_fields(old)) == "E_QUESTION_NO_FIELDS"
+    assert result_fields(old, ["temperature"]).data["temperature"].value.shape == direct.temperature.shape  # 1.x : la température seule
