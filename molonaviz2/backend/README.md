@@ -41,6 +41,28 @@ L'annulation est d'abord coopérative : le DREAM la lit à chaque bloc. Si elle 
 
 Le flux SSE reprend après `Last-Event-ID`. Seule l'adresse `127.0.0.1` est acceptée tant que l'authentification n'existe pas (phase 5, avec Celery). Schéma OpenAPI : `/openapi.json`.
 
+### Questions
+
+```bash
+curl http://127.0.0.1:8765/v1/questions?twin=twin_03                       # catalogue et schémas des paramètres
+curl -X POST http://127.0.0.1:8765/v1/twins/twin_03/questions/exchanged_volume \
+     -H 'Content-Type: application/json' -d '{"start": "2016-06-28T00:00:00"}'
+curl -X POST http://127.0.0.1:8765/v1/twins/twin_03/questions/HN-12 -H 'Accept: application/x-npz' -o answer.npz
+```
+
+Les questions lisent la configuration ou les résultats d'un twin : elles répondent tout de suite (200), sans tâche et sans charger JAX. Référence de chaque question (paramètres, sorties, modes, erreurs) : [docs/API_V1.md](docs/API_V1.md), générée par `python tools/gen_api_doc.py`.
+
+Sans HTTP, par exemple dans un notebook :
+
+```python
+from molonari_twin.api import TwinAPI
+
+answer = TwinAPI("examples/twins").ask("twin_03", "exchanged_volume", {"start": "2016-06-28T00:00:00"})
+answer.data["net"]   # Quantity(value, unit="m³/m²", interval=None)
+```
+
+Le contrat (`molonari_twin.contract`) contient les modèles pydantic de l'API, les modèles des paramètres et le codec des réponses (JSON, npz). Il ne contient aucune logique métier, et n'importe ni FastAPI ni JAX. Tout changement du contrat se voit dans `tests/fixtures/openapi_v1.json`.
+
 ## Façade
 
 Le frontend n'importe que `molonari_twin.facade`. Elle réexporte tels quels les types, constantes et fonctions dont il a besoin (modèles, projet `.molo`, imports de fichiers, nettoyage, calcul, twins, questions, erreurs, traduction pure) ; l'importer ne charge ni JAX, ni ArviZ, ni Qt. Aucun autre module du backend ne l'importe.

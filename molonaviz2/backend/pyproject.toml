@@ -1,6 +1,6 @@
 [project]
 name = "molonari-twin"
-version = "0.7.0-alpha.1"
+version = "0.7.0-alpha.2"
 description = "Backend des twins MOLONARI : données, nettoyage, calcul (JAX, DREAM), twins et questions, sans interface."
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
