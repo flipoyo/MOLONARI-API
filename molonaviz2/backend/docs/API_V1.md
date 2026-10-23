@@ -2,7 +2,7 @@
 
 <!-- Fichier généré par tools/gen_api_doc.py à partir du catalogue (molonari_twin.api). Ne pas modifier à la main. -->
 
-Version de l'API : **1.0.0-alpha.2**. Schéma complet : `GET /openapi.json` ; catalogue avec les schémas de
+Version de l'API : **1.0.0-alpha.3**. Schéma complet : `GET /openapi.json` ; catalogue avec les schémas de
 paramètres : `GET /v1/questions` (`?twin=<ref>` : les questions de son mode).
 
 ## Poser une question

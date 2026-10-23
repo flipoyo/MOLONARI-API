@@ -595,7 +595,7 @@
  },
  "info": {
   "title": "molonari-twin",
-  "version": "1.0.0-alpha.2"
+  "version": "1.0.0-alpha.3"
  },
  "openapi": "3.1.0",
  "paths": {
