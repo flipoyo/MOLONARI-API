@@ -15,7 +15,8 @@ SOURCE = Path(__file__).resolve().parents[1] / "src" / "molonari_twin"
 EXAMPLES = Path(__file__).resolve().parents[2] / "examples" / "twins"
 
 # Modules et paquets de premier niveau de molonari_twin ("__init__" : le paquet lui-même).
-MODULES = {"__init__", "__main__", "errors", "gitinfo", "i18n", "domain", "io", "processing", "engine", "twin", "storage", "questions", "facade"}
+MODULES = {"__init__", "__main__", "errors", "gitinfo", "i18n", "domain", "io", "processing", "engine", "twin", "storage", "questions", "facade",
+           "tasks"}
 
 # Imports interdits au backend (préfixes de noms de modules) : Qt, bibliothèques graphiques, frontend.
 FORBIDDEN = ["PySide6", "pyqtgraph", "matplotlib", "molonaviz2"]
@@ -194,3 +195,17 @@ def test_facade_exports_exist_and_are_the_original_objects():
         if (isinstance(value, type) or callable(value)) and reexported:
             assert getattr(importlib.import_module(origin), value.__name__) is value, name
     assert facade.Cancelled is dream.Cancelled
+
+
+# 5. Tâches -----------------------------------------------------------------------------------------
+
+
+def test_tasks_do_not_load_the_web_stack_or_the_engine():
+    """Le worker et le runner s'importent sans FastAPI ni JAX : JAX n'est chargé que par le job twin.run."""
+    code = (
+        "import sys, molonari_twin.tasks.local, molonari_twin.tasks.worker, molonari_twin.tasks.jobs\n"
+        "print(sorted({n.split('.')[0] for n in sys.modules} & {'fastapi', 'starlette', 'pydantic', 'uvicorn', 'jax', 'arviz'}))"
+    )
+    completed = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=300, check=False)
+    assert completed.returncode == 0, completed.stderr[-4000:]
+    assert completed.stdout.strip() == "[]", f"modules chargés par tasks/ : {completed.stdout.strip()}"

@@ -162,6 +162,14 @@ MESSAGES: dict[str, str] = {
     "W_PROVENANCE_NOT_A_REPOSITORY": "The {target} is not in a git repository: its provenance is not recorded.",
     "W_PROVENANCE_NO_GIT": "git was not found: the provenance of the code and of the twin is not recorded.",
     "W_PROVENANCE_NO_REMOTE": "The git repository of the {target} has no remote: its URL is not recorded.",
+    # tasks
+    "E_DIAG_FAILURE": "The diagnostic task failed on purpose at block {block}.",
+    "E_TASK_FINISHED": "Task {task_id} is already finished ({state}).",
+    "E_TASK_INTERRUPTED": "The task was interrupted: its worker stopped before the end.",
+    "E_TASK_KIND_UNKNOWN": "Unknown task type \"{kind}\" (available: {kinds}).",
+    "E_TASK_NOT_FINISHED": "Task {task_id} is not finished yet ({state}).",
+    "E_TASK_NOT_FOUND": "Task {task_id} does not exist.",
+    "E_TASK_TIMEOUT": "The task exceeded its time limit ({timeout_s:g} s) and was stopped.",
 }
 
 
