@@ -1,2 +1,2 @@
-ID,Name,Notice,Setup,LastTransfer,Offset,Riverbed,Shaft,PressureSensor,Study,Scheme,CleanupScript
-1,TestPoint,placeholder.txt,2025-01-01,0,0,1,1,1,1,placeholder.png,placeholder.txt
+Name,Notice,Setup,LastTransfer,Offset,RiverBed,Shaft,PressureSensor,Study,Scheme,CleanupScript,ID
+Point1,placeholder.txt,2026-10-19,2026-10-19,0.0,0.0,3,3,3,placeholder.png,placeholder.txt,3

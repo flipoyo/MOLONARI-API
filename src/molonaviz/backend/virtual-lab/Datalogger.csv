@@ -1,2 +1,2 @@
-ID,Name,DevEUI,Relay,Labo
-1,TestDatalogger,ferhfuieriu,1,1
+Name,DevEUI,Relay,Labo,ID
+Datalogger1,a8610a34334d710d,3,3,3
