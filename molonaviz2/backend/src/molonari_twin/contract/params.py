@@ -46,7 +46,9 @@ class VolumeParams(PeriodParams):
 
 
 class TemperatureParams(Params):
-    z: float | None = Field(default=None, ge=0, description="Depth (m, positive downwards, inside the column). Alone: the series T(t).")
+    z: float | None = Field(default=None, ge=0, description="Depth (m, positive downwards) between the centres of the first and last "
+                            "computed cells, e.g. 0.004 to 0.396 m for 50 cells over 0.4 m (the error gives the range). "
+                            "Alone: the series T(t).")
     t: datetime | None = Field(default=None, description="Date (ISO 8601, no time zone). Alone: the profile T(z).")
 
     _check_date = field_validator("t")(_naive)

@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from ..contract import params as p
+from ..domain.compute import INVERTED_PARAMETERS
 from ..i18n import N_
 from ..questions import (
     Answer,
@@ -53,11 +54,15 @@ class Question:
     requires: Literal["config", "results"]
     run: Callable[[TwinContext, p.Params], Answer] = field(repr=False)
     since: str = "1.0.0"
+    outputs: tuple[str, ...] = ()  # noms des grandeurs de la réponse (certaines selon le mode ou les données)
 
     @property
     def level(self) -> str:
         return "high" if self.ref.startswith("HN-") else "low"
 
+
+# Bandes du modèle, en mode M avec des champs stockés (questions.sensors.model_bands).
+BANDS = ("field_time", "credible", "predictive", "coverage", "coverage_per_sensor", "points")
 
 CATALOG: tuple[Question, ...] = (
     Question(
@@ -65,6 +70,10 @@ CATALOG: tuple[Question, ...] = (
         "Layers, sensors, period, mode and main settings, read from the configuration (no computation needed).",
         ("D", "M"), p.NoParams, "config",
         lambda twin, _: describe(twin.config),
+        outputs=(
+            "name", "point", "mode", "description", "start", "end", "layers", "layer_bottoms", "sensor_depths", "offset",
+            "nb_cells", "sigma_temperature", "seed", "nb_chains", "nb_iter", "burn_in_max", "thin", "store_fields",
+        ),
     ),
     Question(
         "water_flux", "HN-10", "water", N_("What is the water flux through the riverbed?"),
@@ -72,6 +81,7 @@ CATALOG: tuple[Question, ...] = (
         "positive downwards (infiltration: the river feeds the aquifer).",
         ("D", "M"), p.PeriodParams, "results",
         lambda twin, a: water_flux(twin.results, a.start, a.end),
+        outputs=("mean", "median", "p5", "p95", "points", "start", "end"),
     ),
     Question(
         "exchanged_volume", "HN-12", "water", N_("What volume of water crossed 1 m² of riverbed?"),
@@ -79,6 +89,7 @@ CATALOG: tuple[Question, ...] = (
         "at the zero crossing: m³/m², or m³ when an area is given.",
         ("D", "M"), p.VolumeParams, "results",
         lambda twin, a: twin_exchanged_volume(twin.results, a.start, a.end, a.area),
+        outputs=("infiltration", "exfiltration", "net"),
     ),
     Question(
         "temperature", "HN-30", "temperature", N_("What is the temperature at a depth and a date?"),
@@ -86,6 +97,7 @@ CATALOG: tuple[Question, ...] = (
         "series T(t) (z alone).",
         ("D", "M"), p.TemperatureParams, "results",
         lambda twin, a: temperature_at(twin.results, a.z, a.t),
+        outputs=("temperature", "depth", "time"),
     ),
     Question(
         "sensor_intervals", "HN-33", "temperature", N_("What uncertainty surrounds each measurement point?"),
@@ -94,6 +106,7 @@ CATALOG: tuple[Question, ...] = (
         "measurements the predictive band covers. Arrays are sensor first: (3, T).",
         ("D", "M"), p.IntervalParams, "results",
         lambda twin, a: sensor_report(twin.results, a.level, a.sigma, a.seed),
+        outputs=("time", "measured", "simulated", "level", "z", "sigma") + BANDS,
     ),
     Question(
         "provenance", "HN-43", "reliability", N_("Where does this result come from?"),
@@ -101,6 +114,10 @@ CATALOG: tuple[Question, ...] = (
         "the commits and state of each repository are in the provenance of the answer.",
         ("D", "M"), p.NoParams, "results",
         lambda twin, _: provenance(twin.results),
+        outputs=(
+            "twin_id", "code_version", "results_format", "created_at", "device", "duration", "data_file", "data_sha256",
+            "reproduce",
+        ),
     ),
     Question(
         "residuals", "BN-31", "raw_results", N_("Residuals at each sensor"),
@@ -108,6 +125,7 @@ CATALOG: tuple[Question, ...] = (
         "`intervals`: the credible and predictive bands.",
         ("D", "M"), p.ResidualParams, "results",
         lambda twin, a: residuals(twin.results, a.intervals, a.level, a.sigma, a.seed),
+        outputs=("time", "measured", "simulated", "residual", "rmse") + BANDS,
     ),
     Question(
         "chain_data", "BN-34", "raw_results", N_("Everything about one or more chains"),
@@ -115,6 +133,10 @@ CATALOG: tuple[Question, ...] = (
         "each kept sample; read thinning and iteration range as in the computation.",
         ("M",), p.ChainParams, "results",
         lambda twin, a: chain_data(twin.results, a.chains, a.thin, a.iterations),
+        outputs=(
+            "iteration", "chain", *(f"samples.{name}" for name in INVERTED_PARAMETERS), "energy", "acceptance", "resets",
+            "count",
+        ),
     ),
     Question(
         "sampling_layout", "BN-36", "raw_results", N_("How was this twin sampled?"),
@@ -122,5 +144,10 @@ CATALOG: tuple[Question, ...] = (
         "them, space and time steps, store_fields and stored size; from the configuration, before or after the run.",
         ("M",), p.NoParams, "config",
         lambda twin, _: describe_sampling(twin.config),
+        outputs=(
+            "nb_chains", "burn_in_max", "nb_iter", "thin", "kept_per_chain", "samples", "fields_per_chain",
+            "fields_total", "field_interval", "nb_cells", "field_cells", "nb_times", "field_times", "space_step",
+            "time_step", "store_fields", "stored_bytes",
+        ),
     ),
 )

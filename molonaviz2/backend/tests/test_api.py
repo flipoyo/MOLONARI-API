@@ -216,3 +216,17 @@ def test_asking_every_question_loads_neither_jax_nor_arviz(twins):
     completed = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=300, check=False)
     assert completed.returncode == 0, completed.stderr[-3000:]
     assert completed.stdout.strip() == "[]"
+
+
+def test_declared_outputs_are_the_answers(api):
+    """La documentation (docs/API_V1.md) liste les sorties déclarées : elles doivent être celles des réponses.
+    Toute sortie apparaît pour au moins un des twins D et M ; aucune réponse n'a de sortie non déclarée."""
+    seen = {q.id: set() for q in CATALOG}
+    for ref in ("twin_01", "twin_03"):
+        for question in api.questions(ref):
+            params = {"temperature": {"z": 0.2}, "residuals": {"intervals": True}}.get(question.id, {})
+            answer = api.ask(ref, question.id, params)
+            assert set(answer.data) <= set(question.outputs), (question.id, set(answer.data) - set(question.outputs))
+            seen[question.id] |= set(answer.data)
+    for question in CATALOG:
+        assert seen[question.id] == set(question.outputs), (question.id, set(question.outputs) - seen[question.id])
