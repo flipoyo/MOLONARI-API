@@ -1,6 +1,6 @@
 [project]
 name = "molonari-twin"
-version = "0.6.0"
+version = "0.7.0-alpha.1"
 description = "Backend des twins MOLONARI : données, nettoyage, calcul (JAX, DREAM), twins et questions, sans interface."
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
@@ -15,6 +15,13 @@ dependencies = [
     "pyyaml>=6.0",
 ]
 
+[project.optional-dependencies]
+# API HTTP locale (`molonari-twin serve`). Le serveur distant de la phase 5 ajoutera Celery et Redis.
+server = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+]
+
 [project.scripts]
 molonari-twin = "molonari_twin.__main__:main"
 
@@ -22,6 +29,9 @@ molonari-twin = "molonari_twin.__main__:main"
 dev = [
     "pytest>=8",
     "pyheatmy",  # référence des tests du moteur (engine/reference.py)
+    "fastapi>=0.115",  # tests de l'API (extra server)
+    "uvicorn>=0.30",
+    "httpx2>=2.16",  # TestClient de FastAPI (starlette 1.x)
 ]
 
 [build-system]
