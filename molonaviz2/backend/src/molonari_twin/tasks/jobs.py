@@ -8,6 +8,7 @@ les résultats lourds restent dans des fichiers.
 
 from __future__ import annotations
 
+import logging
 import math
 import shutil
 import time
@@ -18,6 +19,8 @@ from typing import Protocol
 
 from ..errors import Cancelled, UserError
 from .model import jsonable
+
+log = logging.getLogger(__name__)
 
 
 class JobContext(Protocol):
@@ -123,3 +126,15 @@ def get_job(kind: str) -> Job:
     if kind not in JOBS:
         raise UserError("E_TASK_KIND_UNKNOWN", kind=kind, kinds=", ".join(sorted(JOBS)))
     return JOBS[kind]
+
+
+def cleanup(kind: str, params: dict) -> None:
+    """Nettoyage du job d'une tâche qui n'a pas réussi. Il s'exécute toujours avant que la tâche passe à son
+    état terminal : un client qui voit « cancelled » ou « failed » ne trouve plus de fichiers partiels."""
+    job = JOBS.get(kind)
+    if job is None or job.cleanup is None:
+        return
+    try:
+        job.cleanup(params)
+    except OSError:
+        log.exception("Cleanup failed for a %s task", kind)

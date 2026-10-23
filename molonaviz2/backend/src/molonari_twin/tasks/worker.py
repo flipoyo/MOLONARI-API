@@ -3,6 +3,7 @@
 Le runner a déjà passé la tâche en « running ». Le worker exécute le job, publie sa progression dans le
 magasin, lit le drapeau d'annulation à chaque `should_cancel()`, puis conclut la tâche : « succeeded »,
 « cancelled » (Cancelled) ou « failed » (UserError avec son code, toute autre exception en E_SYSTEM_ERROR).
+Une tâche qui ne réussit pas est nettoyée avant d'être conclue.
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ import logging
 import time
 
 from ..errors import Cancelled, UserError
-from .jobs import get_job
+from .jobs import cleanup, get_job
 from .model import error_dict, jsonable
 from .store import TaskStore
 
@@ -41,11 +42,14 @@ def main(db_path: str, task_id: str) -> None:
     try:
         result = get_job(record.kind).run(record.params, WorkerContext(store, task_id))
     except Cancelled:
+        cleanup(record.kind, record.params)
         store.set_state(task_id, "cancelled", ["running"], duration_s=time.perf_counter() - started)
     except UserError as exc:
+        cleanup(record.kind, record.params)
         store.set_state(task_id, "failed", ["running"], error=error_dict(exc), duration_s=time.perf_counter() - started)
     except Exception as exc:  # toute erreur imprévue conclut la tâche, avec son type et son texte
         log.exception("Task %s failed", task_id)
+        cleanup(record.kind, record.params)
         error = UserError("E_SYSTEM_ERROR", detail=f"{type(exc).__name__}: {exc}")
         store.set_state(task_id, "failed", ["running"], error=error_dict(error), duration_s=time.perf_counter() - started)
     else:
