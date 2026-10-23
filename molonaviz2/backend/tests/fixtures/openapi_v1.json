@@ -111,12 +111,46 @@
       "title": "Backend Version",
       "type": "string"
      },
+     "data_release": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Version of the data the twins are built on; null until the raw-data pipeline (lot C4).",
+      "title": "Data Release"
+     },
+     "device": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Computing device, e.g. \"CPU · float64\"; null until the startup diagnostic task (diag.device) is over.",
+      "title": "Device"
+     },
      "max_workers": {
       "title": "Max Workers",
       "type": "integer"
      },
+     "results_format": {
+      "description": "Format of the results written by this backend (results/<twin_id>/metadata.json).",
+      "title": "Results Format",
+      "type": "string"
+     },
      "runner": {
       "title": "Runner",
+      "type": "string"
+     },
+     "twin_schema": {
+      "description": "Schema written for new twins (twin.yaml); the older names are still read.",
+      "title": "Twin Schema",
       "type": "string"
      }
     },
@@ -124,7 +158,9 @@
      "api_version",
      "backend_version",
      "runner",
-     "max_workers"
+     "max_workers",
+     "twin_schema",
+     "results_format"
     ],
     "title": "InfoOut",
     "type": "object"

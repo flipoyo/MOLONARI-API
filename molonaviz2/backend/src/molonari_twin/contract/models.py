@@ -23,6 +23,10 @@ class InfoOut(BaseModel):
     backend_version: str
     runner: str
     max_workers: int
+    twin_schema: str = Field(description="Schema written for new twins (twin.yaml); the older names are still read.")
+    results_format: str = Field(description="Format of the results written by this backend (results/<twin_id>/metadata.json).")
+    data_release: str | None = Field(default=None, description="Version of the data the twins are built on; null until the raw-data pipeline (lot C4).")
+    device: str | None = Field(default=None, description="Computing device, e.g. \"CPU · float64\"; null until the startup diagnostic task (diag.device) is over.")
 
 
 # Tâches ------------------------------------------------------------------------------------------

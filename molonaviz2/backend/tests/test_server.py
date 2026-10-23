@@ -22,6 +22,7 @@ from molonari_twin.errors import UserError
 from molonari_twin.server.app import create_app
 from molonari_twin.tasks.local import LocalTaskRunner
 from molonari_twin.tasks.model import TaskEvent, TaskRecord, now
+from molonari_twin.twin.results import RESULTS_FORMAT
 
 EXAMPLES = Path(__file__).resolve().parents[2] / "examples" / "twins"
 ERROR_KEYS = {"code", "field", "params", "message_en"}
@@ -136,7 +137,22 @@ def assert_error(response, status, code):
 
 def test_info(client):
     assert client.get("/v1/info").json() == {"api_version": API_VERSION, "backend_version": __version__,
-                                             "runner": "fake", "max_workers": 2}
+                                             "runner": "fake", "max_workers": 2, "twin_schema": "molonari-twin/1.1.0",
+                                             "results_format": RESULTS_FORMAT, "data_release": None, "device": None}
+
+
+def test_info_gives_the_device_once_the_diagnostic_task_succeeded(fake, twins):
+    client = TestClient(create_app(fake, twins, device_task=fake.submit("diag.device", {}).id))
+    assert client.get("/v1/info").json()["device"] is None  # en file
+    fake.finish("t1", "succeeded", {"device": "CPU · float64"})
+    assert client.get("/v1/info").json()["device"] == "CPU · float64"
+    assert TestClient(create_app(fake, twins, device_task="t99")).get("/v1/info").json()["device"] is None  # tâche inconnue
+
+
+def test_info_leaves_the_device_empty_when_the_diagnostic_task_failed(fake, twins):
+    client = TestClient(create_app(fake, twins, device_task=fake.submit("diag.device", {}).id))
+    fake.finish("t1", "failed")
+    assert client.get("/v1/info").json()["device"] is None
 
 
 def test_run_creates_a_task(client, fake, twins):
@@ -257,6 +273,19 @@ def local(tmp_path, twins):
     runner = LocalTaskRunner(tmp_path / "tasks.sqlite", cancel_grace_s=1.0, poll_s=0.02)
     yield runner, TestClient(create_app(runner, twins, events_poll_s=0.02))
     runner.close()
+
+
+def test_device_is_filled_in_by_a_worker_that_loads_jax(tmp_path, twins):
+    runner = LocalTaskRunner(tmp_path / "tasks.sqlite", poll_s=0.02)
+    try:
+        task = runner.submit("diag.device", {})
+        client = TestClient(create_app(runner, twins, device_task=task.id))
+        assert client.get("/v1/info").json()["device"] in (None, "CPU · float64")  # le worker démarre
+        assert runner.wait(task.id, timeout_s=120).state == "succeeded"
+        info = client.get("/v1/info").json()
+        assert info["device"].endswith("float64") and info["twin_schema"] == "molonari-twin/1.1.0"
+    finally:
+        runner.close()
 
 
 def test_api_answers_while_a_task_runs(local):

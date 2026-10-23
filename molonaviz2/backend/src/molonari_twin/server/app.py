@@ -44,6 +44,8 @@ from ..errors import Issue, UserError
 from ..questions import Answer
 from ..tasks.model import TERMINAL, TaskRecord, error_dict
 from ..tasks.runner import TaskRunner, task_key
+from ..twin.config import SCHEMA_WRITTEN
+from ..twin.results import RESULTS_FORMAT
 
 HTTP_STATUS = {
     "E_TASK_NOT_FOUND": 404,
@@ -99,7 +101,9 @@ def task_result_out(record: TaskRecord) -> TaskResultOut:
     return TaskResultOut(task_id=record.id, state=record.state, result=record.result, error=record.error)
 
 
-def create_app(runner: TaskRunner, twins_folder: str | Path, events_poll_s: float = 0.1) -> FastAPI:
+def create_app(runner: TaskRunner, twins_folder: str | Path, events_poll_s: float = 0.1, device_task: str | None = None) -> FastAPI:
+    """`device_task` : identifiant de la tâche `diag.device` lancée au démarrage (par `serve`) ; son résultat est l'appareil
+    de /v1/info, null tant qu'elle n'a pas réussi."""
     twins_folder = Path(twins_folder)
     questions = TwinAPI(twins_folder)
     app = FastAPI(title="molonari-twin", version=API_VERSION,
@@ -120,7 +124,17 @@ def create_app(runner: TaskRunner, twins_folder: str | Path, events_poll_s: floa
     @app.get("/v1/info")
     def info() -> InfoOut:
         return InfoOut(api_version=API_VERSION, backend_version=__version__, runner=runner.name,
-                       max_workers=runner.max_workers)
+                       max_workers=runner.max_workers, twin_schema=SCHEMA_WRITTEN, results_format=RESULTS_FORMAT,
+                       data_release=None, device=device())
+
+    def device() -> str | None:
+        if device_task is None:
+            return None
+        try:
+            record = runner.get(device_task)
+        except UserError:
+            return None
+        return record.result.get("device") if record.state == "succeeded" and record.result else None
 
     @app.get("/v1/questions", responses={404: {"model": ErrorOut}})
     def list_questions(twin: str | None = None) -> QuestionsOut:

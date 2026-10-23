@@ -116,9 +116,21 @@ def cleanup_sleep_job(params: dict) -> None:
         shutil.rmtree(params["partial"], ignore_errors=True)
 
 
+# diag.device -------------------------------------------------------------------------------------
+
+
+def device_job(params: dict, context: JobContext) -> dict:
+    """Appareil de calcul (CPU ou GPU CUDA, float64). Il importe JAX : il tourne dans un worker, jamais dans le
+    processus de l'API, qui ne charge pas le moteur."""
+    from ..engine import api
+
+    return {"device": api.device()}
+
+
 JOBS: dict[str, Job] = {
     "twin.run": Job(run_twin_job, cleanup_twin_job),
     "diag.sleep": Job(sleep_job, cleanup_sleep_job),
+    "diag.device": Job(device_job),
 }
 
 
