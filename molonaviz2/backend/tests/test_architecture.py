@@ -224,3 +224,10 @@ def test_only_the_command_line_imports_the_server():
             if module == "molonari_twin.server" or module.startswith("molonari_twin.server."):
                 problems.append(f"{relative}:{line} importe le serveur")
     assert not problems, "\n".join(problems)
+
+
+def test_command_line_imports_the_server_only_when_serving():
+    tree = ast.parse((SOURCE / "twin" / "cli.py").read_text(encoding="utf-8"))
+    top_level = [n for n in tree.body if isinstance(n, ast.Import | ast.ImportFrom)]
+    assert not [n for n in top_level if isinstance(n, ast.ImportFrom) and n.module and "server" in n.module]
+    assert not [n for n in top_level if isinstance(n, ast.Import) and any(a.name in ("fastapi", "uvicorn") for a in n.names)]

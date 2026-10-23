@@ -4,6 +4,7 @@
     molonari-twin id <twin_xx>           étape 3 : affiche le twin_id et l'état dans le registre
     molonari-twin run <twin_xx>          étapes 4-6 : exécute (ou signale un doublon) et range les résultats
     molonari-twin list <dossier twins>   liste les twins et leur état
+    molonari-twin serve --local          API HTTP sur 127.0.0.1 (extra `server`), calculs dans des workers
 
 (aussi `python -m molonari_twin …`, et `molonaviz2 twin …` depuis l'application)
 
@@ -19,9 +20,12 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from pathlib import Path
 
 from ..errors import UserError
 from ..i18n import DEFAULT_LANGUAGE, LANGUAGES, render, translate
+
+LOCAL_HOSTS = ("127.0.0.1", "localhost", "::1")
 
 
 def language() -> str:
@@ -54,12 +58,23 @@ def main(argv: list[str]) -> int:
     sub.choices["run"].add_argument("--strict", action="store_true",
                                     help="refuse an unpublished code version or modified or untagged repositories")
     sub.add_parser("list").add_argument("folder", help="twins folder")
+    serve_parser = sub.add_parser("serve")
+    serve_parser.add_argument("--local", action="store_true", help="listen on 127.0.0.1 (default, and the only mode until authentication exists)")
+    serve_parser.add_argument("--host", default="127.0.0.1", help=argparse.SUPPRESS)
+    serve_parser.add_argument("--port", type=int, default=8765)
+    serve_parser.add_argument("--twins-folder", default=".", help="folder that contains the twin_xx folders")
+    serve_parser.add_argument("--tasks-db", default=None, help="task database (default: $XDG_CACHE_HOME/molonari-twin/tasks.sqlite)")
+    serve_parser.add_argument("--max-workers", type=int, default=1, help="tasks computed at the same time")
     args = parser.parse_args(argv)
+    if args.command == "serve" and args.host not in LOCAL_HOSTS:
+        serve_parser.error(tr("only a local address is allowed until authentication exists"))
 
     from .config import TwinConfigError, load_twin
     from .run import list_twins, run_twin, twin_status
 
     try:
+        if args.command == "serve":
+            return serve(args)
         if args.command == "validate":
             config = load_twin(args.twin)
             print(tr("{name}: valid configuration ({mode} mode).").format(name=config.name, mode=config.mode))
@@ -106,4 +121,26 @@ def main(argv: list[str]) -> int:
     except UserError as exc:
         print(render(exc, tr), file=sys.stderr)
         return 1
+    return 0
+
+
+def serve(args) -> int:
+    """Lance l'API sur une adresse locale, avec un LocalTaskRunner ; les workers sont arrêtés à la sortie."""
+    try:
+        import uvicorn
+
+        from ..server.app import create_app
+    except ImportError:
+        raise UserError("E_SERVER_EXTRA_MISSING") from None
+    from ..tasks.local import LocalTaskRunner, default_db_path
+
+    db = Path(args.tasks_db) if args.tasks_db else default_db_path()
+    folder = Path(args.twins_folder).resolve()
+    runner = LocalTaskRunner(db, max_workers=args.max_workers)
+    print(tr("Local server: http://{host}:{port} (twins: {folder}, tasks: {db})").format(
+        host=args.host, port=args.port, folder=folder, db=db))
+    try:
+        uvicorn.run(create_app(runner, folder), host=args.host, port=args.port)
+    finally:
+        runner.close()
     return 0
