@@ -357,7 +357,7 @@ def test_question_catalog(asking):
     assert body["api_version"] == API_VERSION
     assert [q["id"] for q in body["questions"]] == ["describe", "water_flux", "exchange_direction", "exchanged_volume",
                                                      "heat_budget", "temperature", "sensor_intervals", "fit_quality",
-                                                     "provenance", "residuals", "chain_data", "sampling_layout",
+                                                     "reliability", "provenance", "residuals", "chain_data", "sampling_layout",
                                                      "soil_properties", "posterior_samples", "convergence",
                                                      "energy_breakdown"]
     volume = next(q for q in body["questions"] if q["id"] == "exchanged_volume")
@@ -365,7 +365,7 @@ def test_question_catalog(asking):
     assert volume["label_en"] == "What volume of water crossed 1 m² of riverbed?"
     assert set(volume["params_schema"]["properties"]) == {"start", "end", "area"}
     assert volume["params_schema"]["additionalProperties"] is False
-    assert len(asking.get("/v1/questions", params={"twin": "twin_01"}).json()["questions"]) == 12
+    assert len(asking.get("/v1/questions", params={"twin": "twin_01"}).json()["questions"]) == 13
     assert_error(asking.get("/v1/questions", params={"twin": "twin_99"}), 404, "E_TWIN_NOT_FOUND")
 
 

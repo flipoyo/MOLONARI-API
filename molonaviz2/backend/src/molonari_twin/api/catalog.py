@@ -35,6 +35,7 @@ from ..questions import (
     heat_budget,
     posterior_samples,
     provenance,
+    reliability,
     residuals,
     sensor_report,
     soil_properties,
@@ -159,6 +160,18 @@ CATALOG: tuple[Question, ...] = (
         ("D", "M"), p.IntervalParams, "results",
         lambda twin, a: fit_quality(twin.results, a.level, a.sigma, a.seed),
         outputs=("rmse", "bias", "rmse_over_sigma", "lag1_autocorrelation", "sigma", "level", "coverage_per_sensor"),
+    ),
+    Question(
+        "reliability", "HN-41", "reliability", N_("Can I trust this result?"),
+        "A green, orange or red verdict, the worst of the criteria, each with its level and its reason: convergence "
+        "(R̂, ESS) in mcmc mode, fit (RMSE/σT), identifiability and predictive coverage in mcmc mode, gaps in the "
+        "data and provenance. **The thresholds are provisional and not validated by a hydrogeologist** "
+        "(`thresholds_validated` is false): the response gives those it used, and they can be overridden.",
+        ("D", "M"), p.ReliabilityParams, "results",
+        lambda twin, a: reliability(twin.results, a.level, a.sigma, a.seed, a.thresholds),
+        outputs=(
+            "verdict", "criteria", "levels", "reasons", "threshold_names", "thresholds", "thresholds_validated", "level",
+        ),
     ),
     Question(
         "provenance", "HN-43", "reliability", N_("Where does this result come from?"),

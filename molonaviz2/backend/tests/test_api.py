@@ -44,7 +44,7 @@ def code_of(call):
 
 def test_catalog_is_consistent():
     ids, refs = [q.id for q in CATALOG], [q.ref for q in CATALOG]
-    assert len(set(ids)) == len(ids) == 16 and len(set(refs)) == len(refs)
+    assert len(set(ids)) == len(ids) == 17 and len(set(refs)) == len(refs)
     french = load_catalog("fr")
     for question in CATALOG:
         assert re.fullmatch(r"[a-z_]+", question.id)

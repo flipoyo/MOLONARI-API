@@ -119,3 +119,11 @@ class SoilParams(Params):
 
 class SigmaParams(Params):
     sigma: float | None = Field(default=None, gt=0, description="Measurement uncertainty of the thermometers (°C). Default: the one recorded with the results.")
+
+
+class ReliabilityParams(IntervalParams):
+    thresholds: dict[str, float] | None = Field(
+        default=None,
+        description="Override of the reliability thresholds (a partial object), on top of the MOLONARI_THRESHOLDS file. "
+                    "Keys: rhat, ess, fit, coverage, identifiability and gaps, each with `_green` and `_orange` "
+                    "(e.g. `rhat_green`). The defaults are provisional and not validated by a hydrogeologist.")

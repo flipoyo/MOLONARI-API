@@ -209,6 +209,24 @@ Per sensor: RMSE, bias, RMSE/σT, lag-1 autocorrelation of the residuals and, in
 
 Sorties : `rmse`, `bias`, `rmse_over_sigma`, `lag1_autocorrelation`, `sigma`, `level`, `coverage_per_sensor`.
 
+### `reliability` (HN-41)
+
+**Can I trust this result?** — *Puis-je faire confiance à ce résultat ?*
+
+A green, orange or red verdict, the worst of the criteria, each with its level and its reason: convergence (R̂, ESS) in mcmc mode, fit (RMSE/σT), identifiability and predictive coverage in mcmc mode, gaps in the data and provenance. **The thresholds are provisional and not validated by a hydrogeologist** (`thresholds_validated` is false): the response gives those it used, and they can be overridden.
+
+- Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
+- Requête : `POST /v1/twins/{ref}/questions/reliability`
+
+| Paramètre | Type | Défaut | Bornes | Description |
+|---|---|---|---|---|
+| `level` | nombre | `0.9` | > 0, < 1 | Level of the intervals, e.g. 0.9 for 90 %. |
+| `sigma` | nombre ou null | — | ≥ 0 | Measurement uncertainty of the thermometers (°C). Default: the one recorded with the results. |
+| `seed` | entier | `0` | ≥ 0 | Seed of the measurement noise drawn for the predictive band (same seed, same band). |
+| `thresholds` | object ou null | — |  | Override of the reliability thresholds (a partial object), on top of the MOLONARI_THRESHOLDS file. Keys: rhat, ess, fit, coverage, identifiability and gaps, each with `_green` and `_orange` (e.g. `rhat_green`). The defaults are provisional and not validated by a hydrogeologist. |
+
+Sorties : `verdict`, `criteria`, `levels`, `reasons`, `threshold_names`, `thresholds`, `thresholds_validated`, `level`.
+
 ### `provenance` (HN-43)
 
 **Where does this result come from?** — *D'où vient ce résultat ?*

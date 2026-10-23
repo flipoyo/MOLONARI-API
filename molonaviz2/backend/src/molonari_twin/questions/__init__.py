@@ -18,6 +18,7 @@ from .intervals import (
     z_score,
 )
 from .predictive import coverage, observed_at, predictive_band, sensor_samples
+from .reliability import reliability
 from .sensors import residuals, sensor_report
 from .soil import soil_properties
 from .temperature import temperature_at
@@ -44,6 +45,7 @@ __all__ = [
     "posterior_samples",
     "predictive_band",
     "provenance",
+    "reliability",
     "residuals",
     "sensor_intervals",
     "sensor_report",

@@ -116,6 +116,13 @@ MESSAGES: dict[str, str] = {
     # questions
     "E_QUESTION_CHAINS": "Unknown chain {chain}: this computation has {n} chains, numbered from 0.",
     "E_QUESTION_LEVEL": "The level must be strictly between 0 and 1 (got {level}).",
+    "E_THRESHOLDS_INVALID": "Invalid reliability thresholds: {detail}",
+    "W_RELIABILITY_CONVERGENCE": "Convergence: largest R̂ {rhat:.3g}, smallest ESS {ess:.0f} (green: R̂ ≤ {rhat_green:g} and ESS ≥ {ess_green:g}; orange: R̂ ≤ {rhat_orange:g} and ESS ≥ {ess_orange:g}).",
+    "W_RELIABILITY_COVERAGE": "Coverage: the predictive band covers {coverage:.1%} of the measurements for a level of {level:.1%} (green: within {green:.1%}; orange: within {orange:.1%}).",
+    "W_RELIABILITY_DATA": "Data: {gaps:.1%} of the expected measurements are missing (green: at most {green:.1%}; orange: at most {orange:.1%}).",
+    "W_RELIABILITY_FIT": "Fit: largest RMSE/σT {ratio:.3g} (green: at most {green:g}; orange: at most {orange:g}).",
+    "W_RELIABILITY_IDENTIFIABILITY": "Identifiability: largest posterior over prior standard-deviation ratio {ratio:.3g}, for {parameter} in layer {layer} (green: at most {green:g}; orange: at most {orange:g}).",
+    "W_RELIABILITY_PROVENANCE": "Provenance: {count} problem(s) recorded (green: none; otherwise orange).",
     "E_QUESTION_NO_FIELDS": "No temperature fields were stored with this computation (store_fields: none).",
     "E_QUESTION_NO_TWIN": "Question \"{question}\" is not about a twin: ask it without one.",
     "E_QUESTION_TWIN_REQUIRED": "Question \"{question}\" is about a twin: ask it of one.",
