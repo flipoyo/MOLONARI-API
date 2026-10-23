@@ -1,2 +1,2 @@
-ID,Name,gatewayEUI,TLS_Cert,TLS_Key,CA_Cert,Labo
-1,TestGateway,34fa40fffe21c566,NULL,NULL,NULL,1
+Name,gatewayEUI,TLS_Cert,TLS_Key,CA_Cert,Labo,ID
+Gateway1,34fa40fffe21c566,./src/receiver/settings/TLS.crt,./src/receiver/settings/TLS.key,./src/receiver/settings/CA.crt,3,3

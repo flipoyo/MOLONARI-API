@@ -1,2 +1,2 @@
-ID,Name,RelayEUI,Gateway,Labo
-1,TestRelay,a8610a3433408f04,1,1
+Name,RelayEUI,Gateway,Labo,ID
+Relay1,a8610a35391d6f08,3,3,3

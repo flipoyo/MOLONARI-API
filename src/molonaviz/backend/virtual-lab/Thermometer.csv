@@ -1,2 +1,2 @@
-ID,Name,ManuName,ManuRef,Error,Beta,V,Labo
-1,TestThermo,Name,Ref,0,3834,3.3,1
+Name,ManuName,ManuRef,Error,Beta,V,Labo,ID
+Thermo1,Generic,Ref1,0.1,3950,3.3,3,3
