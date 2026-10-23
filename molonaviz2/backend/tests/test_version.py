@@ -48,3 +48,47 @@ def test_frozen_application_has_no_local_suffix(monkeypatch):
 
     monkeypatch.setattr(api.sys, "frozen", True, raising=False)
     assert api.local_suffix() == ""
+
+
+def test_jax_version_is_read_without_importing_jax():
+    """engine_version() identifie le code sans charger jax : l'API qui lit des résultats n'a pas à le faire.
+    La chaîne est celle que donnerait jax.__version__, donc aucun twin_id ne change."""
+    import subprocess
+    import sys
+    import textwrap
+
+    code = textwrap.dedent(
+        """
+        import sys
+        from molonari_twin.engine.api import engine_version, jax_version, release_version
+        print(engine_version(), release_version(), jax_version(), sep="|")
+        print("jax" in sys.modules)
+        import jax
+        print(jax.__version__)
+        """
+    )
+    completed = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=300, check=False)
+    assert completed.returncode == 0, completed.stderr
+    versions, loaded, imported = completed.stdout.strip().splitlines()
+    engine, release, installed = versions.split("|")
+    assert loaded == "False"
+    assert installed == imported
+    assert engine.endswith(f" · jax {imported}") and release.endswith(f" · jax {imported}")
+
+
+def test_twin_status_does_not_load_jax():
+    """Identifier un twin et retrouver ses résultats ne charge ni jax ni ArviZ."""
+    import subprocess
+    import sys
+
+    example = ROOT.parent / "examples" / "twins" / "twin_03"
+    code = (
+        "import sys\n"
+        "from molonari_twin.twin.run import twin_status\n"
+        f"status = twin_status({str(example)!r})\n"
+        "print(status.state)\n"
+        "print(sorted({n.split('.')[0] for n in sys.modules} & {'jax', 'jaxlib', 'arviz'}))"
+    )
+    completed = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=300, check=False)
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.strip().splitlines()[-1] == "[]"
