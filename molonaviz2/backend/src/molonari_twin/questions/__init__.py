@@ -16,7 +16,7 @@ from .intervals import (
 from .predictive import coverage, observed_at, predictive_band, sensor_samples
 from .sensors import residuals, sensor_report
 from .temperature import temperature_at
-from .twin_info import describe, provenance
+from .twin_info import describe, describe_sampling, provenance
 from .volumes import exchanged_volume
 
 __all__ = [
@@ -26,6 +26,7 @@ __all__ = [
     "chain_data",
     "coverage",
     "describe",
+    "describe_sampling",
     "exchanged_volume",
     "measurement_interval",
     "observed_at",

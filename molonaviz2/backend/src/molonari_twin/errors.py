@@ -117,9 +117,12 @@ MESSAGES: dict[str, str] = {
     "E_QUESTION_CHAINS": "Unknown chain {chain}: this computation has {n} chains, numbered from 0.",
     "E_QUESTION_LEVEL": "The level must be strictly between 0 and 1 (got {level}).",
     "E_QUESTION_NO_FIELDS": "No temperature fields were stored with this computation (store_fields: none).",
+    "E_QUESTION_NOT_AVAILABLE": "Question \"{question}\" does not apply to {ref} ({mode} mode).",
     "E_QUESTION_OUT_OF_RANGE": "{name} = {value} is outside the results ({low} – {high}).",
+    "E_QUESTION_PARAMS": "Invalid parameters for question \"{question}\":\n{issues}",
     "E_QUESTION_PERIOD_EMPTY": "No result between {start} and {end}.",
     "E_QUESTION_SIGMA_REQUIRED": "These results do not record the measurement uncertainty σ: give it as a parameter.",
+    "E_QUESTION_UNKNOWN": "Unknown question \"{question}\".",
     "E_QUESTION_Z_OR_T": "Give a depth z, a date t, or both.",
     "E_QUESTION_NO_POSTERIOR": "These results have no posterior samples (direct mode, or results written before format 2.0.0).",
     "E_QUESTION_SHAPES": "Incompatible shapes: expected {expected}, found {found}.",
@@ -166,7 +169,8 @@ MESSAGES: dict[str, str] = {
     "W_PROVENANCE_NOT_A_REPOSITORY": "The {target} is not in a git repository: its provenance is not recorded.",
     "W_PROVENANCE_NO_GIT": "git was not found: the provenance of the code and of the twin is not recorded.",
     "W_PROVENANCE_NO_REMOTE": "The git repository of the {target} has no remote: its URL is not recorded.",
-    # tasks, server
+    # tasks, server, api
+    "E_PARAM_INVALID": "{message}",
     "E_DIAG_FAILURE": "The diagnostic task failed on purpose at block {block}.",
     "E_SERVER_EXTRA_MISSING": "The server needs optional dependencies: install molonari-twin[server].",
     "E_TASK_FINISHED": "Task {task_id} is already finished ({state}).",
@@ -175,6 +179,7 @@ MESSAGES: dict[str, str] = {
     "E_TASK_NOT_FINISHED": "Task {task_id} is not finished yet ({state}).",
     "E_TASK_NOT_FOUND": "Task {task_id} does not exist.",
     "E_TASK_TIMEOUT": "The task exceeded its time limit ({timeout_s:g} s) and was stopped.",
+    "E_TWIN_NOT_COMPUTED": "Twin \"{ref}\" has no results yet: run it first.",
     "E_TWIN_NOT_FOUND": "Twin \"{ref}\" not found in {folder}.",
 }
 

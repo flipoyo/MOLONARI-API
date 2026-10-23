@@ -61,3 +61,34 @@ def provenance(results: TwinResults) -> Answer:
     return Answer(data=data, provenance={"question": "provenance", "parameters": {},
                                          "repositories": metadata.get("provenance")},
                   warnings=list(results.warnings))
+
+
+def describe_sampling(config: TwinConfig) -> Answer:
+    """Comment un twin mcmc est (ou sera) échantillonné (BN-36) : chaînes, itérations, burn-in, `thin`, total
+    d'échantillons, champs par chaîne et intervalle entre eux, pas d'espace et de temps, `store_fields` et taille
+    stockée. Lu dans la configuration et le nombre de mesures de la période, sans calcul."""
+    from ..engine.layout import sampling_layout
+
+    mcmc = config.inversion_config()
+    layout = sampling_layout(mcmc, len(config.load_measurements()))
+    stored = layout.stored_bytes(mcmc.store_fields)
+    data = {
+        "nb_chains": Quantity(layout.nb_chains, "1"),
+        "burn_in_max": Quantity(layout.burn_in_max, "1"),
+        "nb_iter": Quantity(layout.nb_iter, "1"),
+        "thin": Quantity(layout.thin, "1"),
+        "kept_per_chain": Quantity(layout.kept, "1"),
+        "samples": Quantity(layout.parameter_sets, "1"),
+        "fields_per_chain": Quantity(layout.fields_per_chain, "1"),
+        "fields_total": Quantity(layout.fields_total, "1"),
+        "field_interval": Quantity(layout.interval, "1"),
+        "nb_cells": Quantity(layout.nb_cells, "1"),
+        "field_cells": Quantity(layout.field_cells, "1"),
+        "nb_times": Quantity(layout.nb_times, "1"),
+        "field_times": Quantity(layout.field_times, "1"),
+        "space_step": Quantity(int(mcmc.space_step), "1"),
+        "time_step": Quantity(int(mcmc.time_step), "1"),
+        "store_fields": Quantity(str(mcmc.store_fields), "1"),
+        "stored_bytes": Quantity(stored, "B"),
+    }
+    return Answer(data=data, provenance={"question": "sampling_layout", "parameters": {}})
