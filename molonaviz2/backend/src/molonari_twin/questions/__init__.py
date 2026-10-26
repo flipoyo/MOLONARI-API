@@ -7,7 +7,7 @@ Partie du cœur : ni Qt, ni HTTP, ni phrase traduite. Chaque question renvoie un
 from .answer import Answer, Quantity
 from .chains import chain_data, posterior_samples
 from .check import check_twin
-from .convergence import convergence
+from .convergence import convergence, public_convergence
 from .energy import energy_breakdown
 from .fields import result_fields
 from .fit import fit_quality, lag1_autocorrelation, model_difference
@@ -51,6 +51,7 @@ __all__ = [
     "posterior_samples",
     "predictive_band",
     "provenance",
+    "public_convergence",
     "reliability",
     "residuals",
     "result_fields",

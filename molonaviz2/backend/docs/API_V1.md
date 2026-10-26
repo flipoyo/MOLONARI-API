@@ -230,6 +230,19 @@ A green, orange or red verdict, the worst of the criteria, each with its level a
 
 Sorties : `verdict`, `criteria`, `levels`, `reasons`, `threshold_names`, `thresholds`, `thresholds_validated`, `level`.
 
+### `public_convergence` (HN-45)
+
+**Has the sampling converged?** — *L'échantillonnage a-t-il convergé ?*
+
+The convergence of the algorithm for the public report, without a verdict: largest R̂ and smallest ESS over all parameters, mean acceptance, whether the burn-in converged, chains and kept samples per chain, with the reference thresholds (the defaults of the reliability thresholds, not their overrides) and `thresholds_validated`, false until a hydrogeologist validates them. No colour and no verdict; the developer's own R̂ threshold is private and not given. mcmc mode only.
+
+- Modes : mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
+- Requête : `POST /v1/twins/{ref}/questions/public_convergence`
+
+Aucun paramètre : le corps de la requête est vide (ou `{}`).
+
+Sorties : `rhat_max`, `ess_min`, `acceptance_mean`, `burn_in_converged`, `burn_in_iterations`, `chains`, `samples_per_chain`, `rhat_green`, `rhat_orange`, `ess_green`, `ess_orange`, `thresholds_validated`.
+
 ### `provenance` (HN-43)
 
 **Where does this result come from?** — *D'où vient ce résultat ?*

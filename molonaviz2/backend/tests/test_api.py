@@ -19,7 +19,8 @@ from molonari_twin.twin.run import twin_status
 EXAMPLES = Path(__file__).resolve().parents[2] / "examples" / "twins"
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 # Listes 1.0.0 du plan (PLAN_TWIN_v2, section 2) : une question du catalogue a l'une de ces références.
-PLAN_1_0_0 = {f"HN-{n:02d}" for n in (1, 2, 10, 11, 12, 20, 30, 33, 40, 41, 42, 43)} | {
+# HN-45 (convergence publique) s'y ajoute avec le rapport public (P2c.1).
+PLAN_1_0_0 = {f"HN-{n:02d}" for n in (1, 2, 10, 11, 12, 20, 30, 33, 40, 41, 42, 43, 45)} | {
     f"BN-{n:02d}" for n in (1, 2, 3, 4, 10, 11, 12, 13, 15, 20, 21, 22, 30, 31, 32, 34, 36, 40, 43, 60)}
 
 
@@ -44,7 +45,7 @@ def code_of(call):
 
 def test_catalog_is_consistent():
     ids, refs = [q.id for q in CATALOG], [q.ref for q in CATALOG]
-    assert len(set(ids)) == len(ids) == 20 and len(set(refs)) == len(refs)
+    assert len(set(ids)) == len(ids) == 21 and len(set(refs)) == len(refs)
     french = load_catalog("fr")
     for question in CATALOG:
         assert re.fullmatch(r"[a-z_]+", question.id)
@@ -104,7 +105,7 @@ def test_questions_of_a_twin_follow_its_mode(api):
     direct = {q.id for q in api.questions("twin_01")}
     mcmc = {q.id for q in api.questions("twin_03")}
     assert mcmc == {q.id for q in CATALOG} - {"parameters_catalog"}  # une question sans twin n'est celle d'aucun twin
-    assert direct == mcmc - {"chain_data", "sampling_layout", "posterior_samples", "convergence"}
+    assert direct == mcmc - {"chain_data", "sampling_layout", "posterior_samples", "convergence", "public_convergence"}
 
 
 # Questions sans twin et sur un dossier ------------------------------------------------------------
@@ -340,6 +341,15 @@ def test_model_difference_of_a_direct_and_an_mcmc_twin(api):
     forward, inversion = (api.ask(ref, "fit_quality") for ref in ("twin_01", "twin_03"))
     # Chaque modèle est comparé aux mêmes mesures : la différence entre les deux vaut au plus la somme de leurs RMSE.
     assert data["rmse_total"].value <= forward.data["rmse_total"].value + inversion.data["rmse_total"].value + 1e-12
+
+
+def test_public_convergence_is_for_mcmc_twins_and_has_no_verdict(api):
+    answer = api.ask("twin_03", "public_convergence")
+    detail = api.ask("twin_03", "convergence")
+    assert answer.data["rhat_max"].value == pytest.approx(detail.data["rhat_max"].value, rel=1e-12)
+    assert answer.data["thresholds_validated"].value is False and "verdict" not in answer.data
+    error = code_of(lambda: api.ask("twin_01", "public_convergence"))  # un twin direct : une erreur explicite, pas des valeurs vides
+    assert error.code == "E_QUESTION_NOT_AVAILABLE" and error.params["mode"] == "direct"
 
 
 def test_model_difference_needs_a_direct_forward_and_a_computed_mcmc_inversion(api):

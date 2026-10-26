@@ -28,6 +28,7 @@ from molonari_twin.questions import (
     posterior_samples,
     predictive_band,
     provenance,
+    public_convergence,
     residuals,
     result_fields,
     sensor_intervals,
@@ -910,6 +911,57 @@ def test_convergence_follows_the_selection(direct):
     assert selected["rhat_max_all"].value == pytest.approx(everything["rhat_max_all"].value)  # indépendant de la sélection
     assert convergence(results, burn=100, thin=2).data["samples_per_chain"].value == 100
     assert np.isnan(convergence(results, chains=[0, 1]).data["rhat_without_chain"].value).all()  # R̂ demande 2 chaînes
+
+
+# Convergence publique (P2c.1f) --------------------------------------------------------------------
+
+
+def test_public_convergence_agrees_with_convergence_and_reliability(direct):
+    from molonari_twin.questions import reliability
+
+    samples = uniform_samples(kept=300, chains=5)
+    samples[:, 2] += 0.2 * (np.array(list(PRIOR.values()))[:, 1] - np.array(list(PRIOR.values()))[:, 0])  # une chaîne décalée
+    results = with_posterior(direct, samples, acceptance=np.array([0.1, 0.2, 0.3, 0.4, 0.5]))
+    public = public_convergence(results).data
+    detail = convergence(results).data
+    assert public["rhat_max"].value == pytest.approx(detail["rhat_max"].value, rel=1e-12)
+    assert public["ess_min"].value == pytest.approx(min(detail["ess_bulk"].value.min(), detail["ess_tail"].value.min()), rel=1e-12)
+    assert public["acceptance_mean"].value == pytest.approx(0.3) and public["burn_in_iterations"].value == 12
+    assert public["burn_in_converged"].value is True
+    assert (public["chains"].value, public["samples_per_chain"].value) == (5, 300)
+    reasons = {w.code: w.params for w in reliability(results).warnings if w.code.startswith("W_RELIABILITY_CONVERGENCE")}
+    if reasons:  # la raison de HN-41 porte les mêmes valeurs
+        assert reasons["W_RELIABILITY_CONVERGENCE"]["rhat"] == pytest.approx(public["rhat_max"].value, rel=1e-12)
+        assert reasons["W_RELIABILITY_CONVERGENCE"]["ess"] == pytest.approx(public["ess_min"].value, rel=1e-12)
+
+
+def test_public_convergence_gives_reference_thresholds_and_no_verdict(direct):
+    from molonari_twin.questions.thresholds import ReliabilityThresholds
+
+    answer = public_convergence(with_posterior(direct, uniform_samples(kept=300, chains=5)))
+    limits = ReliabilityThresholds()
+    assert [answer.data[name].value for name in ("rhat_green", "rhat_orange", "ess_green", "ess_orange")] == [
+        limits.rhat_green, limits.rhat_orange, limits.ess_green, limits.ess_orange]
+    assert answer.data["thresholds_validated"].value is False  # choix C9 : tant qu'un hydrogéologue ne les a pas validés
+    assert not {"verdict", "levels", "reasons", "criteria", "gr_threshold", "thresholds"} & set(answer.data)
+    assert answer.warnings == []  # pas même d'avertissement W_RELIABILITY_* : aucune couleur
+
+
+def test_public_convergence_ignores_the_threshold_environment(direct, tmp_path, monkeypatch):
+    file = tmp_path / "thresholds.yaml"
+    file.write_text("rhat_green: 1.01\n", encoding="utf-8")
+    monkeypatch.setenv("MOLONARI_THRESHOLDS", str(file))
+    answer = public_convergence(with_posterior(direct, uniform_samples(kept=300, chains=5)))
+    assert answer.data["rhat_green"].value == 1.05  # le rapport doit se reproduire : seuils par défaut
+
+
+def test_public_convergence_with_too_few_iterations_is_undefined_not_empty(direct):
+    data = public_convergence(with_posterior(direct, uniform_samples(kept=3, chains=5))).data
+    assert np.isnan(data["rhat_max"].value) and np.isnan(data["ess_min"].value) and data["samples_per_chain"].value == 3
+
+
+def test_public_convergence_needs_posterior_samples(direct):
+    assert code_of(lambda: public_convergence(direct)) == "E_QUESTION_NO_POSTERIOR"
 
 
 def test_energy_terms_add_up_and_the_implicit_rmse_is_the_rms_residual(direct):

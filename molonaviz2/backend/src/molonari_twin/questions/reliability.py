@@ -17,10 +17,10 @@ from __future__ import annotations
 import numpy as np
 
 from ..domain.compute import PARAMETER_LABELS
-from ..engine import stats
 from ..errors import Issue
 from ..twin.results import TwinResults
 from .answer import Answer, Quantity
+from .convergence import convergence_extremes
 from .sensors import (
     PREDICTIVE_SEED,
     SENSORS,
@@ -54,9 +54,7 @@ def data_gaps(results: TwinResults) -> float:
 
 
 def _convergence(results: TwinResults, limits: ReliabilityThresholds):
-    samples = np.moveaxis(np.asarray(results.posterior["samples"], float), 1, 0)  # (N, I, L, 4)
-    rhat = float(np.nanmax(stats.rank_normalized_rhat(samples))) if samples.shape[1] >= 4 else float("nan")
-    ess = float(min(np.nanmin(stats.ess_bulk(samples)), np.nanmin(stats.ess_tail(samples)))) if samples.shape[1] >= 4 else float("nan")
+    rhat, ess = convergence_extremes(results)
     level = _worst(grade_below(rhat, limits.rhat_green, limits.rhat_orange), grade_above(ess, limits.ess_green, limits.ess_orange))
     return level, Issue(None, "W_RELIABILITY_CONVERGENCE", rhat=rhat, ess=ess, rhat_green=limits.rhat_green,
                         rhat_orange=limits.rhat_orange, ess_green=limits.ess_green, ess_orange=limits.ess_orange)

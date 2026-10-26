@@ -40,6 +40,7 @@
  "Fit: largest RMSE/σT {ratio:.3g} (green: at most {green:g}; orange: at most {orange:g}).": "Ajustement : RMSE/σT maximal {ratio:.3g} (vert : au plus {green:g} ; orange : au plus {orange:g}).",
  "Folder not found: {path}": "Dossier introuvable : {path}",
  "Give a depth z, a date t, or both.": "Donnez une profondeur z, une date t, ou les deux.",
+ "Has the sampling converged?": "L'échantillonnage a-t-il convergé ?",
  "Have the chains converged?": "Les chaînes ont-elles convergé ?",
  "How was this twin sampled?": "Comment ce twin a-t-il été échantillonné ?",
  "Identifiability: largest posterior over prior standard-deviation ratio {ratio:.3g}, for {parameter} in layer {layer} (green: at most {green:g}; orange: at most {orange:g}).": "Identifiabilité : rapport maximal des écarts-types a posteriori et a priori {ratio:.3g}, pour {parameter} dans la couche {layer} (vert : au plus {green:g} ; orange : au plus {orange:g}).",

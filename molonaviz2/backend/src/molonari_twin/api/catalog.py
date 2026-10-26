@@ -37,6 +37,7 @@ from ..questions import (
     parameters_catalog,
     posterior_samples,
     provenance,
+    public_convergence,
     reliability,
     residuals,
     result_fields,
@@ -184,6 +185,20 @@ CATALOG: tuple[Question, ...] = (
         lambda twin, a: reliability(twin.results, a.level, a.sigma, a.seed, a.thresholds),
         outputs=(
             "verdict", "criteria", "levels", "reasons", "threshold_names", "thresholds", "thresholds_validated", "level",
+        ),
+    ),
+    Question(
+        "public_convergence", "HN-45", "reliability", N_("Has the sampling converged?"),
+        "The convergence of the algorithm for the public report, without a verdict: largest R̂ and smallest ESS over all "
+        "parameters, mean acceptance, whether the burn-in converged, chains and kept samples per chain, with the "
+        "reference thresholds (the defaults of the reliability thresholds, not their overrides) and "
+        "`thresholds_validated`, false until a hydrogeologist validates them. No colour and no verdict; the "
+        "developer's own R̂ threshold is private and not given. mcmc mode only.",
+        ("M",), p.NoParams, "results",
+        lambda twin, _: public_convergence(twin.results),
+        outputs=(
+            "rhat_max", "ess_min", "acceptance_mean", "burn_in_converged", "burn_in_iterations", "chains", "samples_per_chain",
+            "rhat_green", "rhat_orange", "ess_green", "ess_orange", "thresholds_validated",
         ),
     ),
     Question(
