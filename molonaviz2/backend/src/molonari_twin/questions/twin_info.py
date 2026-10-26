@@ -14,7 +14,9 @@ def _date(value):
 
 
 def describe(config: TwinConfig) -> Answer:
-    """Couches, capteurs, période, mode et réglages principaux, lus dans la configuration (sans calcul)."""
+    """Couches, capteurs, période, mode et réglages principaux, lus dans la configuration (sans calcul).
+
+    La graine de l'inversion n'y figure pas : elle est réservée au niveau ORX (patch « accès » du 26/10, P2c.2g)."""
     data = {
         "name": Quantity(config.name, "1"),
         "point": Quantity(config.point, "1"),
@@ -28,7 +30,6 @@ def describe(config: TwinConfig) -> Answer:
         "offset": Quantity(float(config.offset), "m"),
         "nb_cells": Quantity(int(config.nb_cells), "1"),
         "sigma_temperature": Quantity(float(config.sigma_temperature), "°C"),
-        "seed": Quantity(int(config.seed), "1"),
     }
     if config.mcmc is not None:
         mcmc = config.mcmc

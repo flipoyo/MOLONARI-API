@@ -20,6 +20,7 @@ Phase 2 du plan twin v3 : issues P2.1 (pipeline du brut, avec BN-03 et BN-04) et
 
 - P2.1 : le pipeline du brut au résultat, avec BN-03 et BN-04 (sortis du lot C4, car ils ne dépendent que du pipeline brut).
 - P2c.1 : les questions du rapport public. Pas de nouvelle version ici : la version est celle de l'alpha.3, donc **aucun identifiant de référence ne change** (le `twin_id` dépend de la configuration et de la version du code, pas du contenu des résultats).
+- P2c.2 : visibilité des questions et projections publiques. Chaque question déclare ce qu'elle **expose** (`Question.exposes`, colonne « Accès » du catalogue ; obligatoire). `questions/visibility.py` (`Visibility`, défaut : tout privé sauf la PDF), `questions/public.py` (liste blanche de HN-02 et HN-43 et des agrégats publiables), `api/publication.py` (refus : `E_REPORT_DEV_ONLY`, `E_REPORT_PRIVATE`, `E_REPORT_NO_PROJECTION`). La graine sort de HN-02 et de HN-43 (patch « accès » : elle est réservée au niveau ORX). **`API_VERSION` passe à 1.0.0-alpha.5** : le champ `seed` disparaît de la réponse de HN-02 ; le reste de `/v1` ne change pas.
 
 ### Ajouté
 - `twin/pipeline.py` : `read_raw_point`, `resolve_instruments`, `load_point`, `clean_point`, `column_inputs` et `run_pipeline`. Il enchaîne les lecteurs (`io/lab_import.py`, `io/point_import.py`), `clean(…, CleanupSettings)` et `ColumnInputs.from_cleaned`, sans dupliquer leur code. Le brut de Point034 redonne exactement les mesures nettoyées de `examples/twins/twin_01/measurements.csv` (1436 dates, ou 1430 dans la fenêtre du twin).

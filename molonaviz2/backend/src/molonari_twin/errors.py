@@ -155,6 +155,10 @@ MESSAGES: dict[str, str] = {
     "W_FIT_NO_MEDIAN": "The posterior median is not available (no stored quantile 0.5): no RMSE of the median.",
     "W_FLUX_NO_SAMPLES": "The flux of the posterior samples was not stored with this computation (results written by an older version): the mean flux has no interval.",
     "W_COVERAGE_NO_POINTS": "No measurement can be compared with the band: coverage is undefined.",
+    # rapport public : visibilité des éléments exposés (P2c.2)
+    "E_REPORT_DEV_ONLY": "Question \"{question}\" is reserved for the twin developer: a public report never contains it.",
+    "E_REPORT_NO_PROJECTION": "Question \"{question}\" has no public projection yet: it cannot enter a public report.",
+    "E_REPORT_PRIVATE": "Question \"{question}\" exposes elements the developer has not made public: {elements}.",
     # twin
     "E_NO_CLEANED_MEASURES": "No cleaned measurements yet: apply a cleaning first.",
     "E_STRICT_DIRTY": "The {target} repository has uncommitted changes.",

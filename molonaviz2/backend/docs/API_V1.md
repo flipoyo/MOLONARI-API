@@ -2,7 +2,7 @@
 
 <!-- Fichier généré par tools/gen_api_doc.py à partir du catalogue (molonari_twin.api). Ne pas modifier à la main. -->
 
-Version de l'API : **1.0.0-alpha.4**. Schéma complet : `GET /openapi.json` ; catalogue avec les schémas de
+Version de l'API : **1.0.0-alpha.5**. Schéma complet : `GET /openapi.json` ; catalogue avec les schémas de
 paramètres : `GET /v1/questions` (`?twin=<ref>` : les questions de son mode).
 
 ## Poser une question
@@ -26,6 +26,8 @@ Calculer un twin passe par `POST /v1/twins/{ref}/run`, puis par le suivi de la t
 
 `{data: {nom: {value, unit, interval}}, provenance, warnings}`. `interval` vaut `[bas, haut]`, de la forme de
 `value`, ou `null`. La provenance donne la question, ses paramètres, le twin, son `twin_id` et ses résultats.
+L'API est celle du développeur : elle est complète. Le rapport public n'en publie qu'une projection (liste blanche
+de champs), et seulement les questions dont les éléments exposés sont publics (ligne « Accès » de chaque question).
 
 - **JSON** (par défaut) : un tableau s'écrit `{dtype, shape, data}`, valeurs à plat dans l'ordre C. NaN et
   dates absentes valent `null`, ±∞ s'écrivent `"inf"` et `"-inf"`. Un flottant scalaire non fini s'écrit
@@ -83,11 +85,12 @@ Les autres codes `E_…` répondent 400.
 Layers, sensors, period, mode and main settings, read from the configuration (no computation needed).
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige la configuration du twin.
+- Accès : rapport public (agrégats : rien de privé, réglages que les échantillons publics révèlent). Projection publique, champs publiés : `mode`, `start`, `end`, `layers`, `layer_bottoms`, `sensor_depths`, `offset`, `nb_chains`, `nb_iter`, `thin`.
 - Requête : `POST /v1/twins/{ref}/questions/describe`
 
 Aucun paramètre : le corps de la requête est vide (ou `{}`).
 
-Sorties : `name`, `point`, `mode`, `description`, `start`, `end`, `layers`, `layer_bottoms`, `sensor_depths`, `offset`, `nb_cells`, `sigma_temperature`, `seed`, `nb_chains`, `nb_iter`, `burn_in_max`, `thin`, `store_fields`.
+Sorties : `name`, `point`, `mode`, `description`, `start`, `end`, `layers`, `layer_bottoms`, `sensor_depths`, `offset`, `nb_cells`, `sigma_temperature`, `nb_chains`, `nb_iter`, `burn_in_max`, `thin`, `store_fields`.
 
 ## Données et traitement
 
@@ -98,6 +101,7 @@ Sorties : `name`, `point`, `mode`, `description`, `start`, `end`, `layers`, `lay
 The raw measurements of a point folder (CSV exports of the logger software), between two dates: thermometer temperatures (°C), voltage (V) and temperature of the pressure sensor (°C), and the number of file lines left out (logger events, empty or unreadable values, duplicate dates). It is about no twin. Formats that are not supported are refused with a coded error, never read wrongly.
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige aucun twin.
+- Accès : développeur seulement (jamais dans le rapport public).
 - Requête : `POST /v1/questions/raw_series`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -115,6 +119,7 @@ Sorties : `temperature_time`, `temperature`, `temperature_dropped`, `pressure_ti
 What a cleaning would do to a point, without saving anything: every date common to the temperature and pressure files, with the measurements (the pressure converted to a differential head, in m, with the calibration of the laboratory), the reason each date is left out (`outside_window`, `manual`, `missing`, `iqr:<variable>` or `zscore:<variable>`; empty when it is kept), the count per reason, the dates found in only one file, and the uncertainties σ of the instruments (Sigma_Meas_P, Sigma_Meas_T). It is about no twin.
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige aucun twin.
+- Accès : développeur seulement (jamais dans le rapport public).
 - Requête : `POST /v1/questions/processing_preview`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -137,6 +142,7 @@ Sorties : `time`, `temperature`, `river_temperature`, `pressure`, `kept`, `reaso
 Mean flux q at the riverbed (z = 0) over the period, in m/s, positive downwards (infiltration: the river feeds the aquifer), with the median and the 5th and 95th percentiles of q over time. In mcmc mode `mean` is the posterior mean flux and its interval, at `level` (0.9 by default), is the posterior interval of that mean, drawn from the series q(0, t) stored for every kept sample (`mean_best`: the mean of the best sample); in direct mode `mean` is a single value, without interval (`uncertainty` is none).
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
+- Accès : rapport public (agrégats : rien de privé). Projection publique, champs publiés : `mean`, `median`, `p5`, `p95`, `points`, `start`, `end`, `level`, `model`, `uncertainty`, `mean_best`.
 - Requête : `POST /v1/twins/{ref}/questions/water_flux`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -154,6 +160,7 @@ Sorties : `mean`, `median`, `p5`, `p95`, `points`, `start`, `end`, `level`, `mod
 Share of the time in infiltration (q ≥ 0, the river feeds the aquifer) and in exfiltration, weighted by the time intervals, dominant regime and number of reversals of q at the riverbed over the period. In mcmc mode with stored water-flux fields (`store_fields: full`), the probability that q ≥ 0 over the posterior samples, as a series and averaged over time.
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
+- Accès : rapport public (agrégats : rien de privé). Projection publique, champs publiés : `infiltration_share`, `exfiltration_share`, `dominant`, `reversals`, `points`, `start`, `end`, `p_infiltration`.
 - Requête : `POST /v1/twins/{ref}/questions/exchange_direction`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -170,6 +177,7 @@ Sorties : `infiltration_share`, `exfiltration_share`, `dominant`, `reversals`, `
 Infiltrated, exfiltrated and net volumes over the period, integrated by trapezoids with the sign change cut at the zero crossing: m³/m², or m³ when an area is given.
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
+- Accès : rapport public (agrégats : rien de privé). Projection publique, champs publiés : `infiltration`, `exfiltration`, `net`.
 - Requête : `POST /v1/twins/{ref}/questions/exchanged_volume`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -189,6 +197,7 @@ Sorties : `infiltration`, `exfiltration`, `net`.
 Mean advective, conductive and total heat fluxes (W/m², positive downwards) at a depth over the period, their shares (absolute value of the mean) and the dominant process. The lateral exchange is not modelled: it is zero, with a warning. Needs results of format 2.0.0.
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
+- Accès : rapport public si ces éléments sont publics : `states`. Pas encore de projection publique : refusée dans un rapport (`E_REPORT_NO_PROJECTION`).
 - Requête : `POST /v1/twins/{ref}/questions/heat_budget`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -208,6 +217,7 @@ Sorties : `advective`, `conductive`, `lateral`, `total`, `advective_share`, `con
 Simulated temperature in °C, linearly interpolated: one value (z and t), a profile T(z) (t alone) or a series T(t) (z alone).
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
+- Accès : rapport public si ces éléments sont publics : `states`. Pas encore de projection publique : refusée dans un rapport (`E_REPORT_NO_PROJECTION`).
 - Requête : `POST /v1/twins/{ref}/questions/temperature`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -224,6 +234,7 @@ Sorties : `temperature`, `depth`, `time`.
 Per sensor: the measurement with its instrument interval (± z·σ), the simulation and, in mcmc mode with stored fields, the credible band (model) and the predictive band (a new measurement), with the share of measurements the predictive band covers. Arrays are sensor first: (3, T).
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
+- Accès : rapport public si ces éléments sont publics : `raw_data`, `processed_data`, `states`. Pas encore de projection publique : refusée dans un rapport (`E_REPORT_NO_PROJECTION`).
 - Requête : `POST /v1/twins/{ref}/questions/sensor_intervals`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -243,6 +254,7 @@ Sorties : `time`, `measured`, `simulated`, `level`, `z`, `sigma`, `field_time`, 
 Per sensor: RMSE, bias (simulated − measured), RMSE/σT, lag-1 autocorrelation of the residuals and, in mcmc mode with stored fields, the share of measurements the predictive band covers; then the total RMSE (root mean square of the three). Arrays are sensor first: (3,). A direct twin is the forward model (`model` forward, `uncertainty` none); an mcmc twin is the inversion model, represented by its best sample, and `median_rmse` and `median_rmse_total` give the RMSE of the posterior median in addition. The direct difference forward − inversion is `TwinAPI.model_difference`, which needs two twins.
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
+- Accès : rapport public si ces éléments sont publics : `raw_data`, `processed_data`. Pas encore de projection publique : refusée dans un rapport (`E_REPORT_NO_PROJECTION`).
 - Requête : `POST /v1/twins/{ref}/questions/fit_quality`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -260,6 +272,7 @@ Sorties : `rmse`, `bias`, `rmse_over_sigma`, `lag1_autocorrelation`, `sigma`, `l
 A green, orange or red verdict, the worst of the criteria, each with its level and its reason: convergence (R̂, ESS) in mcmc mode, fit (RMSE/σT), identifiability and predictive coverage in mcmc mode, gaps in the data and provenance. **The thresholds are provisional and not validated by a hydrogeologist** (`thresholds_validated` is false): the response gives those it used, and they can be overridden.
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
+- Accès : rapport public (agrégats : rien de privé). Pas encore de projection publique : refusée dans un rapport (`E_REPORT_NO_PROJECTION`).
 - Requête : `POST /v1/twins/{ref}/questions/reliability`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -278,6 +291,7 @@ Sorties : `verdict`, `criteria`, `levels`, `reasons`, `threshold_names`, `thresh
 The convergence of the algorithm for the public report, without a verdict: largest R̂ and smallest ESS over all parameters, mean acceptance, whether the burn-in converged, chains and kept samples per chain, with the reference thresholds (the defaults of the reliability thresholds, not their overrides) and `thresholds_validated`, false until a hydrogeologist validates them. No colour and no verdict; the developer's own R̂ threshold is private and not given. mcmc mode only.
 
 - Modes : mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
+- Accès : rapport public (agrégats : rien de privé). Projection publique, champs publiés : `rhat_max`, `ess_min`, `acceptance_mean`, `burn_in_converged`, `burn_in_iterations`, `chains`, `samples_per_chain`, `rhat_green`, `rhat_orange`, `ess_green`, `ess_orange`, `thresholds_validated`.
 - Requête : `POST /v1/twins/{ref}/questions/public_convergence`
 
 Aucun paramètre : le corps de la requête est vide (ou `{}`).
@@ -291,6 +305,7 @@ Sorties : `rhat_max`, `ess_min`, `acceptance_mean`, `burn_in_converged`, `burn_i
 Versions, data fingerprint, platform and duration of the computation, the command that reproduces it; the commits and state of each repository are in the provenance of the answer.
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
+- Accès : rapport public (agrégats : rien de privé). Projection publique, champs publiés : `code_version`, `data_release`.
 - Requête : `POST /v1/twins/{ref}/questions/provenance`
 
 Aucun paramètre : le corps de la requête est vide (ou `{}`).
@@ -304,6 +319,7 @@ Sorties : `twin_id`, `code_version`, `results_format`, `created_at`, `device`, `
 Per layer: permeability k (m²), hydraulic conductivity K (m/s, k·ρw·g/μ with water at 20 °C: an approximation), porosity n, solid thermal conductivity λs and heat capacity ρs·cs. In mcmc mode the best value, the median, the highest-density interval (computed in the space of the priors, −log₁₀ k for k) and the identifiability (posterior standard deviation over that of a uniform prior: near 1, the data teach nothing). In direct mode, the values of the configuration.
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
+- Accès : rapport public si ces éléments sont publics : `posterior`, `forward_parameters`. Pas encore de projection publique : refusée dans un rapport (`E_REPORT_NO_PROJECTION`).
 - Requête : `POST /v1/twins/{ref}/questions/soil_properties`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -321,6 +337,7 @@ Sorties : `layers`, `level`, `k`, `k_median`, `k_identifiability`, `K`, `K_media
 The settings with their bounds, defaults and units, the values of `store_fields`, the default priors and the physical bounds of the inverted parameters, and the keys of the layers and of the mcmc section of twin.yaml. It is about no twin.
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige aucun twin.
+- Accès : développeur seulement (jamais dans le rapport public).
 - Requête : `POST /v1/questions/parameters_catalog`
 
 Aucun paramètre : le corps de la requête est vide (ou `{}`).
@@ -334,6 +351,7 @@ Sorties : `settings.name`, `settings.minimum`, `settings.maximum`, `settings.def
 Whether the configuration of a twin folder is valid, with its problems (also given as warnings); if so, the twin_id expected for the published code, the state (new, computed, duplicate or modified) and, in mcmc mode, the number of samples, the evaluations and the stored size, which depends on `store_fields`. An invalid configuration is an answer (`valid` is false), not an error.
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige le dossier d'un twin, dont la configuration peut être invalide.
+- Accès : développeur seulement (jamais dans le rapport public).
 - Requête : `POST /v1/twins/{ref}/questions/check`
 
 Aucun paramètre : le corps de la requête est vide (ou `{}`).
@@ -349,6 +367,7 @@ Sorties : `valid`, `name`, `mode`, `twin_id`, `twin_id_local`, `state`, `duplica
 Measured, simulated and residual (simulated − measured) temperatures per sensor, with the RMSE; option `intervals`: the credible and predictive bands.
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
+- Accès : développeur seulement (jamais dans le rapport public).
 - Requête : `POST /v1/twins/{ref}/questions/residuals`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -367,6 +386,7 @@ Sorties : `time`, `measured`, `simulated`, `residual`, `rmse`, `field_time`, `cr
 Parameters, energies, acceptance and burn-in resets of the chosen chains, with the computed iteration of each kept sample; read thinning and iteration range as in the computation.
 
 - Modes : mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
+- Accès : rapport public si ces éléments sont publics : `posterior`, `inversion_settings_public`. Pas encore de projection publique : refusée dans un rapport (`E_REPORT_NO_PROJECTION`).
 - Requête : `POST /v1/twins/{ref}/questions/chain_data`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -384,6 +404,7 @@ Sorties : `iteration`, `chain`, `samples.neg_log10_k`, `samples.porosity`, `samp
 Chains, iterations per chain, burn-in, thin, total samples, fields per chain and the interval between them, space and time steps, store_fields and stored size; from the configuration, before or after the run.
 
 - Modes : mcmc ; depuis l'API 1.0.0 ; exige la configuration du twin.
+- Accès : développeur seulement (jamais dans le rapport public).
 - Requête : `POST /v1/twins/{ref}/questions/sampling_layout`
 
 Aucun paramètre : le corps de la requête est vide (ou `{}`).
@@ -397,6 +418,7 @@ Sorties : `nb_chains`, `burn_in_max`, `nb_iter`, `thin`, `kept_per_chain`, `samp
 The posterior samples as an array (chain, iteration, layer, parameter) in the space of the priors (−log₁₀ k, n, λs, ρs·cs; k = 10^−x in m²), with its axes. Chains, range of computed iterations, burn (kept iterations skipped at the start) and thin choose the samples.
 
 - Modes : mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
+- Accès : rapport public si ces éléments sont publics : `posterior`, `inversion_settings_public`. Pas encore de projection publique : refusée dans un rapport (`E_REPORT_NO_PROJECTION`).
 - Requête : `POST /v1/twins/{ref}/questions/posterior_samples`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -415,6 +437,7 @@ Sorties : `samples`, `iteration`, `chain`, `layer`, `parameter`, `parameter_unit
 Temperature (°C), water flux (m/s) and advective and conductive heat fluxes (W/m², positive downwards) as arrays (depth, time) of the best fit, with their axes. Choose the variables, period, depth range and time step. They are large: prefer Accept: application/x-npz.
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
+- Accès : rapport public si ces éléments sont publics : `states`. Pas encore de projection publique : refusée dans un rapport (`E_REPORT_NO_PROJECTION`).
 - Requête : `POST /v1/twins/{ref}/questions/fields`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -436,6 +459,7 @@ Sorties : `depth`, `time`, `temperature`, `water_flux`, `heat_flux_advective`, `
 Per parameter and layer: R̂ (rank-normalized), bulk and tail ESS and MCSE of the mean. Per chain: acceptance, mean energy, bulk ESS and the largest R̂ without that chain. The statistics follow the selection (chains, burn, thin); `rhat_max_all` uses everything, to show the effect of the selection.
 
 - Modes : mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
+- Accès : développeur seulement (jamais dans le rapport public).
 - Requête : `POST /v1/twins/{ref}/questions/convergence`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -453,6 +477,7 @@ Sorties : `rhat`, `ess_bulk`, `ess_tail`, `mcse_mean`, `rhat_max`, `rhat_max_all
 The terms of the energy (negative Gaussian log-likelihood) of the recorded fit: N·ln σ², the residual term Σr²/(2σ²), the implicit RMSE and the reference N/2, the value the residual term takes when σ is right.
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
+- Accès : développeur seulement (jamais dans le rapport public).
 - Requête : `POST /v1/twins/{ref}/questions/energy_breakdown`
 
 | Paramètre | Type | Défaut | Bornes | Description |
