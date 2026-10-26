@@ -136,7 +136,7 @@ def test_new_schema_names_are_read(twins, schema):
 
 
 @pytest.mark.parametrize("schema, extra, key, code", [
-    ("molonari-twin/2.0.0", "", "schema", "E_TWIN_SCHEMA"),
+    ("molonaviz-twin/9", "", "schema", "E_TWIN_SCHEMA"),
     ("molonaviz-twin/1", "  thin: 2\n", "mcmc.thin", "E_TWIN_UNKNOWN_KEY"),
     ("molonari-twin/1.0.0", "  store_fields: full\n", "mcmc.store_fields", "E_TWIN_UNKNOWN_KEY"),
     ("molonari-twin/1.1.0", "  fields_per_chain: 5\n", "mcmc.fields_per_chain", "E_MCMC_FIELDS_BOTH"),

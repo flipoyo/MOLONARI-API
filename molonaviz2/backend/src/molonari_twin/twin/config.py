@@ -3,20 +3,32 @@
 Un twin est la copie numérique d'un point de mesure : une colonne 1D de sédiments
 entre le fond de la rivière et le thermomètre le plus profond. Il est défini
 entièrement par son `twin.yaml` (données d'entrée, paramètres du sol, réglages
-numériques, graine, version du code). Même config + mêmes données + même code
-donnent le même résultat.
+numériques, graine). Même config + mêmes données + même code donnent le même résultat.
+
+Deux familles de schémas coexistent, lues par le même `load_twin` :
+- 1.0.0 (`molonaviz-twin/1`, `molonari-twin/1.0.0`) et 1.1.0 : un fichier de mesures déjà nettoyé
+  (`data.measurements`), la graine au niveau supérieur (`seed`, 0 par défaut), `code_version` facultatif.
+  Ils sont lus sans changement, et leur `twin_id` ne bouge pas.
+- 2.0.0 (`molonari-twin/2.0.0`) : le brut. `data: {lab, point}` désigne le laboratoire et le point dans le dépôt de
+  données (chemins relatifs à sa racine), `processing: {start, end, methods, excluded}` le nettoyage, `mcmc.seed` la
+  graine (obligatoire en mode mcmc). Plus de `code_version` (les versions sont dans `twin.cgs`), plus de
+  `data.measurements`, de `sensors.depths` ni de `sensors.offset` : profondeurs, décalage et σ viennent des fichiers du
+  laboratoire et du point (`twin/pipeline.py`), `sensors.sigma_*` les remplace. `legacy_twin_id` garde l'identifiant
+  d'un twin 1.x migré.
 
 Règles :
-- `twin_id` = empreinte (SHA-256) de la config canonique, qui contient l'empreinte
-  du fichier de mesures et la version du code. Les libellés (nom du twin,
-  description, nom du point, noms des couches) n'y entrent pas : deux twins qui ne
-  diffèrent que par leur nom sont des doublons.
+- `twin_id` = empreinte (SHA-256) de la config canonique. Pour un twin 1.x, elle contient l'empreinte du fichier de
+  mesures et la version du code ; pour un twin 2.0.0, l'empreinte des mesures nettoyées (ce qui entre vraiment dans le
+  calcul, quel que soit le chemin des données) et la version du code. Les libellés (nom du twin, description, nom
+  du point, noms des couches, `legacy_twin_id`) n'y entrent pas : deux twins qui ne diffèrent que par leur nom sont des
+  doublons. Un schéma ne change pas l'identifiant d'un twin 1.x : la forme canonique 1.x est figée.
 - Les clés inconnues sont refusées : une faute de frappe ne doit pas être ignorée en
-  silence, sinon le twin ne serait pas celui que l'on croit.
+  silence, sinon le twin ne serait pas celui que l'on croit. Les clés 1.x retirées du 2.0.0 reçoivent un message qui
+  dit où elles sont passées.
 
-Exemple minimal (mode direct) :
+Exemple minimal (schéma 1.1.0, mode direct) :
 
-    schema: molonaviz-twin/1
+    schema: molonari-twin/1.1.0
     name: twin_01
     point: Point034
     mode: direct
@@ -29,12 +41,28 @@ Exemple minimal (mode direct) :
       - {name: couche 1, z_low: 0.4, neg_log10_k: 12, porosity: 0.15, lambda_s: 3.4, rhos_cs: 5.0e6}
     numerics:
       nb_cells: 100
+
+Le même point, en schéma 2.0.0 depuis le brut (mode mcmc) :
+
+    schema: molonari-twin/2.0.0
+    name: twin_05
+    mode: mcmc
+    data: {lab: Laboratory, point: SamplingPoints/Point034}
+    processing:
+      start: 2016-07-12 10:00
+      methods: {t1: iqr}
+      excluded: [2016-07-13 12:00]
+    layers:
+      - {name: couche 1, z_low: 0.4}
+    mcmc:
+      seed: 42
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from itertools import pairwise
@@ -52,16 +80,23 @@ from ..domain.compute import (
     LayerSpec,
     PriorRange,
 )
+from ..domain.models import CLEANED_COLUMNS
 from ..engine.column import ColumnInputs
 from ..errors import Issue, UserError
+from ..processing.cleanup import METHODS, VARIABLES, CleanupResult, CleanupSettings
+from . import pipeline
 
 # Schémas lus, avec leur version. molonaviz-twin/1 est l'ancien nom de 1.0.0.
-SCHEMAS = {"molonaviz-twin/1": (1, 0, 0), "molonari-twin/1.0.0": (1, 0, 0), "molonari-twin/1.1.0": (1, 1, 0)}
-SCHEMA_WRITTEN = "molonari-twin/1.1.0"  # schéma des twins créés
-CANONICAL_SCHEMA = "molonaviz-twin/1"  # schéma de la forme canonique, quel que soit le schéma déclaré : le twin_id ne change pas
+SCHEMA_2_0_0 = "molonari-twin/2.0.0"
+SCHEMAS = {"molonaviz-twin/1": (1, 0, 0), "molonari-twin/1.0.0": (1, 0, 0), "molonari-twin/1.1.0": (1, 1, 0), SCHEMA_2_0_0: (2, 0, 0)}
+SCHEMA_WRITTEN = "molonari-twin/1.1.0"  # schéma des twins créés depuis des mesures nettoyées (`create_twin`)
+CANONICAL_SCHEMA = "molonaviz-twin/1"  # schéma de la forme canonique 1.x, quel que soit le schéma déclaré : le twin_id ne change pas
+CANONICAL_SCHEMA_2 = SCHEMA_2_0_0  # forme canonique d'un twin 2.0.0
 CONFIG_NAME = "twin.yaml"
 MODES = ("direct", "mcmc")
 ID_LENGTH = 16
+DATA_ROOT_ENV = "MOLONARI_DATA"  # racine du dépôt de données d'un twin 2.0.0 (sinon : `data/` de l'espace de travail cgs)
+WORKSPACE_MARKER = "molonari.cgs"  # fichier à la racine de l'espace de travail cgs, dont `data/` est le dépôt de données
 
 TOP_KEYS = {"schema", "name", "description", "point", "mode", "data", "sensors", "layers", "numerics", "mcmc", "seed", "code_version"}
 REQUIRED_TOP = ("schema", "name", "mode", "data", "sensors", "layers")
@@ -74,6 +109,25 @@ MCMC_KEYS = {"priors", "nb_chains", "nb_iter", "burn_in_max", "delta", "n_cr", "
              "n_field_samples", "space_step", "time_step"} | MCMC_KEYS_1_1
 # Valeurs par défaut des clés 1.1.0 : à ces valeurs, elles n'entrent ni dans la forme canonique ni dans un twin créé.
 MCMC_DEFAULTS_1_1 = {"thin": 1, "fields_per_chain": None, "store_fields": "sensors"}
+
+# Schéma 2.0.0 : le brut (`data`), son nettoyage (`processing`) et la graine (`mcmc.seed`).
+TOP_KEYS_2 = {"schema", "name", "description", "mode", "data", "processing", "sensors", "layers", "numerics", "mcmc", "legacy_twin_id"}
+REQUIRED_TOP_2 = ("schema", "name", "mode", "data", "layers")
+DATA_KEYS_2 = {"lab", "point"}
+PROCESSING_KEYS = {"start", "end", "methods", "excluded"}
+SENSOR_KEYS_2 = {"sigma_temperature", "sigma_pressure"}  # remplacent les σ du laboratoire
+MCMC_KEYS_2 = MCMC_KEYS | {"seed"}
+# Clés des schémas 1.x retirées du 2.0.0, avec ce qui les remplace : ("moved", nouvelle clé), ("from_data", None) ou ("versions", None).
+REMOVED_IN_2_0_0 = {
+    "seed": ("moved", "mcmc.seed"),
+    "code_version": ("versions", None),
+    "point": ("moved", "data.point"),
+    "data.measurements": ("moved", "data.lab, data.point"),
+    "data.start": ("moved", "processing.start"),
+    "data.end": ("moved", "processing.end"),
+    "sensors.depths": ("from_data", None),
+    "sensors.offset": ("from_data", None),
+}
 INITIAL_CONDITIONS = ("linear",)
 
 
@@ -93,25 +147,40 @@ class TwinConfig:
     path: Path  # chemin du twin.yaml
     name: str
     mode: str
-    measurements: Path
-    depths: tuple[float, float, float, float]
-    offset: float = 0.0
-    sigma_temperature: float = 0.1
-    sigma_pressure: float = 0.01
+    measurements: Path | None  # fichier de mesures nettoyées (1.x) ; None en 2.0.0 (brut + nettoyage)
+    depths: tuple[float, float, float, float]  # en 2.0.0 : profondeurs de la tige du point, lues dans le laboratoire
+    offset: float = 0.0  # en 2.0.0 : décalage du fichier info du point
+    sigma_temperature: float = 0.1  # en 2.0.0 : Sigma_Meas_T du thermomètre de la tige, ou la valeur de `sensors`
+    sigma_pressure: float = 0.01  # en 2.0.0 : Sigma_Meas_P du capteur de pression, ou la valeur de `sensors`
     layers: list[LayerSpec] = field(default_factory=list)
     nb_cells: int = 100
     initial_condition: str = "linear"
-    start: datetime | None = None
-    end: datetime | None = None
+    start: datetime | None = None  # en 2.0.0 : processing.start
+    end: datetime | None = None  # en 2.0.0 : processing.end
     mcmc: InversionConfig | None = None
-    seed: int = 0
+    seed: int = 0  # 1.x : 0 par défaut ; 2.0.0 : mcmc.seed, obligatoire en mode mcmc (0 en mode direct, qui n'a pas de graine)
     description: str = ""
-    point: str = ""
+    point: str = ""  # libellé ; en 2.0.0 : nom du point lu dans son fichier info (ou son dossier)
     declared_code_version: str | None = None
+    # Schéma 2.0.0 -----------------------------------------------------------------------
+    schema_version: tuple[int, int, int] = (1, 0, 0)
+    data_root: Path | None = None  # racine du dépôt de données
+    data_lab: str = ""  # dossier du laboratoire, relatif à data_root
+    data_point: str = ""  # dossier du point, relatif à data_root
+    processing: CleanupSettings | None = None
+    legacy_twin_id: str | None = None  # identifiant 1.x d'un twin migré (étiquette : il n'entre pas dans le twin_id)
+    # Lecture du brut, une fois par objet (chargée par load_twin).
+    _point: pipeline.LoadedPoint | None = field(default=None, init=False, repr=False, compare=False)
+    _cleanup: CleanupResult | None = field(default=None, init=False, repr=False, compare=False)
 
     @property
     def folder(self) -> Path:
         return self.path.parent
+
+    @property
+    def raw_data(self) -> bool:
+        """Vrai pour un twin 2.0.0, qui part du brut : `data: {lab, point}` et `processing`."""
+        return self.schema_version >= (2, 0, 0)
 
     @property
     def column_depth(self) -> float:
@@ -122,7 +191,16 @@ class TwinConfig:
         return self.mode == "mcmc"
 
     # Données ---------------------------------------------------------------------------
+    def cleanup(self) -> CleanupResult:
+        """Nettoyage du brut d'un twin 2.0.0 (une fois par objet)."""
+        assert self._point is not None and self.processing is not None
+        if self._cleanup is None:
+            self._cleanup = pipeline.clean_point(self._point, self.processing)
+        return self._cleanup
+
     def load_measurements(self) -> pd.DataFrame:
+        if self.raw_data:
+            return self.cleanup().cleaned
         from ..processing.cleanup import read_cleaned_csv
 
         frame = read_cleaned_csv(self.measurements)
@@ -133,6 +211,8 @@ class TwinConfig:
         return frame.reset_index(drop=True)
 
     def column_inputs(self) -> ColumnInputs:
+        if self.raw_data:
+            return pipeline.column_inputs(self._point, self.cleanup())
         return ColumnInputs.from_cleaned(self.load_measurements(), self.depths, self.offset, self.sigma_pressure, self.sigma_temperature)
 
     def forward_config(self) -> ForwardConfig:
@@ -144,20 +224,26 @@ class TwinConfig:
 
     # Identité --------------------------------------------------------------------------
     def canonical(self, code_version: str) -> dict:
-        """Forme canonique : tout ce qui détermine le résultat, et rien d'autre."""
-        data = {
-            "measurements_sha256": file_digest(self.measurements),
-            "start": self.start.isoformat() if self.start else None,
-            "end": self.end.isoformat() if self.end else None,
-        }
+        """Forme canonique : tout ce qui détermine le résultat, et rien d'autre.
+
+        1.x : figée (le `twin_id` d'un twin 1.x ne change pas). 2.0.0 : mêmes sections, avec l'empreinte des mesures
+        nettoyées à la place de celle du fichier, la graine dans `mcmc` et toujours la version du code."""
+        if self.raw_data:
+            data = {"cleaned_sha256": frame_digest(self.load_measurements())}
+        else:
+            data = {
+                "measurements_sha256": file_digest(self.measurements),
+                "start": self.start.isoformat() if self.start else None,
+                "end": self.end.isoformat() if self.end else None,
+            }
         sensors = {"depths": [float(d) for d in self.depths], "offset": float(self.offset), "sigma_pressure": float(self.sigma_pressure)}
         canonical = {
-            "schema": CANONICAL_SCHEMA,
+            "schema": CANONICAL_SCHEMA_2 if self.raw_data else CANONICAL_SCHEMA,
             "mode": self.mode,
             "data": data,
             "sensors": sensors,
             "numerics": {"nb_cells": int(self.nb_cells), "initial_condition": self.initial_condition},
-            "code_version": self.declared_code_version or code_version,
+            "code_version": code_version if self.raw_data else (self.declared_code_version or code_version),
         }
         if self.mode == "direct":
             canonical["layers"] = [
@@ -176,7 +262,10 @@ class TwinConfig:
                 "quantiles": [float(q) for q in mcmc.quantiles],
                 **{key: getattr(mcmc, key) for key, default in MCMC_DEFAULTS_1_1.items() if getattr(mcmc, key) != default},
             }
-            canonical["seed"] = int(self.seed)
+            if self.raw_data:
+                canonical["mcmc"]["seed"] = int(self.seed)
+            else:
+                canonical["seed"] = int(self.seed)
         return canonical
 
     def twin_id(self, code_version: str) -> str:
@@ -190,6 +279,35 @@ def file_digest(path: Path) -> str:
         for block in iter(lambda: handle.read(1 << 20), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def frame_digest(frame: pd.DataFrame) -> str:
+    """Empreinte des mesures nettoyées : dates à la seconde, flottants à 17 chiffres (sans perte), sans index."""
+    out = frame[CLEANED_COLUMNS].copy()
+    out["date"] = pd.to_datetime(out["date"]).dt.strftime("%Y-%m-%d %H:%M:%S")
+    return hashlib.sha256(out.to_csv(index=False, float_format="%.17g").encode("utf-8")).hexdigest()
+
+
+def data_root(twin_folder: Path) -> Path | None:
+    """Racine du dépôt de données d'un twin 2.0.0 : la variable MOLONARI_DATA, sinon le dossier `data/` de l'espace de
+    travail cgs qui contient le twin (celui où se trouve `molonari.cgs`). None si aucun des deux. Le dépôt et la version
+    des données sont ceux du manifeste cgs : le twin.yaml n'en dit pas plus que des chemins relatifs à cette racine."""
+    declared = os.environ.get(DATA_ROOT_ENV)
+    if declared:
+        return Path(declared).expanduser().resolve()
+    twin_folder = Path(twin_folder).resolve()
+    for folder in (twin_folder, *twin_folder.parents):
+        if (folder / WORKSPACE_MARKER).is_file():
+            return folder / "data"
+    return None
+
+
+def without_seed(canonical: dict) -> dict:
+    """Forme canonique sans la graine : celle qui est écrite dans metadata.json (la graine est hors visibilité, P0.7)."""
+    out = {key: value for key, value in canonical.items() if key != "seed"}
+    if "mcmc" in out:
+        out["mcmc"] = {key: value for key, value in out["mcmc"].items() if key != "seed"}
+    return out
 
 
 def config_path(path: str | Path) -> Path:
@@ -208,12 +326,27 @@ class _Checker:
     def add(self, where: str, code: str, **params) -> None:
         self.issues.append(Issue(where or None, code, prefixed=True, **params))
 
-    def mapping(self, value, where: str, allowed: set[str], required=()) -> dict:
+    def removed(self, where: str) -> None:
+        """Clé d'un schéma 1.x retirée du 2.0.0 : dit où elle est passée."""
+        kind, new = REMOVED_IN_2_0_0[where]
+        if kind == "moved":
+            self.add(where, "E_TWIN_KEY_MOVED", new=new)
+        elif kind == "from_data":
+            self.add(where, "E_TWIN_KEY_FROM_DATA")
+        else:
+            self.add(where, "E_TWIN_CODE_VERSION_REMOVED")
+
+    def mapping(self, value, where: str, allowed: set[str], required=(), v2: bool = False) -> dict:
+        """`v2` : les clés retirées du schéma 2.0.0 ont leur message plutôt que « clé inconnue »."""
         if not isinstance(value, dict):
             self.add(where, "E_TWIN_EXPECTED_MAPPING")
             return {}
         for key in sorted(set(value) - allowed, key=str):
-            self.add(f"{where}.{key}" if where else str(key), "E_TWIN_UNKNOWN_KEY", keys=", ".join(sorted(allowed)))
+            path = f"{where}.{key}" if where else str(key)
+            if v2 and path in REMOVED_IN_2_0_0:
+                self.removed(path)
+            else:
+                self.add(path, "E_TWIN_UNKNOWN_KEY", keys=", ".join(sorted(allowed)))
         for key in required:
             if key not in value:
                 self.add(f"{where}.{key}" if where else key, "E_TWIN_REQUIRED")
@@ -251,8 +384,52 @@ class _Checker:
             return None
 
 
-def load_twin(path: str | Path, check_data: bool = True) -> TwinConfig:
-    """Lit et valide un twin. Lève TwinConfigError avec la liste complète des problèmes."""
+def _data_folder(check: _Checker, root: Path, value, where: str) -> Path | None:
+    """Dossier du laboratoire ou du point : un chemin relatif à la racine du dépôt de données, qui n'en sort pas."""
+    if not isinstance(value, str) or not value.strip() or Path(value).is_absolute():
+        check.add(where, "E_TWIN_DATA_PATH")
+        return None
+    folder = (root / value).resolve()
+    if not folder.is_relative_to(root):
+        check.add(where, "E_TWIN_DATA_PATH")
+        return None
+    if not folder.is_dir():
+        check.add(where, "E_FOLDER_NOT_FOUND", path=folder)
+        return None
+    return folder
+
+
+def _processing(check: _Checker, raw) -> CleanupSettings:
+    """`processing: {start, end, methods, excluded}` d'un twin 2.0.0, qui devient les réglages de `clean`."""
+    section = check.mapping(raw if raw is not None else {}, "processing", PROCESSING_KEYS)
+    start, end = check.date(section.get("start"), "processing.start"), check.date(section.get("end"), "processing.end")
+    if start and end and start >= end:
+        check.add("processing.end", "E_TWIN_END_BEFORE_START", start="processing.start")
+    methods = {variable: "none" for variable in VARIABLES}
+    declared = check.mapping(section.get("methods") if section.get("methods") is not None else {}, "processing.methods", set(VARIABLES))
+    for variable in VARIABLES:
+        if variable in declared:
+            if declared[variable] in METHODS:
+                methods[variable] = declared[variable]
+            else:
+                check.add(f"processing.methods.{variable}", "E_TWIN_METHOD", methods=", ".join(METHODS))
+    excluded = []
+    raw_excluded = section.get("excluded")
+    if raw_excluded is not None and not isinstance(raw_excluded, list):
+        check.add("processing.excluded", "E_TWIN_EXPECTED_LIST")
+    else:
+        for i, value in enumerate(raw_excluded or []):
+            date = check.date(value, f"processing.excluded[{i}]")
+            if date is not None:
+                excluded.append(date)
+    return CleanupSettings(start=start, end=end, methods=methods, excluded=sorted(set(excluded)))
+
+
+def load_twin(path: str | Path, check_data: bool = True, data_folder: str | Path | None = None) -> TwinConfig:
+    """Lit et valide un twin. Lève TwinConfigError avec la liste complète des problèmes.
+
+    `data_folder` : racine du dépôt de données d'un twin 2.0.0, à défaut de la variable MOLONARI_DATA et de l'espace de
+    travail cgs (voir `data_root`). Sans effet sur un twin 1.x."""
     path = config_path(path)
     if not path.is_file():
         raise TwinConfigError([Issue(None, "E_FILE_NOT_FOUND", path=path)])
@@ -261,12 +438,14 @@ def load_twin(path: str | Path, check_data: bool = True) -> TwinConfig:
     except yaml.YAMLError as exc:
         raise TwinConfigError([Issue(None, "E_TWIN_INVALID_YAML", error=exc)]) from None
     check = _Checker()
-    doc = check.mapping(raw, "", TOP_KEYS, REQUIRED_TOP)
+    # Le schéma décide des clés admises : il est lu avant le reste.
+    declared_schema = raw.get("schema", "molonaviz-twin/1") if isinstance(raw, dict) else None
+    schema_version = SCHEMAS.get(declared_schema) if isinstance(declared_schema, str) else None
+    v2 = schema_version is not None and schema_version >= (2, 0, 0)
+    doc = check.mapping(raw, "", TOP_KEYS_2 if v2 else TOP_KEYS, REQUIRED_TOP_2 if v2 else REQUIRED_TOP, v2)
     if check.issues and not doc:
         raise TwinConfigError(check.issues)
 
-    schema = doc.get("schema", "molonaviz-twin/1")
-    schema_version = SCHEMAS.get(schema) if isinstance(schema, str) else None
     if schema_version is None:
         check.add("schema", "E_TWIN_SCHEMA", value=doc.get("schema"), expected=", ".join(SCHEMAS))
     name = str(doc.get("name", "")).strip()
@@ -276,29 +455,63 @@ def load_twin(path: str | Path, check_data: bool = True) -> TwinConfig:
     if "mode" in doc and mode not in MODES:
         check.add("mode", "E_TWIN_MODE")
 
-    data = check.mapping(doc.get("data", {}), "data", DATA_KEYS, ("measurements",))
-    measurements = None
-    if "measurements" in data:
-        measurements = (path.parent / str(data["measurements"])).resolve()
-        if not measurements.is_file():
-            check.add("data.measurements", "E_TWIN_DATA_NOT_FOUND", path=measurements)
-            measurements = None
-    start, end = check.date(data.get("start"), "data.start"), check.date(data.get("end"), "data.end")
-    if start and end and start >= end:
-        check.add("data.end", "E_TWIN_END_BEFORE_START")
+    measurements = start = end = None
+    lab_name = point_name = ""
+    root = lab_dir = point_dir = None
+    if v2:
+        data = check.mapping(doc.get("data", {}), "data", DATA_KEYS_2, ("lab", "point"), True)
+        root = Path(data_folder).resolve() if data_folder is not None else data_root(path.parent)
+        if root is None and ("lab" in data or "point" in data):
+            check.add("data", "E_TWIN_DATA_ROOT", env=DATA_ROOT_ENV)
+        elif root is not None:
+            lab_dir = _data_folder(check, root, data["lab"], "data.lab") if "lab" in data else None
+            point_dir = _data_folder(check, root, data["point"], "data.point") if "point" in data else None
+            lab_name = Path(data["lab"]).as_posix() if lab_dir else ""
+            point_name = Path(data["point"]).as_posix() if point_dir else ""
+    else:
+        data = check.mapping(doc.get("data", {}), "data", DATA_KEYS, ("measurements",))
+        if "measurements" in data:
+            measurements = (path.parent / str(data["measurements"])).resolve()
+            if not measurements.is_file():
+                check.add("data.measurements", "E_TWIN_DATA_NOT_FOUND", path=measurements)
+                measurements = None
+        start, end = check.date(data.get("start"), "data.start"), check.date(data.get("end"), "data.end")
+        if start and end and start >= end:
+            check.add("data.end", "E_TWIN_END_BEFORE_START", start="data.start")
+    processing = _processing(check, doc.get("processing")) if v2 else None
+    if processing is not None:
+        start, end = processing.start, processing.end
 
-    sensors = check.mapping(doc.get("sensors", {}), "sensors", SENSOR_KEYS, ("depths",))
-    depths = sensors.get("depths")
-    if "depths" in sensors:
-        values = [check.number(d, "sensors.depths", positive=True) for d in depths] if isinstance(depths, list) else []
-        if len(values) != 4 or None in values or any(b <= a for a, b in pairwise(values)):
-            check.add("sensors.depths", "E_TWIN_SENSOR_DEPTHS")
-            depths = None
-        else:
-            depths = tuple(values)
-    offset = check.number(sensors.get("offset", 0.0), "sensors.offset")
-    sigma_t = check.number(sensors.get("sigma_temperature", 0.1), "sensors.sigma_temperature", positive=True)
-    sigma_p = check.number(sensors.get("sigma_pressure", 0.01), "sensors.sigma_pressure", positive=True)
+    if v2:
+        sensors = check.mapping(doc.get("sensors", {}) or {}, "sensors", SENSOR_KEYS_2, (), True)
+        sigma_t = check.number(sensors["sigma_temperature"], "sensors.sigma_temperature", positive=True) if "sigma_temperature" in sensors else None
+        sigma_p = check.number(sensors["sigma_pressure"], "sensors.sigma_pressure", positive=True) if "sigma_pressure" in sensors else None
+        # Profondeurs, décalage et σ viennent du laboratoire et du point (pipeline du brut).
+        depths, offset, loaded = None, None, None
+        if lab_dir is not None and point_dir is not None and not check.issues:
+            try:
+                loaded = pipeline.load_point(point_dir, lab_dir, sigma_temperature=sigma_t, sigma_pressure=sigma_p)
+            except UserError as exc:
+                check.issues.append(Issue.from_error("data", exc, prefixed=True))
+        if loaded is not None:
+            depths, offset = tuple(float(d) for d in loaded.instruments.shaft.depths), loaded.offset
+            sigma_t, sigma_p = loaded.instruments.sigma_temperature, loaded.instruments.sigma_pressure
+            if len(depths) != 4 or depths[0] <= 0 or any(b <= a for a, b in pairwise(depths)):
+                check.add("data.point", "E_TWIN_SENSOR_DEPTHS")
+                depths = None
+    else:
+        sensors = check.mapping(doc.get("sensors", {}), "sensors", SENSOR_KEYS, ("depths",))
+        depths = sensors.get("depths")
+        if "depths" in sensors:
+            values = [check.number(d, "sensors.depths", positive=True) for d in depths] if isinstance(depths, list) else []
+            if len(values) != 4 or None in values or any(b <= a for a, b in pairwise(values)):
+                check.add("sensors.depths", "E_TWIN_SENSOR_DEPTHS")
+                depths = None
+            else:
+                depths = tuple(values)
+        offset = check.number(sensors.get("offset", 0.0), "sensors.offset")
+        sigma_t = check.number(sensors.get("sigma_temperature", 0.1), "sensors.sigma_temperature", positive=True)
+        sigma_p = check.number(sensors.get("sigma_pressure", 0.01), "sensors.sigma_pressure", positive=True)
 
     numerics = check.mapping(doc.get("numerics", {}) or {}, "numerics", NUMERIC_KEYS)
     nb_cells = check.number(numerics.get("nb_cells", 100), "numerics.nb_cells", integer=True, positive=True)
@@ -335,11 +548,20 @@ def load_twin(path: str | Path, check_data: bool = True) -> TwinConfig:
             if "z_low" in values:
                 layers.append(LayerSpec(**values))
 
-    seed = check.number(doc.get("seed", 0), "seed", integer=True, minimum=0)
+    # Graine : au niveau supérieur et facultative (0) avant le 2.0.0 ; `mcmc.seed` obligatoire ensuite (mode mcmc).
+    seed = 0 if v2 else check.number(doc.get("seed", 0), "seed", integer=True, minimum=0)
     mcmc = None
     if mode == "mcmc":
-        allowed = MCMC_KEYS if schema_version is not None and schema_version >= (1, 1, 0) else MCMC_KEYS - MCMC_KEYS_1_1
+        if v2:
+            allowed = MCMC_KEYS_2
+        else:
+            allowed = MCMC_KEYS if schema_version is not None and schema_version >= (1, 1, 0) else MCMC_KEYS - MCMC_KEYS_1_1
         raw_mcmc = check.mapping(doc.get("mcmc", {}) or {}, "mcmc", allowed)
+        if v2:
+            if "seed" in raw_mcmc:
+                seed = check.number(raw_mcmc["seed"], "mcmc.seed", integer=True, minimum=0)
+            else:
+                check.add("mcmc.seed", "E_TWIN_REQUIRED")
         priors = []
         raw_priors = raw_mcmc.get("priors")
         if raw_priors is None:
@@ -395,30 +617,41 @@ def load_twin(path: str | Path, check_data: bool = True) -> TwinConfig:
         for issue in engine_config.validate(column_depth):
             check.issues.append(Issue.from_error(issue.field, issue, prefixed=True))
 
-    declared_version = doc.get("code_version")
+    declared_version = None if v2 else doc.get("code_version")
     if declared_version is not None:
         from ..engine import api
 
         if str(declared_version) != api.engine_version():
             check.add("code_version", "E_TWIN_CODE_VERSION", declared=declared_version, current=api.engine_version())
 
+    legacy_twin_id = doc.get("legacy_twin_id")
+    if legacy_twin_id is not None:
+        legacy_twin_id = str(legacy_twin_id)
+        if len(legacy_twin_id) != ID_LENGTH or any(c not in "0123456789abcdef" for c in legacy_twin_id):
+            check.add("legacy_twin_id", "E_TWIN_LEGACY_ID", length=ID_LENGTH)
+
     config = None
     if not check.issues:
         config = TwinConfig(
             path=path, name=name, mode=mode, measurements=measurements, depths=depths, offset=offset,
             sigma_temperature=sigma_t, sigma_pressure=sigma_p, layers=layers, nb_cells=nb_cells, initial_condition=initial,
-            start=start, end=end, mcmc=mcmc, seed=seed, description=str(doc.get("description", "")), point=str(doc.get("point", "")),
+            start=start, end=end, mcmc=mcmc, seed=seed, description=str(doc.get("description", "")),
+            point=loaded.raw.name if v2 else str(doc.get("point", "")),
             declared_code_version=str(declared_version) if declared_version is not None else None,
+            schema_version=schema_version, data_root=root, data_lab=lab_name, data_point=point_name,
+            processing=processing, legacy_twin_id=legacy_twin_id,
         )
+        if v2:
+            config._point = loaded
         if check_data:
             try:
                 frame = config.load_measurements()
                 if len(frame) < 3:
                     check.add("data", "E_TWIN_TOO_FEW_MEASUREMENTS")
             except UserError as exc:
-                check.issues.append(Issue.from_error("data.measurements", exc, prefixed=True))
+                check.issues.append(Issue.from_error("data" if v2 else "data.measurements", exc, prefixed=True))
             except (ValueError, OSError) as exc:
-                check.add("data.measurements", "E_SYSTEM_ERROR", detail=str(exc))
+                check.add("data" if v2 else "data.measurements", "E_SYSTEM_ERROR", detail=str(exc))
     if check.issues:
         raise TwinConfigError(check.issues)
     return config
