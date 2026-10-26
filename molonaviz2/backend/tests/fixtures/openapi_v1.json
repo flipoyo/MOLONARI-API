@@ -595,7 +595,7 @@
  },
  "info": {
   "title": "molonari-twin",
-  "version": "1.0.0-alpha.3"
+  "version": "1.0.0-alpha.4"
  },
  "openapi": "3.1.0",
  "paths": {
@@ -686,7 +686,7 @@
   },
   "/v1/questions/{question_id}": {
    "post": {
-    "description": "Ask a question that is about no twin (`requires: none` in GET /v1/questions). The body is its parameters.\n\n- `parameters_catalog` (BN-10): The settings with their bounds, defaults and units, the values of `store_fields`, the default priors and the physical bounds of the inverted parameters, and the keys of the layers and of the mcmc section of twin.yaml. It is about no twin.",
+    "description": "Ask a question that is about no twin (`requires: none` in GET /v1/questions). The body is its parameters.\n\n- `parameters_catalog` (BN-10): The settings with their bounds, defaults and units, the values of `store_fields`, the default priors and the physical bounds of the inverted parameters, and the keys of the layers and of the mcmc section of twin.yaml. It is about no twin.\n- `raw_series` (BN-03): The raw measurements of a point folder (CSV exports of the logger software), between two dates: thermometer temperatures (°C), voltage (V) and temperature of the pressure sensor (°C), and the number of file lines left out (logger events, empty or unreadable values, duplicate dates). It is about no twin. Formats that are not supported are refused with a coded error, never read wrongly.\n- `processing_preview` (BN-04): What a cleaning would do to a point, without saving anything: every date common to the temperature and pressure files, with the measurements (the pressure converted to a differential head, in m, with the calibration of the laboratory), the reason each date is left out (`outside_window`, `manual`, `missing`, `iqr:<variable>` or `zscore:<variable>`; empty when it is kept), the count per reason, the dates found in only one file, and the uncertainties σ of the instruments (Sigma_Meas_P, Sigma_Meas_T). It is about no twin.",
     "operationId": "ask_global_v1_questions__question_id__post",
     "parameters": [
      {

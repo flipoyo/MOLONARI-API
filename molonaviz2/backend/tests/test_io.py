@@ -185,3 +185,52 @@ def test_file_without_measures_is_rejected(tmp_path):
     path.write_text("Titre\nDate,Temp\n")
     with pytest.raises(UserError):
         read_temperature_file(path)
+
+
+# Incertitudes σ des instruments (P2.1c) ---------------------------------------------------
+
+
+def test_sigma_is_read_by_name(tmp_path):
+    """σ est lu sous son nom (Sigma_Meas_T, Sigma_Meas_P), sans tenir compte de la casse ni de la position."""
+    (tmp_path / "pressure_sensors").mkdir()
+    (tmp_path / "temperature_sensors").mkdir()
+    # Sigma_Meas_P est échangé avec dU/dT : lu par position, σ vaudrait 0.5
+    (tmp_path / "pressure_sensors" / "P9.csv").write_text(
+        "Sensor_Name,P9\nDatalogger,Hobo\nCalibration_Date,2016/01/12 10:10:10\nIntercept,1.2\ndU/dH,-1.4\n"
+        "sigma_meas_p,0.02\ndU/dT,0.5\nThermometer name,T9\n"
+    )
+    (tmp_path / "temperature_sensors" / "T9.csv").write_text("Cons_Name,A\nCons_Ref,B\nT_Sensor_Name,T9\nSigma_Meas_T,0.07\n")
+    lab = import_lab_directory(tmp_path).lab
+    assert lab.pressure_sensors[0].sigma == 0.02 and lab.thermometers[0].sigma == 0.07
+
+
+def test_sigma_falls_back_to_its_position_without_its_name(tmp_path):
+    (tmp_path / "temperature_sensors").mkdir()
+    (tmp_path / "temperature_sensors" / "T9.csv").write_text("Cons_Name,A\nCons_Ref,B\nT_Sensor_Name,T9\nIncertitude,0.09\n")
+    assert import_lab_directory(tmp_path).lab.thermometers[0].sigma == 0.09
+
+
+def test_sigma_that_is_not_a_number_discards_the_file_and_names_the_key(tmp_path):
+    (tmp_path / "temperature_sensors").mkdir()
+    (tmp_path / "temperature_sensors" / "T9.csv").write_text("Cons_Name,A\nCons_Ref,B\nT_Sensor_Name,T9\nSigma_Meas_T,beaucoup\n")
+    result = import_lab_directory(tmp_path)
+    assert result.lab.thermometers == []
+    issue = result.issues[0].message
+    assert (issue.code, issue.params) == ("E_LAB_FILE_NOT_A_NUMBER", {"key": "Sigma_Meas_T", "value": "beaucoup"})
+
+
+# Unités non prises en charge (P2.1d) --------------------------------------------------------
+
+
+@pytest.mark.parametrize("unit", ["kPa", "psi", "bar", "mbar", "Pa"])
+def test_pressure_in_a_pressure_unit_is_refused(tmp_path, unit):
+    path = tmp_path / "p.csv"
+    path.write_text(
+        '"Titre de tracé : 1"\n'
+        f'"#","Date Heure, GMT+01:00","Pression absolue, {unit} (LGR S/N: 1)","Temp., °C (LGR S/N: 1)"\n'
+        "1,06/27/16 12:00:00 PM,101.3,18.3\n2,06/27/16 12:15:00 PM,101.4,18.1\n"
+    )
+    with pytest.raises(UserError) as error:
+        read_pressure_file(path)
+    assert error.value.code == "E_MEASURES_UNIT_UNSUPPORTED"
+    assert error.value.params["file"] == "p.csv" and unit in error.value.params["column"]
