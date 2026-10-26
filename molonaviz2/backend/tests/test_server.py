@@ -388,7 +388,8 @@ def test_question_catalog(asking):
                                                      "heat_budget", "temperature", "sensor_intervals", "fit_quality",
                                                      "reliability", "provenance", "residuals", "chain_data", "sampling_layout",
                                                      "soil_properties", "posterior_samples", "convergence",
-                                                     "energy_breakdown", "parameters_catalog", "check", "fields"]
+                                                     "energy_breakdown", "parameters_catalog", "check", "fields", "raw_series",
+                                                     "processing_preview"]
     volume = next(q for q in body["questions"] if q["id"] == "exchanged_volume")
     assert volume["ref"] == "HN-12" and volume["level"] == "high" and volume["modes"] == ["D", "M"]
     assert volume["label_en"] == "What volume of water crossed 1 m² of riverbed?"
@@ -462,6 +463,8 @@ def test_openapi_matches_the_snapshot(asking):
 
 
 def test_api_process_answers_questions_without_the_engine(tmp_path, computed_twins):
+    from conftest import GLOBAL_PARAMS
+
     code = textwrap.dedent(f"""
         import sys
         from fastapi.testclient import TestClient
@@ -473,6 +476,8 @@ def test_api_process_answers_questions_without_the_engine(tmp_path, computed_twi
             for question in client.get("/v1/questions", params={{"twin": ref}}).json()["questions"]:
                 body = {{"z": 0.2}} if question["id"] == "temperature" else None
                 assert client.post(f"/v1/twins/{{ref}}/questions/{{question['id']}}", json=body).status_code == 200
+        for question, body in {GLOBAL_PARAMS!r}.items():  # BN-03 et BN-04 : les fichiers d'un point, sans twin
+            assert client.post(f"/v1/questions/{{question}}", json=body).status_code == 200, question
         runner.close()
         print(sorted({{m.split(".")[0] for m in sys.modules}} & {{"jax", "jaxlib", "arviz", "PySide6"}}))
     """)
@@ -515,6 +520,38 @@ def test_parameters_catalog_has_its_endpoint(asking):
     assert_error(ask(asking, "twin_01", "parameters_catalog"), 409, "E_QUESTION_NO_TWIN")
     parameters = next(q for q in asking.get("/v1/questions").json()["questions"] if q["id"] == "parameters_catalog")
     assert parameters["requires"] == "none" and parameters["ref"] == "BN-10" and parameters["level"] == "low"
+
+
+def test_data_questions_have_their_endpoint(asking):
+    from conftest import GLOBAL_PARAMS
+    from molonari_twin.contract.codec import answer_from_json, answer_from_npz
+
+    for question, params in GLOBAL_PARAMS.items():
+        response = asking.post(f"/v1/questions/{question}", json=params)
+        assert response.status_code == 200, response.text
+        binary = asking.post(f"/v1/questions/{question}", json=params, headers={"Accept": "application/x-npz"})
+        assert binary.status_code == 200 and binary.headers["content-type"] == "application/x-npz"
+        from_json, from_npz = answer_from_json(response.content), answer_from_npz(binary.content)
+        assert from_json.data.keys() == from_npz.data.keys() and "twin" not in response.json()["provenance"]
+        for name, quantity in from_json.data.items():
+            np.testing.assert_array_equal(np.asarray(from_npz.data[name].value), np.asarray(quantity.value), err_msg=name)
+    assert asking.post("/v1/questions/BN-03", json=GLOBAL_PARAMS["raw_series"]).status_code == 200
+    questions = {q["id"]: q for q in asking.get("/v1/questions").json()["questions"]}
+    assert questions["processing_preview"]["requires"] == "none" and questions["raw_series"]["ref"] == "BN-03"
+    assert "methods" in questions["processing_preview"]["params_schema"]["properties"]
+
+
+def test_data_questions_refuse_with_structured_errors(asking, tmp_path):
+    from conftest import GLOBAL_PARAMS
+
+    (tmp_path / "t.xlsx").write_bytes(b"PK")
+    body = assert_error(asking.post("/v1/questions/raw_series", json={"point_folder": str(tmp_path)}), 400, "E_PIPELINE_FORMAT_UNSUPPORTED")
+    assert body["params"]["files"] == "t.xlsx"
+    assert_error(asking.post("/v1/questions/raw_series", json={"point_folder": "/nowhere/at/all"}), 400, "E_FOLDER_NOT_FOUND")
+    zone = {**GLOBAL_PARAMS["raw_series"], "start": "2016-06-27T12:00:00+01:00"}
+    body = assert_error(asking.post("/v1/questions/raw_series", json=zone), 422, "E_QUESTION_PARAMS")
+    assert [issue["field"] for issue in body["params"]["issues"]] == ["start"]
+    assert_error(asking.post("/v1/questions/raw_series", json={}), 422, "E_QUESTION_PARAMS")
 
 
 def test_check_of_an_invalid_twin_is_a_200(computed_twins, tmp_path):

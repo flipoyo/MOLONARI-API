@@ -4,12 +4,13 @@ Ils font partie du contrat : le client peut valider une requête avant de l'envo
 modèle est publié par GET /v1/questions. Un paramètre inconnu est refusé.
 
 Dates : ISO 8601 sans fuseau, dans le repère des données du twin. Un fuseau est refusé tant que la convention
-de dates n'est pas fixée (avec le pipeline brut) : il serait sinon ignoré sans le dire.
+de dates n'est pas fixée (P2.1f, après le pipeline brut) : il serait sinon ignoré sans le dire.
 """
 
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -134,3 +135,56 @@ class FieldsParams(PeriodParams):
                                         "heat_flux_advective and heat_flux_conductive. Default: all four.")
     depth_range: tuple[float | None, float | None] | None = Field(default=None, description="(shallowest, deepest) depth in m, included; null: no bound.")
     time_step: int = Field(default=1, ge=1, description="Keep one date out of `time_step`. The fields are large: prefer Accept: application/x-npz.")
+
+
+# Variables et méthodes du nettoyage (processing.cleanup.VARIABLES et METHODS : un test vérifie qu'elles concordent).
+CLEANUP_VARIABLES = ("temp_bed", "t1", "t2", "t3", "t4", "pressure")
+CleanupMethod = Literal["none", "iqr", "zscore"]
+
+
+class RawSeriesParams(Params):
+    """Mesures brutes d'un point (BN-03)."""
+
+    point_folder: str = Field(min_length=1, description="Folder of the sampling point: its info file and its temperature and pressure "
+                              "measurement files, as exported by the logger software (CSV).")
+    start: datetime | None = Field(default=None, description="First date returned, included (ISO 8601, no time zone). Default: start of the measurements.")
+    end: datetime | None = Field(default=None, description="Last date returned, included (ISO 8601, no time zone). Default: end of the measurements.")
+
+    _check_dates = field_validator("start", "end")(_naive)
+
+    @model_validator(mode="after")
+    def _ordered(self):
+        if self.start is not None and self.end is not None and self.end < self.start:
+            raise ValueError("end must not be before start")
+        return self
+
+
+class ProcessingPreviewParams(RawSeriesParams):
+    """Effet d'un nettoyage sur un point (BN-04) : les mêmes réglages que l'onglet Nettoyage, sans rien enregistrer."""
+
+    lab_folder: str = Field(min_length=1, description="Folder of the laboratory (temperature_sensors, pressure_sensors and shafts): "
+                            "it gives the calibration of the pressure sensor, the depths of the shaft and the sensor uncertainties.")
+    start: datetime | None = Field(default=None, description="Start of the studied period, included (ISO 8601, no time zone): earlier dates "
+                                   "are left out as `outside_window`. Default: start of the measurements.")
+    end: datetime | None = Field(default=None, description="End of the studied period, included (ISO 8601, no time zone): later dates "
+                                 "are left out as `outside_window`. Default: end of the measurements.")
+    methods: dict[str, CleanupMethod] | None = Field(
+        default=None, description="Outlier detection per variable (temp_bed, t1, t2, t3, t4, pressure): none, iqr (outside "
+                                  "[Q1 − 1.5·IQR, Q3 + 1.5·IQR]) or zscore (z-score above 3 in absolute value), computed on the studied period. A variable not "
+                                  "listed is not checked. A date is left out as soon as one variable is an outlier.")
+    excluded: list[datetime] = Field(default=[], description="Dates left out by hand (ISO 8601, no time zone), reason `manual`.")
+
+    @field_validator("methods")
+    @classmethod
+    def _variables(cls, value):
+        unknown = sorted(set(value or {}) - set(CLEANUP_VARIABLES))
+        if unknown:
+            raise ValueError(f"unknown variable(s) {', '.join(unknown)} (available: {', '.join(CLEANUP_VARIABLES)})")
+        return value
+
+    @field_validator("excluded")
+    @classmethod
+    def _naive_dates(cls, value):
+        for date in value:
+            _naive(date)
+        return value
