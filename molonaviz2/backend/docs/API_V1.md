@@ -44,6 +44,7 @@ et de `params`.
 |---|---|
 | `E_QUESTION_CHAINS` | 422 |
 | `E_QUESTION_LEVEL` | 422 |
+| `E_QUESTION_MODELS_INCOMPARABLE` | 422 |
 | `E_QUESTION_NOT_AVAILABLE` | 409 |
 | `E_QUESTION_NO_FIELDS` | 422 |
 | `E_QUESTION_NO_POSTERIOR` | 422 |
@@ -198,7 +199,7 @@ Sorties : `time`, `measured`, `simulated`, `level`, `z`, `sigma`, `field_time`, 
 
 **Does the model reproduce the measurements?** — *Le modèle reproduit-il les mesures ?*
 
-Per sensor: RMSE, bias, RMSE/σT, lag-1 autocorrelation of the residuals and, in mcmc mode with stored fields, the share of measurements the predictive band covers. Arrays are sensor first: (3,).
+Per sensor: RMSE, bias (simulated − measured), RMSE/σT, lag-1 autocorrelation of the residuals and, in mcmc mode with stored fields, the share of measurements the predictive band covers; then the total RMSE (root mean square of the three). Arrays are sensor first: (3,). A direct twin is the forward model (`model` forward, `uncertainty` none); an mcmc twin is the inversion model, represented by its best sample, and `median_rmse` and `median_rmse_total` give the RMSE of the posterior median in addition. The direct difference forward − inversion is `TwinAPI.model_difference`, which needs two twins.
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
 - Requête : `POST /v1/twins/{ref}/questions/fit_quality`
@@ -209,7 +210,7 @@ Per sensor: RMSE, bias, RMSE/σT, lag-1 autocorrelation of the residuals and, in
 | `sigma` | nombre ou null | — | ≥ 0 | Measurement uncertainty of the thermometers (°C). Default: the one recorded with the results. |
 | `seed` | entier | `0` | ≥ 0 | Seed of the measurement noise drawn for the predictive band (same seed, same band). |
 
-Sorties : `rmse`, `bias`, `rmse_over_sigma`, `lag1_autocorrelation`, `sigma`, `level`, `coverage_per_sensor`.
+Sorties : `rmse`, `bias`, `rmse_over_sigma`, `lag1_autocorrelation`, `sigma`, `level`, `coverage_per_sensor`, `rmse_total`, `sensor`, `model`, `uncertainty`, `median_rmse`, `median_rmse_total`.
 
 ### `reliability` (HN-41)
 

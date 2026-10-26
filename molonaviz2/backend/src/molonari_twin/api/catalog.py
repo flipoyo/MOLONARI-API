@@ -161,11 +161,18 @@ CATALOG: tuple[Question, ...] = (
     ),
     Question(
         "fit_quality", "HN-40", "reliability", N_("Does the model reproduce the measurements?"),
-        "Per sensor: RMSE, bias, RMSE/σT, lag-1 autocorrelation of the residuals and, in mcmc mode with stored "
-        "fields, the share of measurements the predictive band covers. Arrays are sensor first: (3,).",
+        "Per sensor: RMSE, bias (simulated − measured), RMSE/σT, lag-1 autocorrelation of the residuals and, in mcmc "
+        "mode with stored fields, the share of measurements the predictive band covers; then the total RMSE (root "
+        "mean square of the three). Arrays are sensor first: (3,). A direct twin is the forward model (`model` "
+        "forward, `uncertainty` none); an mcmc twin is the inversion model, represented by its best sample, and "
+        "`median_rmse` and `median_rmse_total` give the RMSE of the posterior median in addition. The direct "
+        "difference forward − inversion is `TwinAPI.model_difference`, which needs two twins.",
         ("D", "M"), p.IntervalParams, "results",
         lambda twin, a: fit_quality(twin.results, a.level, a.sigma, a.seed),
-        outputs=("rmse", "bias", "rmse_over_sigma", "lag1_autocorrelation", "sigma", "level", "coverage_per_sensor"),
+        outputs=(
+            "rmse", "bias", "rmse_over_sigma", "lag1_autocorrelation", "sigma", "level", "coverage_per_sensor", "rmse_total",
+            "sensor", "model", "uncertainty", "median_rmse", "median_rmse_total",
+        ),
     ),
     Question(
         "reliability", "HN-41", "reliability", N_("Can I trust this result?"),

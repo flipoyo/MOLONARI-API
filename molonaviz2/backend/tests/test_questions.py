@@ -22,6 +22,7 @@ from molonari_twin.questions import (
     exchanged_volume,
     fit_quality,
     heat_budget,
+    model_difference,
     observed_at,
     parameters_catalog,
     posterior_samples,
@@ -696,6 +697,91 @@ def test_residual_autocorrelation_separates_noise_from_structure(direct):
 
 def test_fit_quality_in_direct_mode_has_no_coverage(direct):
     assert "coverage_per_sensor" not in fit_quality(direct).data
+
+
+# RMSE par modèle et différence directe forward − inversion (P2c.1c à P2c.1e) ----------------------
+
+
+def with_simulated(results, offsets):
+    """Résultats dont le simulé vaut le mesuré + `offsets[i]` (°C) au capteur i + 1 (résidu constant par capteur)."""
+    frame = results.residuals.copy()
+    for i, offset in enumerate(offsets, start=1):
+        frame[f"t{i}_simulated"] = frame[f"t{i}_measured"] + offset
+        frame[f"t{i}_residual"] = offset
+    return dataclasses.replace(results, residuals=frame)
+
+
+def test_bias_rmse_per_sensor_and_total_rmse_of_the_forward_model(direct):
+    data = fit_quality(with_simulated(direct, (0.1, -0.2, 0.3))).data
+    np.testing.assert_allclose(data["bias"].value, (0.1, -0.2, 0.3))
+    np.testing.assert_allclose(data["rmse"].value, (0.1, 0.2, 0.3))
+    assert data["rmse_total"].value == pytest.approx(np.sqrt((0.1**2 + 0.2**2 + 0.3**2) / 3)) and data["rmse_total"].unit == "°C"
+    assert list(data["sensor"].value) == ["t1", "t2", "t3"]
+    assert (data["model"].value, data["uncertainty"].value) == ("forward", "none")
+    assert not {"median_rmse", "median_rmse_total"} & set(data)
+
+
+def test_total_rmse_is_the_one_recorded_by_the_computation(tmp_path):
+    forward = run_forward(synthetic_inputs(nb_times=80), ForwardConfig([LayerSpec("a", 0.4)], nb_cells=20))
+    results = results_of(tmp_path, forward)
+    data = fit_quality(results).data
+    np.testing.assert_allclose(data["rmse"].value, forward.rmse[:3], rtol=1e-9)
+    assert data["rmse_total"].value == pytest.approx(forward.rmse[3], rel=1e-9)
+
+
+@pytest.mark.parametrize("kind", ["sensors", "full"])
+def test_inversion_model_is_its_best_sample_and_the_median_comes_in_addition(mcmc_results, inversions, kind):
+    results, inversion = mcmc_results[kind], inversions[kind]
+    data = fit_quality(results).data
+    np.testing.assert_allclose(data["rmse"].value, inversion.best.rmse[:3], rtol=1e-9)  # meilleur échantillon
+    assert data["rmse_total"].value == pytest.approx(inversion.best.rmse[3], rel=1e-9)
+    assert (data["model"].value, data["uncertainty"].value) == ("inversion", "posterior")
+    median = next(q for q in inversion.quantiles if q.quantile == 0.5)  # RMSE de la médiane a posteriori du calcul
+    np.testing.assert_allclose(data["median_rmse"].value, median.rmse[:3], rtol=1e-6)
+    assert data["median_rmse_total"].value == pytest.approx(median.rmse[3], rel=1e-6)
+
+
+def test_the_median_rmse_is_missing_with_a_warning_without_the_quantile_one_half(mcmc_results):
+    results = mcmc_results["sensors"]
+    keep = results.quantiles["quantile"] != 0.5
+    quantiles = {key: (value[keep] if key in ("quantile", "temperature_C", "water_flux_m_per_s") else value)
+                 for key, value in results.quantiles.items()}
+    for stored in (dataclasses.replace(results, quantiles=quantiles), dataclasses.replace(results, quantiles=None)):
+        answer = fit_quality(stored)
+        assert "median_rmse" not in answer.data and "W_FIT_NO_MEDIAN" in [w.code for w in answer.warnings]
+        assert answer.data["rmse_total"].value > 0  # le meilleur échantillon reste là
+
+
+def test_model_difference_is_forward_minus_inversion_per_sensor(direct, mcmc_results):
+    forward = with_simulated(direct, (0.1, -0.2, 0.3))  # mêmes mesures et mêmes dates : la différence est celle des décalages
+    inversion = with_simulated(direct, (0.0, 0.0, 0.0))
+    answer = model_difference(forward, inversion)
+    np.testing.assert_allclose(answer.data["mean_difference"].value, (0.1, -0.2, 0.3), atol=1e-12)
+    np.testing.assert_allclose(answer.data["rmse"].value, (0.1, 0.2, 0.3), atol=1e-12)
+    assert answer.data["rmse_total"].value == pytest.approx(np.sqrt((0.1**2 + 0.2**2 + 0.3**2) / 3))
+    assert answer.data["points"].value == len(direct.residuals) and list(answer.data["sensor"].value) == ["t1", "t2", "t3"]
+    swapped = model_difference(inversion, forward)  # l'ordre compte : le signe change, la RMSE non
+    np.testing.assert_allclose(swapped.data["mean_difference"].value, (-0.1, 0.2, -0.3), atol=1e-12)
+    np.testing.assert_allclose(swapped.data["rmse"].value, answer.data["rmse"].value)
+
+
+def test_model_difference_does_not_depend_on_the_measurements(direct):
+    """Deux modèles identiques ne diffèrent pas, même si les mesures de l'un sont faussées."""
+    other = direct.residuals.assign(**{f"t{i}_measured": 99.0 for i in (1, 2, 3)})
+    assert model_difference(direct, dataclasses.replace(direct, residuals=other)).data["rmse_total"].value == 0.0
+
+
+def test_a_model_has_no_difference_with_itself(direct):
+    answer = model_difference(direct, direct)
+    np.testing.assert_array_equal(answer.data["mean_difference"].value, np.zeros(3))
+    assert answer.data["rmse_total"].value == 0.0
+
+
+def test_models_simulated_at_other_dates_are_incomparable(direct):
+    shorter = dataclasses.replace(direct, residuals=direct.residuals.iloc[:-1])
+    assert code_of(lambda: model_difference(direct, shorter)) == "E_QUESTION_MODELS_INCOMPARABLE"
+    shifted = dataclasses.replace(direct, residuals=direct.residuals.assign(date=direct.residuals["date"] + np.timedelta64(1, "m")))
+    assert code_of(lambda: model_difference(direct, shifted)) == "E_QUESTION_MODELS_INCOMPARABLE"
 
 
 # Propriétés du sol, échantillons, convergence et énergie (lot C3) ---------------------------------

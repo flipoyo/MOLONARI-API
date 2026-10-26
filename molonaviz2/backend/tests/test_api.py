@@ -331,6 +331,24 @@ def test_asking_every_question_loads_neither_jax_nor_arviz(twins):
     assert completed.stdout.strip() == "[]"
 
 
+def test_model_difference_of_a_direct_and_an_mcmc_twin(api):
+    answer = api.model_difference("twin_01", "twin_03")
+    data = answer.data
+    assert data["mean_difference"].value.shape == data["rmse"].value.shape == (3,) and data["rmse_total"].unit == "°C"
+    assert answer.provenance["forward"] == "twin_01" and answer.provenance["inversion"] == "twin_03"
+    assert answer.provenance["forward_twin_id"] != answer.provenance["inversion_twin_id"]
+    forward, inversion = (api.ask(ref, "fit_quality") for ref in ("twin_01", "twin_03"))
+    # Chaque modèle est comparé aux mêmes mesures : la différence entre les deux vaut au plus la somme de leurs RMSE.
+    assert data["rmse_total"].value <= forward.data["rmse_total"].value + inversion.data["rmse_total"].value + 1e-12
+
+
+def test_model_difference_needs_a_direct_forward_and_a_computed_mcmc_inversion(api):
+    assert code_of(lambda: api.model_difference("twin_03", "twin_01")).code == "E_QUESTION_NOT_AVAILABLE"
+    assert code_of(lambda: api.model_difference("twin_01", "twin_01")).code == "E_QUESTION_NOT_AVAILABLE"
+    assert code_of(lambda: api.model_difference("twin_09", "twin_03")).code == "E_TWIN_NOT_COMPUTED"
+    assert code_of(lambda: api.model_difference("twin_01", "twin_99")).code == "E_TWIN_NOT_FOUND"
+
+
 def test_declared_outputs_are_the_answers(api):
     """La documentation (docs/API_V1.md) liste les sorties déclarées : elles doivent être celles des réponses.
     Toute sortie apparaît pour au moins un des twins D et M ; aucune réponse n'a de sortie non déclarée."""

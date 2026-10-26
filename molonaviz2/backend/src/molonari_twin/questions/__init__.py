@@ -10,7 +10,7 @@ from .check import check_twin
 from .convergence import convergence
 from .energy import energy_breakdown
 from .fields import result_fields
-from .fit import fit_quality, lag1_autocorrelation
+from .fit import fit_quality, lag1_autocorrelation, model_difference
 from .flux import exchange_direction, twin_exchanged_volume, water_flux
 from .heat import heat_budget
 from .intervals import (
@@ -45,6 +45,7 @@ __all__ = [
     "heat_budget",
     "lag1_autocorrelation",
     "measurement_interval",
+    "model_difference",
     "observed_at",
     "parameters_catalog",
     "posterior_samples",
