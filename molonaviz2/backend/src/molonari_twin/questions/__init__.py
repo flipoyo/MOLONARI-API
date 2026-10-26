@@ -8,6 +8,7 @@ from .answer import Answer, Quantity
 from .chains import chain_data, posterior_samples
 from .check import check_twin
 from .convergence import convergence, public_convergence
+from .data import processing_preview, raw_series
 from .energy import energy_breakdown
 from .fields import result_fields
 from .fit import fit_quality, lag1_autocorrelation, model_difference
@@ -50,8 +51,10 @@ __all__ = [
     "parameters_catalog",
     "posterior_samples",
     "predictive_band",
+    "processing_preview",
     "provenance",
     "public_convergence",
+    "raw_series",
     "reliability",
     "residuals",
     "result_fields",

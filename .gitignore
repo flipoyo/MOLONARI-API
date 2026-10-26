@@ -13,3 +13,4 @@ src/molonaviz/config.txt
 .cproject
 .settings
 .DS_Store
+TestDatabase/Molonari.sqlite

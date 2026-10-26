@@ -17,24 +17,34 @@ class DatabaseManager:
         self.con = QSqlDatabase.addDatabase("QSQLITE")
         self.con.setDatabaseName(self.db_path)
 
-        if not self.con.open():
+        # if not self.con.open():
+        #     self.create_real_database()
+        #     self.fill_real_database()
+        
+        # nedit
+        self.con.open()
+        if "SamplingPoint" not in self.con.tables():
             self.create_real_database()
             self.fill_real_database()
-    
+
+
     def create_real_database(self):
         databaseDirectory = os.path.dirname(self.db_path)
-        if os.path.isdir(databaseDirectory):
-            return False
+        
+        # nedit
+        # if os.path.isdir(databaseDirectory):
+        #     return False
         os.makedirs(databaseDirectory, exist_ok=True)
-        os.mkdir(os.path.join(databaseDirectory, "Notices"))
-        os.mkdir(os.path.join(databaseDirectory, "Schemes"))
-        os.mkdir(os.path.join(databaseDirectory, "Scripts"))
-        with open(self.db_path, "x") as f:
-            pass
-
-        self.con = QSqlDatabase.addDatabase("QSQLITE")
-        self.con.setDatabaseName(self.db_path)
-        self.con.open()
+        os.makedirs(os.path.join(databaseDirectory, "Notices"), exist_ok=True)     # nedit
+        os.makedirs(os.path.join(databaseDirectory, "Schemes"), exist_ok=True)     # nedit
+        os.makedirs(os.path.join(databaseDirectory, "Scripts"), exist_ok=True)     # nedit
+        
+        # nedit
+        # with open(self.db_path, "x") as f:
+        #     pass
+        # self.con = QSqlDatabase.addDatabase("QSQLITE")
+        # self.con.setDatabaseName(self.db_path)
+        # self.con.open()
 
         sqlInitFile = self.sql_structure_file
         with open(sqlInitFile, 'r') as f:

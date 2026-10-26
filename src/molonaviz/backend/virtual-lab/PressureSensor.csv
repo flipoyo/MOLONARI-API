@@ -1,2 +1,2 @@
-ID,Name,Datalogger,DataloggerID,Calibration,Intercept,DuDH,DuDT,Error,ThermoModel,Labo
-1,TestPSensor,TestDatalogger,1,2025-01-01,0,0,0,0,1,1
+Name,Datalogger,DataloggerID,Calibration,Intercept,DuDH,DuDT,Error,ThermoModel,Labo,ID
+PSensor1,Arduino,3,2026-10-19,0.0,0.0,1.0,0.01,3,3,3

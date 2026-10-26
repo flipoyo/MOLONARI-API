@@ -36,8 +36,10 @@ from ..questions import (
     heat_budget,
     parameters_catalog,
     posterior_samples,
+    processing_preview,
     provenance,
     public_convergence,
+    raw_series,
     reliability,
     residuals,
     result_fields,
@@ -319,5 +321,33 @@ CATALOG: tuple[Question, ...] = (
         ("D", "M"), p.FieldsParams, "results",
         lambda twin, a: result_fields(twin.results, a.variables, a.start, a.end, a.depth_range, a.time_step),
         outputs=("depth", "time", "temperature", "water_flux", "heat_flux_advective", "heat_flux_conductive"),
+    ),
+    Question(
+        "raw_series", "BN-03", "data", N_("Raw measurements of a point"),
+        "The raw measurements of a point folder (CSV exports of the logger software), between two dates: thermometer "
+        "temperatures (°C), voltage (V) and temperature of the pressure sensor (°C), and the number of file lines "
+        "left out (logger events, empty or unreadable values, duplicate dates). It is about no twin. Formats that are "
+        "not supported are refused with a coded error, never read wrongly.",
+        ("D", "M"), p.RawSeriesParams, "none",
+        lambda twin, a: raw_series(a.point_folder, a.start, a.end),
+        outputs=(
+            "temperature_time", "temperature", "temperature_dropped", "pressure_time", "voltage", "pressure_temperature",
+            "pressure_dropped",
+        ),
+    ),
+    Question(
+        "processing_preview", "BN-04", "data", N_("Effect of a cleaning"),
+        "What a cleaning would do to a point, without saving anything: every date common to the temperature and pressure "
+        "files, with the measurements (the pressure converted to a differential head, in m, with the calibration of the "
+        "laboratory), the reason each date is left out (`outside_window`, `manual`, `missing`, `iqr:<variable>` or "
+        "`zscore:<variable>`; empty when it is kept), the count per reason, the dates found in only one file, and the "
+        "uncertainties σ of the instruments (Sigma_Meas_P, Sigma_Meas_T). It is about no twin.",
+        ("D", "M"), p.ProcessingPreviewParams, "none",
+        lambda twin, a: processing_preview(a.point_folder, a.lab_folder, a.start, a.end, a.methods, a.excluded),
+        outputs=(
+            "time", "temperature", "river_temperature", "pressure", "kept", "reason", "reasons", "reason_counts",
+            "kept_count", "total_count", "unmatched_temperature", "unmatched_pressure", "sigma_pressure",
+            "sigma_temperature",
+        ),
     ),
 )

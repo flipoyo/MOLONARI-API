@@ -2,7 +2,7 @@
 
 <!-- Fichier généré par tools/gen_api_doc.py à partir du catalogue (molonari_twin.api). Ne pas modifier à la main. -->
 
-Version de l'API : **1.0.0-alpha.3**. Schéma complet : `GET /openapi.json` ; catalogue avec les schémas de
+Version de l'API : **1.0.0-alpha.4**. Schéma complet : `GET /openapi.json` ; catalogue avec les schémas de
 paramètres : `GET /v1/questions` (`?twin=<ref>` : les questions de son mode).
 
 ## Poser une question
@@ -17,7 +17,9 @@ curl -X POST http://127.0.0.1:8765/v1/twins/twin_03/questions/HN-12 -H 'Accept: 
 Une question se désigne par son identifiant (`exchanged_volume`) ou par sa référence du plan (`HN-12`). Le
 corps de la requête contient ses paramètres ; un paramètre inconnu est refusé. Les questions lisent la
 configuration ou les résultats d'un twin : elles répondent tout de suite, sans tâche et sans charger le moteur.
-Celles qui n'ont pas besoin de twin (catalogue des paramètres) se posent à `POST /v1/questions/{id}`.
+Celles qui n'ont pas besoin de twin (catalogue des paramètres, données d'un point) se posent à `POST /v1/questions/{id}`.
+Les questions de données lisent les dossiers d'un point et d'un laboratoire de la machine qui sert l'API, qui
+n'écoute que sur 127.0.0.1 : elles refusent par une erreur codée ce qu'elles ne savent pas lire.
 Calculer un twin passe par `POST /v1/twins/{ref}/run`, puis par le suivi de la tâche (`/v1/tasks/…`).
 
 ## Réponse
@@ -31,7 +33,7 @@ Calculer un twin passe par `POST /v1/twins/{ref}/run`, puis par le suivi de la t
 - **npz** (`Accept: application/x-npz`) : chaque tableau va dans l'archive (`data/<nom>/value`, `…/low`,
   `…/high`) ; la réponse elle-même est l'entrée `meta` (JSON). L'archive se lit sans pickle.
 - **Dates** : ISO 8601 à la seconde, **sans fuseau**, dans le repère des données du twin. Un fuseau donné en
-  paramètre est refusé tant que la convention de dates n'est pas fixée (avec le pipeline brut).
+  paramètre est refusé tant que la convention de dates n'est pas fixée (P2.1f, après le pipeline brut).
 - **Unités** : SI (m/s, m³/m², °C, m, s). Les conversions d'affichage (m/jour, L/m²) sont faites par le client.
 - **Tableaux aux capteurs** : capteur d'abord, `(3, T)`.
 
@@ -86,6 +88,45 @@ Layers, sensors, period, mode and main settings, read from the configuration (no
 Aucun paramètre : le corps de la requête est vide (ou `{}`).
 
 Sorties : `name`, `point`, `mode`, `description`, `start`, `end`, `layers`, `layer_bottoms`, `sensor_depths`, `offset`, `nb_cells`, `sigma_temperature`, `seed`, `nb_chains`, `nb_iter`, `burn_in_max`, `thin`, `store_fields`.
+
+## Données et traitement
+
+### `raw_series` (BN-03)
+
+**Raw measurements of a point** — *Mesures brutes d'un point*
+
+The raw measurements of a point folder (CSV exports of the logger software), between two dates: thermometer temperatures (°C), voltage (V) and temperature of the pressure sensor (°C), and the number of file lines left out (logger events, empty or unreadable values, duplicate dates). It is about no twin. Formats that are not supported are refused with a coded error, never read wrongly.
+
+- Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige aucun twin.
+- Requête : `POST /v1/questions/raw_series`
+
+| Paramètre | Type | Défaut | Bornes | Description |
+|---|---|---|---|---|
+| `point_folder` | texte | requis |  | Folder of the sampling point: its info file and its temperature and pressure measurement files, as exported by the logger software (CSV). |
+| `start` | date ou null | — |  | First date returned, included (ISO 8601, no time zone). Default: start of the measurements. |
+| `end` | date ou null | — |  | Last date returned, included (ISO 8601, no time zone). Default: end of the measurements. |
+
+Sorties : `temperature_time`, `temperature`, `temperature_dropped`, `pressure_time`, `voltage`, `pressure_temperature`, `pressure_dropped`.
+
+### `processing_preview` (BN-04)
+
+**Effect of a cleaning** — *Effet d'un nettoyage*
+
+What a cleaning would do to a point, without saving anything: every date common to the temperature and pressure files, with the measurements (the pressure converted to a differential head, in m, with the calibration of the laboratory), the reason each date is left out (`outside_window`, `manual`, `missing`, `iqr:<variable>` or `zscore:<variable>`; empty when it is kept), the count per reason, the dates found in only one file, and the uncertainties σ of the instruments (Sigma_Meas_P, Sigma_Meas_T). It is about no twin.
+
+- Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige aucun twin.
+- Requête : `POST /v1/questions/processing_preview`
+
+| Paramètre | Type | Défaut | Bornes | Description |
+|---|---|---|---|---|
+| `point_folder` | texte | requis |  | Folder of the sampling point: its info file and its temperature and pressure measurement files, as exported by the logger software (CSV). |
+| `start` | date ou null | — |  | Start of the studied period, included (ISO 8601, no time zone): earlier dates are left out as `outside_window`. Default: start of the measurements. |
+| `end` | date ou null | — |  | End of the studied period, included (ISO 8601, no time zone): later dates are left out as `outside_window`. Default: end of the measurements. |
+| `lab_folder` | texte | requis |  | Folder of the laboratory (temperature_sensors, pressure_sensors and shafts): it gives the calibration of the pressure sensor, the depths of the shaft and the sensor uncertainties. |
+| `methods` | object ou null | — |  | Outlier detection per variable (temp_bed, t1, t2, t3, t4, pressure): none, iqr (outside [Q1 − 1.5·IQR, Q3 + 1.5·IQR]) or zscore (z-score above 3 in absolute value), computed on the studied period. A variable not listed is not checked. A date is left out as soon as one variable is an outlier. |
+| `excluded` | list[date] | `[]` |  | Dates left out by hand (ISO 8601, no time zone), reason `manual`. |
+
+Sorties : `time`, `temperature`, `river_temperature`, `pressure`, `kept`, `reason`, `reasons`, `reason_counts`, `kept_count`, `total_count`, `unmatched_temperature`, `unmatched_pressure`, `sigma_pressure`, `sigma_temperature`.
 
 ## Échanges d'eau
 

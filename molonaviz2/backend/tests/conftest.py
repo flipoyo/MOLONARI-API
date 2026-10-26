@@ -14,6 +14,11 @@ LAB_DIR = DATA_DIR / "Laboratory"
 POINT034_DIR = DATA_DIR / "SamplingPoints" / "Point034"
 FIXTURES = Path(__file__).parent / "fixtures"
 EXAMPLE_TWINS = Path(__file__).resolve().parents[2] / "examples" / "twins"
+# Paramètres des questions sans twin qui ont besoin de données (BN-03, BN-04) : Point034 et son laboratoire.
+GLOBAL_PARAMS = {
+    "raw_series": {"point_folder": str(FIXTURES / "point034")},
+    "processing_preview": {"point_folder": str(FIXTURES / "point034"), "lab_folder": str(FIXTURES / "lab")},
+}
 
 
 def synthetic_inputs(nb_times=300, depths=(0.1, 0.2, 0.3, 0.4), offset=0.0, step_minutes=15, sigma_t=0.1):

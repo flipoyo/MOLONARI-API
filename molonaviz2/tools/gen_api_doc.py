@@ -16,6 +16,7 @@ WORKSPACE = Path(__file__).resolve().parents[1]
 OUTPUT = WORKSPACE / "backend" / "docs" / "API_V1.md"
 CATEGORIES = {
     "discovery": "Découverte",
+    "data": "Données et traitement",
     "water": "Échanges d'eau",
     "heat": "Chaleur",
     "temperature": "Températures",
@@ -96,7 +97,9 @@ def render() -> str:
         "Une question se désigne par son identifiant (`exchanged_volume`) ou par sa référence du plan (`HN-12`). Le",
         "corps de la requête contient ses paramètres ; un paramètre inconnu est refusé. Les questions lisent la",
         "configuration ou les résultats d'un twin : elles répondent tout de suite, sans tâche et sans charger le moteur.",
-        "Celles qui n'ont pas besoin de twin (catalogue des paramètres) se posent à `POST /v1/questions/{id}`.",
+        "Celles qui n'ont pas besoin de twin (catalogue des paramètres, données d'un point) se posent à `POST /v1/questions/{id}`.",
+        "Les questions de données lisent les dossiers d'un point et d'un laboratoire de la machine qui sert l'API, qui",
+        "n'écoute que sur 127.0.0.1 : elles refusent par une erreur codée ce qu'elles ne savent pas lire.",
         "Calculer un twin passe par `POST /v1/twins/{ref}/run`, puis par le suivi de la tâche (`/v1/tasks/…`).",
         "",
         "## Réponse",
@@ -110,7 +113,7 @@ def render() -> str:
         "- **npz** (`Accept: application/x-npz`) : chaque tableau va dans l'archive (`data/<nom>/value`, `…/low`,",
         "  `…/high`) ; la réponse elle-même est l'entrée `meta` (JSON). L'archive se lit sans pickle.",
         "- **Dates** : ISO 8601 à la seconde, **sans fuseau**, dans le repère des données du twin. Un fuseau donné en",
-        "  paramètre est refusé tant que la convention de dates n'est pas fixée (avec le pipeline brut).",
+        "  paramètre est refusé tant que la convention de dates n'est pas fixée (P2.1f, après le pipeline brut).",
         "- **Unités** : SI (m/s, m³/m², °C, m, s). Les conversions d'affichage (m/jour, L/m²) sont faites par le client.",
         "- **Tableaux aux capteurs** : capteur d'abord, `(3, T)`.",
         "",

@@ -9,6 +9,7 @@ from pathlib import Path
 import jsonschema
 import numpy as np
 import pytest
+from conftest import GLOBAL_PARAMS
 from molonari_twin.api import CATALOG, TwinAPI
 from molonari_twin.errors import UserError
 from molonari_twin.i18n import load_catalog
@@ -45,7 +46,7 @@ def code_of(call):
 
 def test_catalog_is_consistent():
     ids, refs = [q.id for q in CATALOG], [q.ref for q in CATALOG]
-    assert len(set(ids)) == len(ids) == 21 and len(set(refs)) == len(refs)
+    assert len(set(ids)) == len(ids) == 23 and len(set(refs)) == len(refs)
     french = load_catalog("fr")
     for question in CATALOG:
         assert re.fullmatch(r"[a-z_]+", question.id)
@@ -69,7 +70,7 @@ def test_every_parameter_schema_is_valid_json_schema(question):
 
 @pytest.mark.parametrize("question", CATALOG, ids=lambda q: q.id)
 def test_every_question_refuses_an_unknown_parameter(api, question):
-    error = code_of(lambda: api.parameters(question, {"bogus": 1}))
+    error = code_of(lambda: api.parameters(question, {**GLOBAL_PARAMS.get(question.id, {}), "bogus": 1}))
     assert error.code == "E_QUESTION_PARAMS" and error.params["question"] == question.id
     assert [(i.code, i.field) for i in error.params["issues"]] == [("E_PARAM_INVALID", "bogus")]
 
@@ -104,7 +105,7 @@ def test_question_by_id_or_plan_reference(api):
 def test_questions_of_a_twin_follow_its_mode(api):
     direct = {q.id for q in api.questions("twin_01")}
     mcmc = {q.id for q in api.questions("twin_03")}
-    assert mcmc == {q.id for q in CATALOG} - {"parameters_catalog"}  # une question sans twin n'est celle d'aucun twin
+    assert mcmc == {q.id for q in CATALOG if q.requires != "none"}  # une question sans twin n'est celle d'aucun twin
     assert direct == mcmc - {"chain_data", "sampling_layout", "posterior_samples", "convergence", "public_convergence"}
 
 
@@ -319,9 +320,10 @@ def test_asking_every_question_loads_neither_jax_nor_arviz(twins):
         import sys
         from molonari_twin.api import TwinAPI
         api = TwinAPI({str(twins)!r})
+        params = {GLOBAL_PARAMS!r}
         for question in api.questions():
             if question.requires == "none":
-                api.ask_global(question.id)
+                api.ask_global(question.id, params.get(question.id))
         for ref in ("twin_01", "twin_03"):
             for question in api.questions(ref):
                 api.ask(ref, question.id, {{"z": 0.2}} if question.id == "temperature" else {{}})
@@ -363,7 +365,8 @@ def test_declared_outputs_are_the_answers(api):
     """La documentation (docs/API_V1.md) liste les sorties déclarées : elles doivent être celles des réponses.
     Toute sortie apparaît pour au moins un des twins D et M ; aucune réponse n'a de sortie non déclarée."""
     seen = {q.id: set() for q in CATALOG}
-    answers = [(question, api.ask_global(question.id)) for question in CATALOG if question.requires == "none"]
+    answers = [(question, api.ask_global(question.id, GLOBAL_PARAMS.get(question.id))) for question in CATALOG
+               if question.requires == "none"]
     for ref in ("twin_01", "twin_03"):
         for question in api.questions(ref):
             params = {"temperature": {"z": 0.2}, "residuals": {"intervals": True}}.get(question.id, {})

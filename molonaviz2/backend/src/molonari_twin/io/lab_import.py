@@ -5,7 +5,9 @@ Structure attendue (identique à Molonaviz, utils/general.extractDetectorsDF) :
     <dossier>/pressure_sensors/*.csv      8 lignes : nom, Datalogger, Calibration_Date, Intercept,
                                           dU/dH, dU/dT, Sigma_Meas_P, Thermometer name
     <dossier>/shafts/*.csv                4 lignes : Shaft_Name, Datalogger, T_Sensor_Name, Sensors_Depth
-Les valeurs sont lues par position, comme Molonaviz ; la virgule décimale est acceptée.
+Les valeurs sont lues par position, comme Molonaviz ; la virgule décimale est acceptée. Seules les
+incertitudes des instruments (σ) sont lues par leur nom, `Sigma_Meas_T` pour un thermomètre et `Sigma_Meas_P`
+pour un capteur de pression, puis par position si le nom est absent.
 Un fichier invalide est écarté et signalé, les autres sont importés.
 """
 
@@ -83,6 +85,12 @@ def _number(rows, index: int) -> float:
         raise _InvalidFile(Issue(None, "E_LAB_FILE_NOT_A_NUMBER", key=key, value=value), index + 1) from None
 
 
+def _sigma(rows, index: int, key: str) -> float:
+    """Incertitude d'un instrument : la ligne nommée `key` (sans tenir compte de la casse), sinon celle de la position."""
+    named = next((i for i, (name, _) in enumerate(rows) if name.strip().lower() == key.lower()), index)
+    return _number(rows, named)
+
+
 def _text(rows, index: int) -> str:
     key, value = rows[index]
     if not value:
@@ -98,7 +106,7 @@ def _expect_rows(rows, count: int) -> None:
 def parse_thermometer(path: Path) -> Thermometer:
     rows = read_key_values(path)
     _expect_rows(rows, 4)
-    return Thermometer(name=_text(rows, 2), manufacturer=_text(rows, 0), reference=_text(rows, 1), sigma=_number(rows, 3))
+    return Thermometer(name=_text(rows, 2), manufacturer=_text(rows, 0), reference=_text(rows, 1), sigma=_sigma(rows, 3, "Sigma_Meas_T"))
 
 
 def parse_pressure_sensor(path: Path) -> PressureSensor:
@@ -115,7 +123,7 @@ def parse_pressure_sensor(path: Path) -> PressureSensor:
         intercept=_number(rows, 3),
         du_dh=_number(rows, 4),
         du_dt=_number(rows, 5),
-        sigma=_number(rows, 6),
+        sigma=_sigma(rows, 6, "Sigma_Meas_P"),
         thermometer=_text(rows, 7),
     )
 

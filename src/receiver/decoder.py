@@ -6,15 +6,9 @@ from datetime import datetime, timezone
 NB_MEASUREMENTS = 6
 
 def int_to_iso8601(value: int) -> str:
-    s = f"{value:010d}"  # always 10 digits
-    month = int(s[0:2])
-    day = int(s[2:4])
-    year = int(s[4:6]) + 2000  # 2000+YY
-    hour = int(s[6:8])
-    minute = int(s[8:10])
-
-    dt = datetime(year, month, day, hour, minute, tzinfo=timezone.utc)
-    return dt.isoformat()
+    """Convert a Unix timestamp in seconds to an ISO 8601 UTC string."""
+    
+    return datetime.fromtimestamp(value, tz=timezone.utc).isoformat()
 
 def conversion_volt(value):
     """
