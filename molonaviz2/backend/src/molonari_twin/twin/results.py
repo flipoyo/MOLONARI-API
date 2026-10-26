@@ -18,6 +18,9 @@ Ajouts du format 2.0.0 (metadata.json : results_format, instruments, conventions
   quantiles.npz (quantiles des champs), posterior.npz (échantillons, énergies, acceptation,
   réinitialisations, numéro d'itération calculée), et selon store_fields fields_temperature.npz
   et fields_water_flux.npz (champs avec leur chaîne et leur itération d'origine).
+- mcmc uniquement, ajout de P2c.1 : fields_riverbed_flux.npz, q(z = 0, t) en m/s de chacun des champs conservés
+  (float64), quel que soit store_fields. C'est l'état privé dont HN-10 tire l'intervalle a posteriori du flux
+  moyen ; absent d'un résultat écrit avant, qui n'a alors pas d'intervalle.
 
 Les fichiers de données ne dépendent que du calcul : deux exécutions d'un même twin
 donnent des fichiers identiques octet pour octet (metadata.json contient en plus la
@@ -119,6 +122,8 @@ def _write_arrays(folder: Path, forward: ForwardResult, inversion: InversionResu
     if inversion.field_chain is None:
         return
     provenance = {"chain": inversion.field_chain, "iteration": inversion.field_iteration, "time": times}
+    if inversion.field_riverbed_flux is not None:
+        np.savez(folder / "fields_riverbed_flux.npz", values=inversion.field_riverbed_flux, depth_m=depths[:1], **provenance)
     if inversion.sensor_temperature is not None:
         np.savez(folder / "fields_temperature.npz", values=inversion.sensor_temperature, depth_m=forward.sensor_depths, **provenance)
     if inversion.field_temperature is not None:
@@ -144,6 +149,7 @@ class TwinResults:
     quantiles: dict[str, np.ndarray] | None = None  # quantiles.npz (mcmc)
     posterior: dict[str, np.ndarray] | None = None  # posterior.npz (mcmc)
     fields: dict[str, dict[str, np.ndarray]] = field(default_factory=dict)  # "temperature", "water_flux" : fields_*.npz
+    riverbed_flux: dict[str, np.ndarray] | None = None  # fields_riverbed_flux.npz (mcmc) : q(0, t) de chaque champ conservé
     warnings: list[Issue] = field(default_factory=list)
 
     @property
@@ -174,6 +180,7 @@ def load_results(folder: Path) -> TwinResults:
         quantiles=_read_arrays(folder / "quantiles.npz"),
         posterior=_read_arrays(folder / "posterior.npz"),
         fields={kind: arrays for kind, arrays in fields.items() if arrays is not None},
+        riverbed_flux=_read_arrays(folder / "fields_riverbed_flux.npz"),
         warnings=([] if results_format.startswith("2.") else [Issue(None, "W_FIELD_UNAVAILABLE")])
         + provenance_warnings(metadata.get("provenance")),
     )

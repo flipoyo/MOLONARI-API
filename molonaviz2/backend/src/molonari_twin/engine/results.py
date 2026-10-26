@@ -76,6 +76,8 @@ class InversionResult:
     sensor_temperature: np.ndarray | None = None  # °C, float64, aux 3 capteurs, (S, 3, T')
     field_temperature: np.ndarray | None = None  # °C, float32, (S, C', T')
     field_water_flux: np.ndarray | None = None  # m·s⁻¹, float32, (S, C', T')
+    # Ajout de P2c.1b : q au fond de la rivière (z = 0) de chaque champ conservé, quel que soit store_fields.
+    field_riverbed_flux: np.ndarray | None = None  # m·s⁻¹, float64, (S, T')
 
     def to_arrays(self) -> dict[str, np.ndarray]:
         arrays = self.best.to_arrays("best.")
@@ -127,4 +129,5 @@ class InversionResult:
 
 
 # Tableaux facultatifs d'InversionResult : le stockage n'écrit pas ceux qui valent None.
-OPTIONAL_ARRAYS = ("field_chain", "field_iteration", "resets", "sensor_temperature", "field_temperature", "field_water_flux")
+OPTIONAL_ARRAYS = ("field_chain", "field_iteration", "resets", "sensor_temperature", "field_temperature", "field_water_flux",
+                   "field_riverbed_flux")

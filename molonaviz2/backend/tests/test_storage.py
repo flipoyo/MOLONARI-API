@@ -233,7 +233,7 @@ def small_inversion_result():
         field_depths=best.depths, field_times=times, thin=2, field_chain=np.tile(np.arange(3), 2),
         field_iteration=np.repeat(np.array([4, 8]), 3), resets=np.array([0, 1, 0]),
         sensor_temperature=rng.normal(size=(6, 3, 2)), field_temperature=rng.normal(size=(6, 4, 2)).astype(np.float32),
-        field_water_flux=rng.normal(size=(6, 4, 2)).astype(np.float32),
+        field_water_flux=rng.normal(size=(6, 4, 2)).astype(np.float32), field_riverbed_flux=rng.normal(size=(6, 2)),
     )
 
 

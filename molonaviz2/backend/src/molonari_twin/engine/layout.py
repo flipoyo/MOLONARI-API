@@ -54,14 +54,16 @@ class SamplingLayout:
         return None if self.field_times is None else 2 * 4 * self.fields_total * self.field_cells * self.field_times
 
     def stored_bytes(self, store_fields: str) -> int | None:
-        """Mémoire des champs stockés dans le résultat : T aux capteurs en float64, ou T et q complets en float32."""
+        """Mémoire des champs stockés dans le résultat : q(0, t) en float64 pour chaque champ (toujours), plus T aux
+        capteurs en float64, ou T et q complets en float32."""
         if self.field_times is None:
             return None
+        riverbed = 8 * self.fields_total * self.field_times
         if store_fields == "sensors":
-            return 8 * self.fields_total * 3 * self.field_times
+            return riverbed + 8 * self.fields_total * 3 * self.field_times
         if store_fields == "full":
-            return 2 * 4 * self.fields_total * self.field_cells * self.field_times
-        return 0
+            return riverbed + 2 * 4 * self.fields_total * self.field_cells * self.field_times
+        return riverbed
 
     def blocks(self) -> list[tuple[int, bool]]:
         """Blocs d'itérations calculées : (longueur, champ conservé à la fin du bloc).

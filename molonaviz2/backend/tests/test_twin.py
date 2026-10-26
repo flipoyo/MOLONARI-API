@@ -318,7 +318,7 @@ def test_mcmc_twin_is_marked_experimental(twins, point034):
     assert results.metadata["experimental"] is True
     assert {"burn_in_iterations", "acceptance_mean", "rhat", "best_parameters"} <= set(results.metadata["mcmc"])
     assert (run.status.results_dir / "posterior_summary.csv").is_file()
-    assert {p.name for p in run.status.results_dir.glob("*.npz")} == {"quantiles.npz", "posterior.npz", "fields_temperature.npz"}
+    assert {p.name for p in run.status.results_dir.glob("*.npz")} == {"quantiles.npz", "posterior.npz", "fields_temperature.npz", "fields_riverbed_flux.npz"}
     assert results.results_format == "2.0.0" and "W_FIELD_UNAVAILABLE" not in [w.code for w in results.warnings]
     assert results.posterior["samples"].shape == (10, 7, 1, 4) and set(results.fields) == {"temperature"}
     assert results.fields["temperature"]["values"].shape[1] == 3  # aux 3 capteurs (store_fields par défaut)
@@ -363,9 +363,9 @@ def load_npz(path):
 
 
 @pytest.mark.parametrize("store_fields, files", [
-    ("sensors", {"fields_temperature.npz"}),
-    ("full", {"fields_temperature.npz", "fields_water_flux.npz"}),
-    ("none", set()),
+    ("sensors", {"fields_temperature.npz", "fields_riverbed_flux.npz"}),
+    ("full", {"fields_temperature.npz", "fields_water_flux.npz", "fields_riverbed_flux.npz"}),
+    ("none", {"fields_riverbed_flux.npz"}),
 ])
 def test_mcmc_arrays_2_0_0(tmp_path, point034, store_fields, files):
     from molonari_twin.engine import api
@@ -393,6 +393,13 @@ def test_mcmc_arrays_2_0_0(tmp_path, point034, store_fields, files):
     np.testing.assert_array_equal(posterior["resets"], inversion.resets)
     np.testing.assert_array_equal(posterior["iteration"], [2, 4, 6, 8, 10])
     assert list(posterior["parameter"]) == ["neg_log10_k", "porosity", "lambda_s", "rhos_cs"] and list(posterior["layer"]) == ["couche 1"]
+
+    riverbed = load_npz(folder / "fields_riverbed_flux.npz")  # P2c.1b : toujours stocké, privé (état)
+    np.testing.assert_array_equal(riverbed["values"], inversion.field_riverbed_flux)
+    assert riverbed["values"].dtype == np.float64 and riverbed["depth_m"].shape == (1,)
+    np.testing.assert_array_equal(riverbed["chain"], inversion.field_chain)
+    np.testing.assert_array_equal(riverbed["iteration"], inversion.field_iteration)
+    assert riverbed["values"].shape == (len(riverbed["chain"]), len(riverbed["time"]))
 
     if "fields_temperature.npz" in files:
         fields = load_npz(folder / "fields_temperature.npz")

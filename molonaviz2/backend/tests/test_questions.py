@@ -855,7 +855,7 @@ def test_stored_size_depends_on_store_fields(tmp_path):
         return check_twin(folder).data["stored_bytes"].value
 
     none, sensors, full = sizes("none"), sizes("sensors"), sizes("full")
-    assert none == 0 and 0 < sensors < full
+    assert 0 < none < sensors < full  # q(0, t) est toujours stocké
 
 
 def test_check_of_an_invalid_twin_is_an_answer_not_an_error(tmp_path):
