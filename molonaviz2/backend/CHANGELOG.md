@@ -14,6 +14,23 @@ Jusqu'à 0.6.0-alpha.1, le backend faisait partie du paquet molonaviz2 : son his
 - Tags : `molonari-twin-vX.Y.Z`, posés sur `CGS-MOLO` après la fusion. La CI (`molonaviz2-version`) vérifie que le tag correspond à `pyproject.toml`.
 - La version entre dans `engine_version()` (`molonari-twin X.Y.Z · jax …`), donc dans chaque `twin_id`. Une nouvelle version du backend donne de nouveaux identifiants ; une version du seul frontend n'en change aucun.
 
+## [Non publié]
+
+Phase 2 du plan twin v3, issue P2.1 : le pipeline du brut au résultat, avec BN-03 et BN-04 (sortis du lot C4, car ils ne dépendent que du pipeline brut). Les questions ne chargent toujours pas JAX (22 au total).
+
+### Ajouté
+- `twin/pipeline.py` : `read_raw_point`, `resolve_instruments`, `load_point`, `clean_point`, `column_inputs` et `run_pipeline`. Il enchaîne les lecteurs (`io/lab_import.py`, `io/point_import.py`), `clean(…, CleanupSettings)` et `ColumnInputs.from_cleaned`, sans dupliquer leur code. Le brut de Point034 redonne exactement les mesures nettoyées de `examples/twins/twin_01/measurements.csv` (1436 dates, ou 1430 dans la fenêtre du twin).
+- σ des instruments : `Sigma_Meas_P` du capteur de pression et `Sigma_Meas_T` du thermomètre de la tige entrent dans `ColumnInputs` ; `sigma_pressure` et `sigma_temperature` peuvent les remplacer.
+- Questions sans twin `raw_series` (BN-03, mesures brutes d'un point) et `processing_preview` (BN-04, effet d'un nettoyage : mesures associées, raison d'exclusion de chaque date, décompte, σ). Elles lisent les dossiers d'un point et d'un laboratoire (`point_folder`, `lab_folder`) et répondent sans charger JAX. Nouvelle catégorie « Données et traitement » dans `docs/API_V1.md`.
+- Refus explicites, par une erreur structurée : `E_PIPELINE_FORMAT_UNSUPPORTED` (exports de tableur, fichiers `.hobo`…), `E_PIPELINE_NO_TEMPERATURE_FILE`, `E_PIPELINE_NO_PRESSURE_FILE`, `E_PIPELINE_NO_INFO`, `E_PIPELINE_NO_PRESSURE_SENSOR`, `E_PIPELINE_NO_SHAFT`, `E_PIPELINE_THERMOMETER_UNKNOWN`, `E_PIPELINE_SIGMA_POSITIVE` et `E_MEASURES_UNIT_UNSUPPORTED` (pression en kPa, psi, bar… au lieu de la tension du capteur). Tous traduits.
+
+### Modifié
+- `API_VERSION = 1.0.0-alpha.4` (deux questions de plus) ; le contrat OpenAPI figé et `docs/API_V1.md` suivent.
+- Le laboratoire lit `Sigma_Meas_T` et `Sigma_Meas_P` par leur nom (sans tenir compte de la casse), puis par position à défaut : les fichiers existants se lisent comme avant.
+
+### Pas encore fait
+- P2.1f, les dates avec fuseau, attend la convention de dates (P0.5b). Un fuseau en paramètre reste refusé : `E_PIPELINE_TIMEZONE` pour le pipeline, `E_QUESTION_PARAMS` pour les questions.
+
 ## [0.7.0-alpha.3] - 2026-10-23
 
 Lot C3, suite de la phase 3 du plan twin : fiabilité, diagnostics et accès bruts aux résultats. 11 questions de plus (20 au total), sans charger JAX ni ArviZ. **Les seuils du verdict de fiabilité sont provisoires : ils doivent être validés par un hydrogéologue avant l'API 1.0.0 (choix C9).**
