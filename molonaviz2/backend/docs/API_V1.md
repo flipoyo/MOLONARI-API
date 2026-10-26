@@ -92,7 +92,7 @@ Sorties : `name`, `point`, `mode`, `description`, `start`, `end`, `layers`, `lay
 
 **What is the water flux through the riverbed?** — *Quel est le flux d'eau à travers le lit ?*
 
-Mean, median, 5th and 95th percentiles of the flux q at the riverbed (z = 0) over the period, in m/s, positive downwards (infiltration: the river feeds the aquifer).
+Mean flux q at the riverbed (z = 0) over the period, in m/s, positive downwards (infiltration: the river feeds the aquifer), with the median and the 5th and 95th percentiles of q over time. In mcmc mode `mean` is the posterior mean flux and its interval, at `level` (0.9 by default), is the posterior interval of that mean, drawn from the series q(0, t) stored for every kept sample (`mean_best`: the mean of the best sample); in direct mode `mean` is a single value, without interval (`uncertainty` is none).
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
 - Requête : `POST /v1/twins/{ref}/questions/water_flux`
@@ -101,8 +101,9 @@ Mean, median, 5th and 95th percentiles of the flux q at the riverbed (z = 0) ove
 |---|---|---|---|---|
 | `start` | date ou null | — |  | First date of the period, included (ISO 8601, no time zone). Default: start of the results. |
 | `end` | date ou null | — |  | Last date of the period, included (ISO 8601, no time zone). Default: end of the results. |
+| `level` | nombre | `0.9` | > 0, < 1 | Level of the posterior interval of the mean flux, e.g. 0.9 for 90 % (mcmc mode; in direct mode there is no interval). |
 
-Sorties : `mean`, `median`, `p5`, `p95`, `points`, `start`, `end`.
+Sorties : `mean`, `median`, `p5`, `p95`, `points`, `start`, `end`, `level`, `model`, `uncertainty`, `mean_best`, `samples`.
 
 ### `exchange_direction` (HN-11)
 

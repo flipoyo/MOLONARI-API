@@ -100,11 +100,14 @@ CATALOG: tuple[Question, ...] = (
     ),
     Question(
         "water_flux", "HN-10", "water", N_("What is the water flux through the riverbed?"),
-        "Mean, median, 5th and 95th percentiles of the flux q at the riverbed (z = 0) over the period, in m/s, "
-        "positive downwards (infiltration: the river feeds the aquifer).",
-        ("D", "M"), p.PeriodParams, "results",
-        lambda twin, a: water_flux(twin.results, a.start, a.end),
-        outputs=("mean", "median", "p5", "p95", "points", "start", "end"),
+        "Mean flux q at the riverbed (z = 0) over the period, in m/s, positive downwards (infiltration: the river "
+        "feeds the aquifer), with the median and the 5th and 95th percentiles of q over time. In mcmc mode `mean` is "
+        "the posterior mean flux and its interval, at `level` (0.9 by default), is the posterior interval of that "
+        "mean, drawn from the series q(0, t) stored for every kept sample (`mean_best`: the mean of the best sample); "
+        "in direct mode `mean` is a single value, without interval (`uncertainty` is none).",
+        ("D", "M"), p.FluxParams, "results",
+        lambda twin, a: water_flux(twin.results, a.start, a.end, a.level),
+        outputs=("mean", "median", "p5", "p95", "points", "start", "end", "level", "model", "uncertainty", "mean_best", "samples"),
     ),
     Question(
         "exchange_direction", "HN-11", "water", N_("Does the river feed the aquifer?"),

@@ -96,6 +96,7 @@
  "The diagnostic task failed on purpose at block {block}.": "La tâche de diagnostic a échoué volontairement au bloc {block}.",
  "The display thinning must be a whole number of at least 1 (got {thin}).": "L'éclaircissement d'affichage doit être un entier au moins égal à 1 (reçu : {thin}).",
  "The file {file} is empty.": "Le fichier {file} est vide.",
+ "The flux of the posterior samples was not stored with this computation (results written by an older version): the mean flux has no interval.": "Le flux des échantillons a posteriori n'a pas été stocké avec ce calcul (résultats écrits par une version plus ancienne) : le flux moyen n'a pas d'intervalle.",
  "The git repository of the {target} has no remote: its URL is not recorded.": "Le dépôt git du {target} n'a pas de remote : son URL n'est pas enregistrée.",
  "The laboratory needs a name.": "Le laboratoire doit avoir un nom.",
  "The last layer must end at the column depth ({depth:g} m).": "La dernière couche doit s'arrêter au fond de la colonne ({depth:g} m).",

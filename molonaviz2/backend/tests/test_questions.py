@@ -558,6 +558,92 @@ def test_constant_heat_fluxes_have_exact_means_and_shares(direct):
     assert heat_budget(constant_heat(direct, 1.0, -3.0)).data["dominant"].value == "conduction"
 
 
+# Flux avec niveau de confiance (P2c.1a) ----------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def mcmc_results(tmp_path_factory, inversions):
+    """Résultats mcmc écrits puis relus, un par réglage de store_fields (q(0, t) est stocké dans les trois)."""
+    return {kind: results_of(tmp_path_factory.mktemp(f"mcmc_{kind}"), inversion.best, inversion, mode="mcmc")
+            for kind, inversion in inversions.items()}
+
+
+def test_direct_water_flux_is_a_single_value_without_interval(direct):
+    answer = water_flux(direct)
+    data = answer.data
+    assert data["mean"].interval is None and data["uncertainty"].value == "none" and data["model"].value == "forward"
+    assert data["level"].value == 0.9 and "samples" not in data and "mean_best" not in data
+    assert water_flux(direct, level=0.5).provenance["parameters"]["level"] == 0.5
+    assert answer.warnings == []
+
+
+@pytest.mark.parametrize("kind", ["sensors", "full", "none"])
+def test_mcmc_water_flux_interval_is_the_posterior_interval_of_the_mean(mcmc_results, inversions, kind):
+    """Quel que soit store_fields : la moyenne de chaque champ conservé, puis la moyenne et les quantiles de ces moyennes."""
+    results, series = mcmc_results[kind], inversions[kind].field_riverbed_flux
+    means = series.mean(axis=1)
+    for level in (0.5, 0.9):
+        data = water_flux(results, level=level).data
+        mean = data["mean"]
+        assert mean.value == pytest.approx(means.mean(), rel=1e-12)
+        np.testing.assert_allclose(mean.interval, np.quantile(means, [(1 - level) / 2, (1 + level) / 2]), rtol=1e-12)
+        assert data["level"].value == level and data["samples"].value == len(means)
+        assert data["model"].value == "inversion" and data["uncertainty"].value == "posterior"
+    narrow, wide = (water_flux(results, level=level).data["mean"].interval for level in (0.5, 0.9))
+    assert wide[0] <= narrow[0] <= narrow[1] <= wide[1]
+    best = water_flux(results).data
+    assert best["mean_best"].value == pytest.approx(results.flux["q_riverbed_m_per_s"].mean())
+    assert best["median"].value == pytest.approx(results.flux["q_riverbed_m_per_s"].median())  # percentiles dans le temps
+
+
+def test_the_mean_flux_interval_follows_the_period(mcmc_results, inversions):
+    results, inversion = mcmc_results["sensors"], inversions["sensors"]
+    times = inversion.field_times.astype("datetime64[s]")
+    data = water_flux(results, start=times[5], end=times[14]).data
+    means = inversion.field_riverbed_flux[:, 5:15].mean(axis=1)
+    assert data["mean"].value == pytest.approx(means.mean(), rel=1e-12)
+    np.testing.assert_allclose(data["mean"].interval, np.quantile(means, [0.05, 0.95]), rtol=1e-12)
+    assert data["points"].value > 10  # les percentiles dans le temps portent, eux, sur toutes les dates de la période
+
+
+def test_a_constant_flux_gives_a_degenerate_interval_and_the_volume_q_times_duration(mcmc_results):
+    results = mcmc_results["sensors"]
+    constant = 2e-6
+    stored = {**results.riverbed_flux, "values": np.full_like(results.riverbed_flux["values"], constant)}
+    results = dataclasses.replace(results, riverbed_flux=stored, flux=results.flux.assign(q_riverbed_m_per_s=constant))
+    data = water_flux(results).data
+    assert data["mean"].value == pytest.approx(constant, rel=1e-12)
+    np.testing.assert_allclose(data["mean"].interval, (constant, constant), rtol=1e-12)
+    times = results.flux["date"].to_numpy().astype("datetime64[s]")
+    duration = (times[-1] - times[0]) / np.timedelta64(1, "s")
+    volume = twin_exchanged_volume(results).data["net"].value
+    assert volume == pytest.approx(data["mean"].value * duration, rel=1e-12)
+    assert volume == pytest.approx(constant * duration, rel=1e-12)
+
+
+def test_results_without_stored_series_have_no_interval_and_a_warning(mcmc_results):
+    old = dataclasses.replace(mcmc_results["sensors"], riverbed_flux=None)
+    answer = water_flux(old)
+    assert answer.data["mean"].interval is None and answer.data["uncertainty"].value == "none"
+    assert [w.code for w in answer.warnings] == ["W_FLUX_NO_SAMPLES"]
+    assert answer.data["mean"].value == pytest.approx(old.flux["q_riverbed_m_per_s"].mean())
+
+
+def test_a_period_without_any_field_date_warns_instead_of_failing(mcmc_results, inversions):
+    results = mcmc_results["sensors"]
+    fields = set(inversions["sensors"].field_times.astype("datetime64[s]"))
+    dates = results.flux["date"].to_numpy().astype("datetime64[s]")
+    between = next(d for d in dates if d not in fields)  # une date des résultats qui n'est pas une date de champ
+    answer = water_flux(results, start=between, end=between)
+    assert answer.data["mean"].interval is None and [w.code for w in answer.warnings] == ["E_QUESTION_PERIOD_EMPTY"]
+
+
+@pytest.mark.parametrize("level", [0.0, 1.0, -0.1, 1.5])
+def test_water_flux_level_must_be_strictly_between_0_and_1(direct, mcmc_results, level):
+    assert code_of(lambda: water_flux(direct, level=level)) == "E_QUESTION_LEVEL"
+    assert code_of(lambda: water_flux(mcmc_results["sensors"], level=level)) == "E_QUESTION_LEVEL"
+
+
 def test_heat_budget_depth_and_period(direct):
     results = dataclasses.replace(direct, heat_flux_advective=np.tile(direct.depths[:, None], (1, direct.temperature.shape[1])),
                                   heat_flux_conductive=np.zeros_like(direct.temperature))
