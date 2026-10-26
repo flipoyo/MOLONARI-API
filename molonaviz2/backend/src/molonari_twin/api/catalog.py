@@ -38,6 +38,7 @@ from ..questions import (
     posterior_samples,
     processing_preview,
     provenance,
+    public_convergence,
     raw_series,
     reliability,
     residuals,
@@ -102,11 +103,14 @@ CATALOG: tuple[Question, ...] = (
     ),
     Question(
         "water_flux", "HN-10", "water", N_("What is the water flux through the riverbed?"),
-        "Mean, median, 5th and 95th percentiles of the flux q at the riverbed (z = 0) over the period, in m/s, "
-        "positive downwards (infiltration: the river feeds the aquifer).",
-        ("D", "M"), p.PeriodParams, "results",
-        lambda twin, a: water_flux(twin.results, a.start, a.end),
-        outputs=("mean", "median", "p5", "p95", "points", "start", "end"),
+        "Mean flux q at the riverbed (z = 0) over the period, in m/s, positive downwards (infiltration: the river "
+        "feeds the aquifer), with the median and the 5th and 95th percentiles of q over time. In mcmc mode `mean` is "
+        "the posterior mean flux and its interval, at `level` (0.9 by default), is the posterior interval of that "
+        "mean, drawn from the series q(0, t) stored for every kept sample (`mean_best`: the mean of the best sample); "
+        "in direct mode `mean` is a single value, without interval (`uncertainty` is none).",
+        ("D", "M"), p.FluxParams, "results",
+        lambda twin, a: water_flux(twin.results, a.start, a.end, a.level),
+        outputs=("mean", "median", "p5", "p95", "points", "start", "end", "level", "model", "uncertainty", "mean_best", "samples"),
     ),
     Question(
         "exchange_direction", "HN-11", "water", N_("Does the river feed the aquifer?"),
@@ -160,11 +164,18 @@ CATALOG: tuple[Question, ...] = (
     ),
     Question(
         "fit_quality", "HN-40", "reliability", N_("Does the model reproduce the measurements?"),
-        "Per sensor: RMSE, bias, RMSE/σT, lag-1 autocorrelation of the residuals and, in mcmc mode with stored "
-        "fields, the share of measurements the predictive band covers. Arrays are sensor first: (3,).",
+        "Per sensor: RMSE, bias (simulated − measured), RMSE/σT, lag-1 autocorrelation of the residuals and, in mcmc "
+        "mode with stored fields, the share of measurements the predictive band covers; then the total RMSE (root "
+        "mean square of the three). Arrays are sensor first: (3,). A direct twin is the forward model (`model` "
+        "forward, `uncertainty` none); an mcmc twin is the inversion model, represented by its best sample, and "
+        "`median_rmse` and `median_rmse_total` give the RMSE of the posterior median in addition. The direct "
+        "difference forward − inversion is `TwinAPI.model_difference`, which needs two twins.",
         ("D", "M"), p.IntervalParams, "results",
         lambda twin, a: fit_quality(twin.results, a.level, a.sigma, a.seed),
-        outputs=("rmse", "bias", "rmse_over_sigma", "lag1_autocorrelation", "sigma", "level", "coverage_per_sensor"),
+        outputs=(
+            "rmse", "bias", "rmse_over_sigma", "lag1_autocorrelation", "sigma", "level", "coverage_per_sensor", "rmse_total",
+            "sensor", "model", "uncertainty", "median_rmse", "median_rmse_total",
+        ),
     ),
     Question(
         "reliability", "HN-41", "reliability", N_("Can I trust this result?"),
@@ -176,6 +187,20 @@ CATALOG: tuple[Question, ...] = (
         lambda twin, a: reliability(twin.results, a.level, a.sigma, a.seed, a.thresholds),
         outputs=(
             "verdict", "criteria", "levels", "reasons", "threshold_names", "thresholds", "thresholds_validated", "level",
+        ),
+    ),
+    Question(
+        "public_convergence", "HN-45", "reliability", N_("Has the sampling converged?"),
+        "The convergence of the algorithm for the public report, without a verdict: largest R̂ and smallest ESS over all "
+        "parameters, mean acceptance, whether the burn-in converged, chains and kept samples per chain, with the "
+        "reference thresholds (the defaults of the reliability thresholds, not their overrides) and "
+        "`thresholds_validated`, false until a hydrogeologist validates them. No colour and no verdict; the "
+        "developer's own R̂ threshold is private and not given. mcmc mode only.",
+        ("M",), p.NoParams, "results",
+        lambda twin, _: public_convergence(twin.results),
+        outputs=(
+            "rhat_max", "ess_min", "acceptance_mean", "burn_in_converged", "burn_in_iterations", "chains", "samples_per_chain",
+            "rhat_green", "rhat_orange", "ess_green", "ess_orange", "thresholds_validated",
         ),
     ),
     Question(

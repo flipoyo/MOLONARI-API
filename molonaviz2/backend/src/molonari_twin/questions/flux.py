@@ -26,23 +26,68 @@ def riverbed_flux(results: TwinResults, start=None, end=None) -> tuple[np.ndarra
     return times[mask], q[mask]
 
 
-def water_flux(results: TwinResults, start=None, end=None) -> Answer:
-    """Moyenne, médiane, P5 et P95 de q (m/s) sur la période, avec le nombre de dates et la période réelle."""
+def model_of(results: TwinResults) -> str:
+    """Étiquette publique du modèle : `forward` (twin direct, sans incertitude) ou `inversion` (twin mcmc)."""
+    return "inversion" if results.metadata.get("mode") == "mcmc" else "forward"
+
+
+def posterior_mean_flux(results: TwinResults, start=None, end=None, level: float = 0.9) -> tuple[dict, list[Issue]]:
+    """Flux moyen a posteriori et son intervalle à `level`, tirés de q(0, t) de chaque champ conservé (P2c.1b).
+
+    Chaque champ donne sa moyenne de q sur la période (aux dates des champs, bornes incluses) ; la valeur centrale
+    est la moyenne de ces moyennes, `interval` leurs quantiles (1 − level)/2 et (1 + level)/2. C'est l'incertitude
+    sur le flux moyen, et non la dispersion de q dans le temps. Sans séries stockées (résultat écrit avant P2c.1) ou
+    sans date de champ dans la période, un avertissement dit pourquoi et le dictionnaire est vide."""
+    stored = results.riverbed_flux
+    if stored is None:
+        return {}, [Issue(None, "W_FLUX_NO_SAMPLES")]
+    try:
+        inside = within(as_seconds(stored["time"]), start, end)
+    except UserError as error:  # aucune date de champ dans la période
+        return {}, [Issue.from_error(None, error)]
+    means = np.asarray(stored["values"], float)[:, inside].mean(axis=1)  # une moyenne par échantillon
+    low, high = np.quantile(means, [(1.0 - level) / 2, (1.0 + level) / 2])
+    return {"mean": float(means.mean()), "interval": (float(low), float(high)), "samples": int(means.size)}, []
+
+
+def water_flux(results: TwinResults, start=None, end=None, level: float = 0.9) -> Answer:
+    """Flux au fond de la rivière sur la période (HN-10) : moyenne, médiane, P5 et P95 de q (m/s) dans le temps,
+    avec le nombre de dates et la période réelle.
+
+    En mode mcmc, `mean` est le flux moyen a posteriori et son `interval` (à `level`) celui de cette moyenne, tiré
+    des séries q(0, t) des champs conservés ; `mean_best` est la moyenne du meilleur échantillon. En mode direct,
+    `mean` est une valeur seule, sans `interval` : `uncertainty` vaut `none`. `median`, `p5` et `p95` sont toujours
+    les percentiles de la série q(t) du modèle stocké (meilleur échantillon en mcmc), et non un intervalle a
+    posteriori. `level` hors de ]0, 1[ : E_QUESTION_LEVEL."""
+    if not 0.0 < level < 1.0:
+        raise UserError("E_QUESTION_LEVEL", level=level)
     times, q = riverbed_flux(results, start, end)
     p5, median, p95 = np.percentile(q, [5, 50, 95])
-    return Answer(
-        data={
-            "mean": Quantity(float(q.mean()), "m/s"),
-            "median": Quantity(float(median), "m/s"),
-            "p5": Quantity(float(p5), "m/s"),
-            "p95": Quantity(float(p95), "m/s"),
-            "points": Quantity(int(q.size), "1"),
-            "start": Quantity(times[0], "datetime64[s]"),
-            "end": Quantity(times[-1], "datetime64[s]"),
-        },
-        provenance={"question": "water_flux", "parameters": period_parameters(start, end)},
-        warnings=list(results.warnings),
-    )
+    mean = Quantity(float(q.mean()), "m/s")
+    extra: dict[str, Quantity] = {}
+    warnings = list(results.warnings)
+    if results.metadata.get("mode") == "mcmc":
+        posterior, more = posterior_mean_flux(results, start, end, level)
+        warnings += more
+        if posterior:
+            extra["mean_best"] = mean
+            mean = Quantity(posterior["mean"], "m/s", posterior["interval"])
+            extra["samples"] = Quantity(posterior["samples"], "1")
+    data = {
+        "mean": mean,
+        "median": Quantity(float(median), "m/s"),
+        "p5": Quantity(float(p5), "m/s"),
+        "p95": Quantity(float(p95), "m/s"),
+        "points": Quantity(int(q.size), "1"),
+        "start": Quantity(times[0], "datetime64[s]"),
+        "end": Quantity(times[-1], "datetime64[s]"),
+        "level": Quantity(float(level), "1"),
+        "model": Quantity(model_of(results), "1"),
+        "uncertainty": Quantity("posterior" if mean.interval is not None else "none", "1"),
+        **extra,
+    }
+    return Answer(data=data, provenance={"question": "water_flux", "parameters": {**period_parameters(start, end), "level": float(level)}},
+                  warnings=warnings)
 
 
 def twin_exchanged_volume(results: TwinResults, start=None, end=None, area: float | None = None) -> Answer:

@@ -46,6 +46,7 @@ et de `params`.
 |---|---|
 | `E_QUESTION_CHAINS` | 422 |
 | `E_QUESTION_LEVEL` | 422 |
+| `E_QUESTION_MODELS_INCOMPARABLE` | 422 |
 | `E_QUESTION_NOT_AVAILABLE` | 409 |
 | `E_QUESTION_NO_FIELDS` | 422 |
 | `E_QUESTION_NO_POSTERIOR` | 422 |
@@ -133,7 +134,7 @@ Sorties : `time`, `temperature`, `river_temperature`, `pressure`, `kept`, `reaso
 
 **What is the water flux through the riverbed?** — *Quel est le flux d'eau à travers le lit ?*
 
-Mean, median, 5th and 95th percentiles of the flux q at the riverbed (z = 0) over the period, in m/s, positive downwards (infiltration: the river feeds the aquifer).
+Mean flux q at the riverbed (z = 0) over the period, in m/s, positive downwards (infiltration: the river feeds the aquifer), with the median and the 5th and 95th percentiles of q over time. In mcmc mode `mean` is the posterior mean flux and its interval, at `level` (0.9 by default), is the posterior interval of that mean, drawn from the series q(0, t) stored for every kept sample (`mean_best`: the mean of the best sample); in direct mode `mean` is a single value, without interval (`uncertainty` is none).
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
 - Requête : `POST /v1/twins/{ref}/questions/water_flux`
@@ -142,8 +143,9 @@ Mean, median, 5th and 95th percentiles of the flux q at the riverbed (z = 0) ove
 |---|---|---|---|---|
 | `start` | date ou null | — |  | First date of the period, included (ISO 8601, no time zone). Default: start of the results. |
 | `end` | date ou null | — |  | Last date of the period, included (ISO 8601, no time zone). Default: end of the results. |
+| `level` | nombre | `0.9` | > 0, < 1 | Level of the posterior interval of the mean flux, e.g. 0.9 for 90 % (mcmc mode; in direct mode there is no interval). |
 
-Sorties : `mean`, `median`, `p5`, `p95`, `points`, `start`, `end`.
+Sorties : `mean`, `median`, `p5`, `p95`, `points`, `start`, `end`, `level`, `model`, `uncertainty`, `mean_best`, `samples`.
 
 ### `exchange_direction` (HN-11)
 
@@ -238,7 +240,7 @@ Sorties : `time`, `measured`, `simulated`, `level`, `z`, `sigma`, `field_time`, 
 
 **Does the model reproduce the measurements?** — *Le modèle reproduit-il les mesures ?*
 
-Per sensor: RMSE, bias, RMSE/σT, lag-1 autocorrelation of the residuals and, in mcmc mode with stored fields, the share of measurements the predictive band covers. Arrays are sensor first: (3,).
+Per sensor: RMSE, bias (simulated − measured), RMSE/σT, lag-1 autocorrelation of the residuals and, in mcmc mode with stored fields, the share of measurements the predictive band covers; then the total RMSE (root mean square of the three). Arrays are sensor first: (3,). A direct twin is the forward model (`model` forward, `uncertainty` none); an mcmc twin is the inversion model, represented by its best sample, and `median_rmse` and `median_rmse_total` give the RMSE of the posterior median in addition. The direct difference forward − inversion is `TwinAPI.model_difference`, which needs two twins.
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
 - Requête : `POST /v1/twins/{ref}/questions/fit_quality`
@@ -249,7 +251,7 @@ Per sensor: RMSE, bias, RMSE/σT, lag-1 autocorrelation of the residuals and, in
 | `sigma` | nombre ou null | — | ≥ 0 | Measurement uncertainty of the thermometers (°C). Default: the one recorded with the results. |
 | `seed` | entier | `0` | ≥ 0 | Seed of the measurement noise drawn for the predictive band (same seed, same band). |
 
-Sorties : `rmse`, `bias`, `rmse_over_sigma`, `lag1_autocorrelation`, `sigma`, `level`, `coverage_per_sensor`.
+Sorties : `rmse`, `bias`, `rmse_over_sigma`, `lag1_autocorrelation`, `sigma`, `level`, `coverage_per_sensor`, `rmse_total`, `sensor`, `model`, `uncertainty`, `median_rmse`, `median_rmse_total`.
 
 ### `reliability` (HN-41)
 
@@ -268,6 +270,19 @@ A green, orange or red verdict, the worst of the criteria, each with its level a
 | `thresholds` | object ou null | — |  | Override of the reliability thresholds (a partial object), on top of the MOLONARI_THRESHOLDS file. Keys: rhat, ess, fit, coverage, identifiability and gaps, each with `_green` and `_orange` (e.g. `rhat_green`). The defaults are provisional and not validated by a hydrogeologist. |
 
 Sorties : `verdict`, `criteria`, `levels`, `reasons`, `threshold_names`, `thresholds`, `thresholds_validated`, `level`.
+
+### `public_convergence` (HN-45)
+
+**Has the sampling converged?** — *L'échantillonnage a-t-il convergé ?*
+
+The convergence of the algorithm for the public report, without a verdict: largest R̂ and smallest ESS over all parameters, mean acceptance, whether the burn-in converged, chains and kept samples per chain, with the reference thresholds (the defaults of the reliability thresholds, not their overrides) and `thresholds_validated`, false until a hydrogeologist validates them. No colour and no verdict; the developer's own R̂ threshold is private and not given. mcmc mode only.
+
+- Modes : mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
+- Requête : `POST /v1/twins/{ref}/questions/public_convergence`
+
+Aucun paramètre : le corps de la requête est vide (ou `{}`).
+
+Sorties : `rhat_max`, `ess_min`, `acceptance_mean`, `burn_in_converged`, `burn_in_iterations`, `chains`, `samples_per_chain`, `rhat_green`, `rhat_orange`, `ess_green`, `ess_orange`, `thresholds_validated`.
 
 ### `provenance` (HN-43)
 

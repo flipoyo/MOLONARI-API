@@ -22,7 +22,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from ..errors import Issue, UserError
-from ..questions import Answer
+from ..questions import Answer, model_difference
 from .catalog import CATALOG, Question, TwinContext
 
 TWIN_REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
@@ -92,8 +92,6 @@ class TwinAPI:
             raise UserError("E_QUESTION_PARAMS", question=question.id, issues=issues) from None
 
     def ask(self, ref: str, question_id: str, params: dict | None = None) -> Answer:
-        from ..twin.run import twin_status
-
         question = self.question(question_id)
         arguments = self.parameters(question, params)
         if question.requires == "none":
@@ -109,14 +107,36 @@ class TwinAPI:
             raise UserError("E_QUESTION_NOT_AVAILABLE", question=question.id, ref=ref, mode=config.mode)
         twin = TwinContext(ref=ref, config=config, folder=folder)
         if question.requires == "results":
-            status = twin_status(config)
-            if status.state == "modified":
-                raise UserError("E_TWIN_FROZEN", name=config.name, previous=status.previous_id)
-            if not status.has_results:
-                raise UserError("E_TWIN_NOT_COMPUTED", ref=ref)
-            twin.results = self._results(status.results_dir)
-            origin.update(twin_id=status.twin_id, results=str(status.results_dir))
+            twin.results, details = self._computed(ref, config)
+            origin.update(details)
         return self._with_provenance(question.run(twin, arguments), question, origin)
+
+    def _computed(self, ref: str, config) -> tuple[object, dict]:
+        """Résultats du twin `ref` et leur origine (twin_id, dossier) : E_TWIN_FROZEN, E_TWIN_NOT_COMPUTED."""
+        from ..twin.run import twin_status
+
+        status = twin_status(config)
+        if status.state == "modified":
+            raise UserError("E_TWIN_FROZEN", name=config.name, previous=status.previous_id)
+        if not status.has_results:
+            raise UserError("E_TWIN_NOT_COMPUTED", ref=ref)
+        return self._results(status.results_dir), {"twin_id": status.twin_id, "results": str(status.results_dir)}
+
+    def model_difference(self, forward_ref: str, inversion_ref: str) -> Answer:
+        """Différence directe forward − inversion aux trois capteurs (P2c.1d) entre deux twins calculés du dossier :
+        `forward_ref` en mode direct, `inversion_ref` en mode mcmc (E_QUESTION_NOT_AVAILABLE sinon). Ce n'est pas une
+        question du catalogue, qui porte sur un seul twin : le générateur de rapport l'appelle pour un space de deux
+        instances. La provenance nomme les deux twins."""
+        loaded = {}
+        for role, ref, mode in (("forward", forward_ref, "direct"), ("inversion", inversion_ref, "mcmc")):
+            config = self._config(ref)
+            if config.mode != mode:
+                raise UserError("E_QUESTION_NOT_AVAILABLE", question="model_difference", ref=ref, mode=config.mode)
+            loaded[role] = self._computed(ref, config)
+        answer = model_difference(loaded["forward"][0], loaded["inversion"][0])
+        origin = {"forward": forward_ref, "inversion": inversion_ref,
+                  "forward_twin_id": loaded["forward"][1]["twin_id"], "inversion_twin_id": loaded["inversion"][1]["twin_id"]}
+        return dataclasses.replace(answer, provenance={**answer.provenance, **origin})
 
     def ask_global(self, question_id: str, params: dict | None = None) -> Answer:
         """Pose une question qui n'a pas besoin de twin (`requires="none"`) : E_QUESTION_TWIN_REQUIRED sinon."""

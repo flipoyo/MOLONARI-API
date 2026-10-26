@@ -386,7 +386,7 @@ def test_question_catalog(asking):
     assert body["api_version"] == API_VERSION
     assert [q["id"] for q in body["questions"]] == ["describe", "water_flux", "exchange_direction", "exchanged_volume",
                                                      "heat_budget", "temperature", "sensor_intervals", "fit_quality",
-                                                     "reliability", "provenance", "residuals", "chain_data", "sampling_layout",
+                                                     "reliability", "public_convergence", "provenance", "residuals", "chain_data", "sampling_layout",
                                                      "soil_properties", "posterior_samples", "convergence",
                                                      "energy_breakdown", "parameters_catalog", "check", "fields", "raw_series",
                                                      "processing_preview"]

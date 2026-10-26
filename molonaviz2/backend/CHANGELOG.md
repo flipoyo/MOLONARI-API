@@ -16,17 +16,28 @@ Jusqu'à 0.6.0-alpha.1, le backend faisait partie du paquet molonaviz2 : son his
 
 ## [Non publié]
 
-Phase 2 du plan twin v3, issue P2.1 : le pipeline du brut au résultat, avec BN-03 et BN-04 (sortis du lot C4, car ils ne dépendent que du pipeline brut). Les questions ne chargent toujours pas JAX (22 au total).
+Phase 2 du plan twin v3 : issues P2.1 (pipeline du brut, avec BN-03 et BN-04) et P2c.1 (questions du rapport public). Les questions ne chargent toujours pas JAX (23 au total).
+
+- P2.1 : le pipeline du brut au résultat, avec BN-03 et BN-04 (sortis du lot C4, car ils ne dépendent que du pipeline brut).
+- P2c.1 : les questions du rapport public. Pas de nouvelle version ici : la version est celle de l'alpha.3, donc **aucun identifiant de référence ne change** (le `twin_id` dépend de la configuration et de la version du code, pas du contenu des résultats).
 
 ### Ajouté
 - `twin/pipeline.py` : `read_raw_point`, `resolve_instruments`, `load_point`, `clean_point`, `column_inputs` et `run_pipeline`. Il enchaîne les lecteurs (`io/lab_import.py`, `io/point_import.py`), `clean(…, CleanupSettings)` et `ColumnInputs.from_cleaned`, sans dupliquer leur code. Le brut de Point034 redonne exactement les mesures nettoyées de `examples/twins/twin_01/measurements.csv` (1436 dates, ou 1430 dans la fenêtre du twin).
 - σ des instruments : `Sigma_Meas_P` du capteur de pression et `Sigma_Meas_T` du thermomètre de la tige entrent dans `ColumnInputs` ; `sigma_pressure` et `sigma_temperature` peuvent les remplacer.
 - Questions sans twin `raw_series` (BN-03, mesures brutes d'un point) et `processing_preview` (BN-04, effet d'un nettoyage : mesures associées, raison d'exclusion de chaque date, décompte, σ). Elles lisent les dossiers d'un point et d'un laboratoire (`point_folder`, `lab_folder`) et répondent sans charger JAX. Nouvelle catégorie « Données et traitement » dans `docs/API_V1.md`.
 - Refus explicites, par une erreur structurée : `E_PIPELINE_FORMAT_UNSUPPORTED` (exports de tableur, fichiers `.hobo`…), `E_PIPELINE_NO_TEMPERATURE_FILE`, `E_PIPELINE_NO_PRESSURE_FILE`, `E_PIPELINE_NO_INFO`, `E_PIPELINE_NO_PRESSURE_SENSOR`, `E_PIPELINE_NO_SHAFT`, `E_PIPELINE_THERMOMETER_UNKNOWN`, `E_PIPELINE_SIGMA_POSITIVE` et `E_MEASURES_UNIT_UNSUPPORTED` (pression en kPa, psi, bar… au lieu de la tension du capteur). Tous traduits.
+- `fields_riverbed_flux.npz` (twins `mcmc`) : q(z = 0, t) en m/s de chacun des `n_field_samples` champs conservés, en float64, **quel que soit `store_fields`** (P2c.1b). C'est un état privé : le rapport n'en publie que l'agrégat. `InversionResult.field_riverbed_flux` et `TwinResults.riverbed_flux`. Un résultat écrit avant n'a pas ce fichier (avertissement `W_FLUX_NO_SAMPLES` dans HN-10).
+- HN-10 `water_flux` : paramètre `level` (0,9 par défaut, hors de ]0, 1[ : `E_QUESTION_PARAMS`) ; en mode `mcmc`, `mean` est le flux moyen a posteriori et son `interval` celui de cette moyenne, tiré des séries stockées ; `mean_best` garde la moyenne du meilleur échantillon ; en mode `direct`, valeur seule, sans `interval`. Nouvelles sorties : `level`, `model`, `uncertainty`, `samples`, `mean_best` (P2c.1a).
+- HN-40 `fit_quality` : `rmse_total` (RMSE totale), `sensor`, `model` (`forward` ou `inversion`), `uncertainty` (`none` ou `posterior`) ; en mode `mcmc`, `median_rmse` et `median_rmse_total` de la médiane a posteriori, en complément du meilleur échantillon (avertissement `W_FIT_NO_MEDIAN` sans le quantile 0,5) (P2c.1c, P2c.1e).
+- `model_difference` (fonction pure et `TwinAPI.model_difference`) : différence directe forward − inversion aux trois capteurs, sans passer par les mesures : écart moyen et RMSE par capteur, puis RMSE totale. Ce n'est pas une question du catalogue (elle porte sur deux twins) ; `E_QUESTION_MODELS_INCOMPARABLE` si les dates de simulation diffèrent (P2c.1d).
+- HN-45 `public_convergence` : R̂ maximal, ESS minimal, acceptation moyenne, convergence du burn-in, chaînes et échantillons par chaîne, seuils de référence (ceux par défaut de `thresholds.py`) et `thresholds_validated`, **sans verdict** ; mode `mcmc` seulement (un twin `direct` reçoit `E_QUESTION_NOT_AVAILABLE`) (P2c.1f). 21 questions au total.
 
 ### Modifié
 - `API_VERSION = 1.0.0-alpha.4` (deux questions de plus) ; le contrat OpenAPI figé et `docs/API_V1.md` suivent.
 - Le laboratoire lit `Sigma_Meas_T` et `Sigma_Meas_P` par leur nom (sans tenir compte de la casse), puis par position à défaut : les fichiers existants se lisent comme avant.
+- `SamplingLayout.stored_bytes` (BN-36, BN-11, interface) compte q(0, t) : `none` ne vaut plus 0.
+- `convergence_extremes` partage le calcul de R̂ maximal et d'ESS minimal entre HN-41 et HN-45 (mêmes valeurs).
+- La version du paquet ne change pas : à monter au moment de la publication du lot.
 
 ### Pas encore fait
 - P2.1f, les dates avec fuseau, attend la convention de dates (P0.5b). Un fuseau en paramètre reste refusé : `E_PIPELINE_TIMEZONE` pour le pipeline, `E_QUESTION_PARAMS` pour les questions.

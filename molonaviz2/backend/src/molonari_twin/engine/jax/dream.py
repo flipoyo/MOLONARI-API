@@ -248,7 +248,7 @@ class DreamSampler:
         sl_space = slice(None, None, cfg.space_step)
         sl_time = slice(None, None, cfg.time_step)
         samples, energies, accepted = [], [], []
-        field_temp, field_flux, sensor_temp = [], [], []
+        field_temp, field_flux, sensor_temp, riverbed_flux = [], [], [], []
         done = 0
         for length, keep_field in layout.blocks():
             carry, (xs, es, acc) = self._block(length, False)(carry)
@@ -261,6 +261,7 @@ class DreamSampler:
             if keep_field:
                 field_temp.append(np.asarray(carry[3][:, sl_space, sl_time], np.float32))
                 field_flux.append(np.asarray(carry[4][:, sl_space, sl_time], np.float32))
+                riverbed_flux.append(np.asarray(carry[4][:, 0, sl_time], np.float64))  # z = 0, toujours gardé (HN-10)
                 if cfg.store_fields == "sensors":
                     sensor_temp.append(np.asarray(carry[3][:, self.geom.sensor_index, sl_time], np.float64) - 273.15)
             report("sampling", done, cfg.nb_iter, float(np.mean(acc)), carry[2], rhat_max)
@@ -312,6 +313,7 @@ class DreamSampler:
             sensor_temperature=np.concatenate(sensor_temp) if sensor_temp else None,
             field_temperature=(temps - 273.15).astype(np.float32) if full else None,
             field_water_flux=fluxes if full else None,
+            field_riverbed_flux=np.concatenate(riverbed_flux),
         )
 
 

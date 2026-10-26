@@ -42,6 +42,11 @@ class PeriodParams(Params):
         return self
 
 
+class FluxParams(PeriodParams):
+    level: float = Field(default=0.9, gt=0, lt=1, description="Level of the posterior interval of the mean flux, e.g. 0.9 for 90 % (mcmc mode; "
+                         "in direct mode there is no interval).")
+
+
 class VolumeParams(PeriodParams):
     area: float | None = Field(default=None, gt=0, description="Riverbed area represented by the point (m²). Without it, volumes are per m² (m³/m²).")
 

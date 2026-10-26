@@ -151,6 +151,9 @@ MESSAGES: dict[str, str] = {
     "E_QUESTION_THIN": "The display thinning must be a whole number of at least 1 (got {thin}).",
     "E_QUESTION_TIMES": "Times must be strictly increasing.",
     "W_LATERAL_NOT_MODELLED": "Lateral heat exchange is not modelled by this version: it is taken as zero.",
+    "E_QUESTION_MODELS_INCOMPARABLE": "The two models cannot be compared: they were simulated at different dates ({forward} and {inversion} dates).",
+    "W_FIT_NO_MEDIAN": "The posterior median is not available (no stored quantile 0.5): no RMSE of the median.",
+    "W_FLUX_NO_SAMPLES": "The flux of the posterior samples was not stored with this computation (results written by an older version): the mean flux has no interval.",
     "W_COVERAGE_NO_POINTS": "No measurement can be compared with the band: coverage is undefined.",
     # twin
     "E_NO_CLEANED_MEASURES": "No cleaned measurements yet: apply a cleaning first.",

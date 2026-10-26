@@ -158,9 +158,10 @@ def test_fields_per_chain_sets_the_number_of_fields_exactly(thin):
 
 def test_stored_bytes_by_kind_of_stored_fields():
     layout = sampling_layout(small_config(space_step=3, time_step=4), nb_times=301)  # 14 champs, 7 cellules, 76 dates
-    assert layout.stored_bytes("none") == 0
-    assert layout.stored_bytes("sensors") == 8 * 14 * 3 * 76
-    assert layout.stored_bytes("full") == layout.field_bytes == 2 * 4 * 14 * 7 * 76
+    riverbed = 8 * 14 * 76  # q(0, t) de chaque champ, float64, quel que soit store_fields
+    assert layout.stored_bytes("none") == riverbed
+    assert layout.stored_bytes("sensors") == riverbed + 8 * 14 * 3 * 76
+    assert layout.stored_bytes("full") == riverbed + layout.field_bytes == riverbed + 2 * 4 * 14 * 7 * 76
     assert sampling_layout(small_config()).stored_bytes("sensors") is None
 
 
@@ -214,9 +215,12 @@ def test_each_stored_field_is_the_direct_model_of_its_chain_and_iteration():
     np.testing.assert_array_equal(result.field_chain, np.tile(np.arange(7), layout.fields_per_chain))
     for k, (chain, iteration) in enumerate(zip(result.field_chain, result.field_iteration, strict=True)):
         x = result.samples[iteration // result.thin - 1, chain]
-        temperature = np.asarray(sampler._forward(to_physical(jnp.asarray(x)))["temperature"])
+        fields = sampler._forward(to_physical(jnp.asarray(x)))
+        temperature = np.asarray(fields["temperature"])
         expected = temperature[sampler.geom.sensor_index][:, ::3] - 273.15
         np.testing.assert_allclose(result.sensor_temperature[k], expected, rtol=1e-12, atol=0)
+        # P2c.1b : q(z = 0, t) du même échantillon, en float64, aux mêmes dates
+        np.testing.assert_allclose(result.field_riverbed_flux[k], np.asarray(fields["water_flux"])[0, ::3], rtol=1e-12, atol=0)
 
 
 @pytest.mark.slow
@@ -243,6 +247,9 @@ def test_stored_fields_by_setting(store_fields):
     layout = sampling_layout(config, nb_times=60)
     fields, cells, times = layout.fields_total, layout.field_cells, layout.field_times
     assert result.field_chain.shape == result.field_iteration.shape == (fields,)
+    # q(z = 0, t) de chaque champ conservé : toujours là, en float64, quel que soit store_fields
+    assert result.field_riverbed_flux.shape == (fields, times) and result.field_riverbed_flux.dtype == np.float64
+    assert np.isfinite(result.field_riverbed_flux).all()
     if store_fields == "sensors":
         assert result.sensor_temperature.shape == (fields, 3, times)
     else:
@@ -250,6 +257,7 @@ def test_stored_fields_by_setting(store_fields):
     if store_fields == "full":
         assert result.field_temperature.shape == result.field_water_flux.shape == (fields, cells, times)
         assert result.field_temperature.dtype == result.field_water_flux.dtype == np.float32
+        np.testing.assert_allclose(result.field_riverbed_flux, result.field_water_flux[:, 0, :], rtol=1e-6, atol=1e-12)
         median = np.quantile(result.field_temperature, 0.5, axis=0)
         np.testing.assert_allclose(median, result.quantiles[1].temperature, atol=1e-3)
     else:

@@ -22,11 +22,13 @@ from molonari_twin.questions import (
     exchanged_volume,
     fit_quality,
     heat_budget,
+    model_difference,
     observed_at,
     parameters_catalog,
     posterior_samples,
     predictive_band,
     provenance,
+    public_convergence,
     residuals,
     result_fields,
     sensor_intervals,
@@ -558,6 +560,92 @@ def test_constant_heat_fluxes_have_exact_means_and_shares(direct):
     assert heat_budget(constant_heat(direct, 1.0, -3.0)).data["dominant"].value == "conduction"
 
 
+# Flux avec niveau de confiance (P2c.1a) ----------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def mcmc_results(tmp_path_factory, inversions):
+    """Résultats mcmc écrits puis relus, un par réglage de store_fields (q(0, t) est stocké dans les trois)."""
+    return {kind: results_of(tmp_path_factory.mktemp(f"mcmc_{kind}"), inversion.best, inversion, mode="mcmc")
+            for kind, inversion in inversions.items()}
+
+
+def test_direct_water_flux_is_a_single_value_without_interval(direct):
+    answer = water_flux(direct)
+    data = answer.data
+    assert data["mean"].interval is None and data["uncertainty"].value == "none" and data["model"].value == "forward"
+    assert data["level"].value == 0.9 and "samples" not in data and "mean_best" not in data
+    assert water_flux(direct, level=0.5).provenance["parameters"]["level"] == 0.5
+    assert answer.warnings == []
+
+
+@pytest.mark.parametrize("kind", ["sensors", "full", "none"])
+def test_mcmc_water_flux_interval_is_the_posterior_interval_of_the_mean(mcmc_results, inversions, kind):
+    """Quel que soit store_fields : la moyenne de chaque champ conservé, puis la moyenne et les quantiles de ces moyennes."""
+    results, series = mcmc_results[kind], inversions[kind].field_riverbed_flux
+    means = series.mean(axis=1)
+    for level in (0.5, 0.9):
+        data = water_flux(results, level=level).data
+        mean = data["mean"]
+        assert mean.value == pytest.approx(means.mean(), rel=1e-12)
+        np.testing.assert_allclose(mean.interval, np.quantile(means, [(1 - level) / 2, (1 + level) / 2]), rtol=1e-12)
+        assert data["level"].value == level and data["samples"].value == len(means)
+        assert data["model"].value == "inversion" and data["uncertainty"].value == "posterior"
+    narrow, wide = (water_flux(results, level=level).data["mean"].interval for level in (0.5, 0.9))
+    assert wide[0] <= narrow[0] <= narrow[1] <= wide[1]
+    best = water_flux(results).data
+    assert best["mean_best"].value == pytest.approx(results.flux["q_riverbed_m_per_s"].mean())
+    assert best["median"].value == pytest.approx(results.flux["q_riverbed_m_per_s"].median())  # percentiles dans le temps
+
+
+def test_the_mean_flux_interval_follows_the_period(mcmc_results, inversions):
+    results, inversion = mcmc_results["sensors"], inversions["sensors"]
+    times = inversion.field_times.astype("datetime64[s]")
+    data = water_flux(results, start=times[5], end=times[14]).data
+    means = inversion.field_riverbed_flux[:, 5:15].mean(axis=1)
+    assert data["mean"].value == pytest.approx(means.mean(), rel=1e-12)
+    np.testing.assert_allclose(data["mean"].interval, np.quantile(means, [0.05, 0.95]), rtol=1e-12)
+    assert data["points"].value > 10  # les percentiles dans le temps portent, eux, sur toutes les dates de la période
+
+
+def test_a_constant_flux_gives_a_degenerate_interval_and_the_volume_q_times_duration(mcmc_results):
+    results = mcmc_results["sensors"]
+    constant = 2e-6
+    stored = {**results.riverbed_flux, "values": np.full_like(results.riverbed_flux["values"], constant)}
+    results = dataclasses.replace(results, riverbed_flux=stored, flux=results.flux.assign(q_riverbed_m_per_s=constant))
+    data = water_flux(results).data
+    assert data["mean"].value == pytest.approx(constant, rel=1e-12)
+    np.testing.assert_allclose(data["mean"].interval, (constant, constant), rtol=1e-12)
+    times = results.flux["date"].to_numpy().astype("datetime64[s]")
+    duration = (times[-1] - times[0]) / np.timedelta64(1, "s")
+    volume = twin_exchanged_volume(results).data["net"].value
+    assert volume == pytest.approx(data["mean"].value * duration, rel=1e-12)
+    assert volume == pytest.approx(constant * duration, rel=1e-12)
+
+
+def test_results_without_stored_series_have_no_interval_and_a_warning(mcmc_results):
+    old = dataclasses.replace(mcmc_results["sensors"], riverbed_flux=None)
+    answer = water_flux(old)
+    assert answer.data["mean"].interval is None and answer.data["uncertainty"].value == "none"
+    assert [w.code for w in answer.warnings] == ["W_FLUX_NO_SAMPLES"]
+    assert answer.data["mean"].value == pytest.approx(old.flux["q_riverbed_m_per_s"].mean())
+
+
+def test_a_period_without_any_field_date_warns_instead_of_failing(mcmc_results, inversions):
+    results = mcmc_results["sensors"]
+    fields = set(inversions["sensors"].field_times.astype("datetime64[s]"))
+    dates = results.flux["date"].to_numpy().astype("datetime64[s]")
+    between = next(d for d in dates if d not in fields)  # une date des résultats qui n'est pas une date de champ
+    answer = water_flux(results, start=between, end=between)
+    assert answer.data["mean"].interval is None and [w.code for w in answer.warnings] == ["E_QUESTION_PERIOD_EMPTY"]
+
+
+@pytest.mark.parametrize("level", [0.0, 1.0, -0.1, 1.5])
+def test_water_flux_level_must_be_strictly_between_0_and_1(direct, mcmc_results, level):
+    assert code_of(lambda: water_flux(direct, level=level)) == "E_QUESTION_LEVEL"
+    assert code_of(lambda: water_flux(mcmc_results["sensors"], level=level)) == "E_QUESTION_LEVEL"
+
+
 def test_heat_budget_depth_and_period(direct):
     results = dataclasses.replace(direct, heat_flux_advective=np.tile(direct.depths[:, None], (1, direct.temperature.shape[1])),
                                   heat_flux_conductive=np.zeros_like(direct.temperature))
@@ -610,6 +698,91 @@ def test_residual_autocorrelation_separates_noise_from_structure(direct):
 
 def test_fit_quality_in_direct_mode_has_no_coverage(direct):
     assert "coverage_per_sensor" not in fit_quality(direct).data
+
+
+# RMSE par modèle et différence directe forward − inversion (P2c.1c à P2c.1e) ----------------------
+
+
+def with_simulated(results, offsets):
+    """Résultats dont le simulé vaut le mesuré + `offsets[i]` (°C) au capteur i + 1 (résidu constant par capteur)."""
+    frame = results.residuals.copy()
+    for i, offset in enumerate(offsets, start=1):
+        frame[f"t{i}_simulated"] = frame[f"t{i}_measured"] + offset
+        frame[f"t{i}_residual"] = offset
+    return dataclasses.replace(results, residuals=frame)
+
+
+def test_bias_rmse_per_sensor_and_total_rmse_of_the_forward_model(direct):
+    data = fit_quality(with_simulated(direct, (0.1, -0.2, 0.3))).data
+    np.testing.assert_allclose(data["bias"].value, (0.1, -0.2, 0.3))
+    np.testing.assert_allclose(data["rmse"].value, (0.1, 0.2, 0.3))
+    assert data["rmse_total"].value == pytest.approx(np.sqrt((0.1**2 + 0.2**2 + 0.3**2) / 3)) and data["rmse_total"].unit == "°C"
+    assert list(data["sensor"].value) == ["t1", "t2", "t3"]
+    assert (data["model"].value, data["uncertainty"].value) == ("forward", "none")
+    assert not {"median_rmse", "median_rmse_total"} & set(data)
+
+
+def test_total_rmse_is_the_one_recorded_by_the_computation(tmp_path):
+    forward = run_forward(synthetic_inputs(nb_times=80), ForwardConfig([LayerSpec("a", 0.4)], nb_cells=20))
+    results = results_of(tmp_path, forward)
+    data = fit_quality(results).data
+    np.testing.assert_allclose(data["rmse"].value, forward.rmse[:3], rtol=1e-9)
+    assert data["rmse_total"].value == pytest.approx(forward.rmse[3], rel=1e-9)
+
+
+@pytest.mark.parametrize("kind", ["sensors", "full"])
+def test_inversion_model_is_its_best_sample_and_the_median_comes_in_addition(mcmc_results, inversions, kind):
+    results, inversion = mcmc_results[kind], inversions[kind]
+    data = fit_quality(results).data
+    np.testing.assert_allclose(data["rmse"].value, inversion.best.rmse[:3], rtol=1e-9)  # meilleur échantillon
+    assert data["rmse_total"].value == pytest.approx(inversion.best.rmse[3], rel=1e-9)
+    assert (data["model"].value, data["uncertainty"].value) == ("inversion", "posterior")
+    median = next(q for q in inversion.quantiles if q.quantile == 0.5)  # RMSE de la médiane a posteriori du calcul
+    np.testing.assert_allclose(data["median_rmse"].value, median.rmse[:3], rtol=1e-6)
+    assert data["median_rmse_total"].value == pytest.approx(median.rmse[3], rel=1e-6)
+
+
+def test_the_median_rmse_is_missing_with_a_warning_without_the_quantile_one_half(mcmc_results):
+    results = mcmc_results["sensors"]
+    keep = results.quantiles["quantile"] != 0.5
+    quantiles = {key: (value[keep] if key in ("quantile", "temperature_C", "water_flux_m_per_s") else value)
+                 for key, value in results.quantiles.items()}
+    for stored in (dataclasses.replace(results, quantiles=quantiles), dataclasses.replace(results, quantiles=None)):
+        answer = fit_quality(stored)
+        assert "median_rmse" not in answer.data and "W_FIT_NO_MEDIAN" in [w.code for w in answer.warnings]
+        assert answer.data["rmse_total"].value > 0  # le meilleur échantillon reste là
+
+
+def test_model_difference_is_forward_minus_inversion_per_sensor(direct, mcmc_results):
+    forward = with_simulated(direct, (0.1, -0.2, 0.3))  # mêmes mesures et mêmes dates : la différence est celle des décalages
+    inversion = with_simulated(direct, (0.0, 0.0, 0.0))
+    answer = model_difference(forward, inversion)
+    np.testing.assert_allclose(answer.data["mean_difference"].value, (0.1, -0.2, 0.3), atol=1e-12)
+    np.testing.assert_allclose(answer.data["rmse"].value, (0.1, 0.2, 0.3), atol=1e-12)
+    assert answer.data["rmse_total"].value == pytest.approx(np.sqrt((0.1**2 + 0.2**2 + 0.3**2) / 3))
+    assert answer.data["points"].value == len(direct.residuals) and list(answer.data["sensor"].value) == ["t1", "t2", "t3"]
+    swapped = model_difference(inversion, forward)  # l'ordre compte : le signe change, la RMSE non
+    np.testing.assert_allclose(swapped.data["mean_difference"].value, (-0.1, 0.2, -0.3), atol=1e-12)
+    np.testing.assert_allclose(swapped.data["rmse"].value, answer.data["rmse"].value)
+
+
+def test_model_difference_does_not_depend_on_the_measurements(direct):
+    """Deux modèles identiques ne diffèrent pas, même si les mesures de l'un sont faussées."""
+    other = direct.residuals.assign(**{f"t{i}_measured": 99.0 for i in (1, 2, 3)})
+    assert model_difference(direct, dataclasses.replace(direct, residuals=other)).data["rmse_total"].value == 0.0
+
+
+def test_a_model_has_no_difference_with_itself(direct):
+    answer = model_difference(direct, direct)
+    np.testing.assert_array_equal(answer.data["mean_difference"].value, np.zeros(3))
+    assert answer.data["rmse_total"].value == 0.0
+
+
+def test_models_simulated_at_other_dates_are_incomparable(direct):
+    shorter = dataclasses.replace(direct, residuals=direct.residuals.iloc[:-1])
+    assert code_of(lambda: model_difference(direct, shorter)) == "E_QUESTION_MODELS_INCOMPARABLE"
+    shifted = dataclasses.replace(direct, residuals=direct.residuals.assign(date=direct.residuals["date"] + np.timedelta64(1, "m")))
+    assert code_of(lambda: model_difference(direct, shifted)) == "E_QUESTION_MODELS_INCOMPARABLE"
 
 
 # Propriétés du sol, échantillons, convergence et énergie (lot C3) ---------------------------------
@@ -740,6 +913,57 @@ def test_convergence_follows_the_selection(direct):
     assert np.isnan(convergence(results, chains=[0, 1]).data["rhat_without_chain"].value).all()  # R̂ demande 2 chaînes
 
 
+# Convergence publique (P2c.1f) --------------------------------------------------------------------
+
+
+def test_public_convergence_agrees_with_convergence_and_reliability(direct):
+    from molonari_twin.questions import reliability
+
+    samples = uniform_samples(kept=300, chains=5)
+    samples[:, 2] += 0.2 * (np.array(list(PRIOR.values()))[:, 1] - np.array(list(PRIOR.values()))[:, 0])  # une chaîne décalée
+    results = with_posterior(direct, samples, acceptance=np.array([0.1, 0.2, 0.3, 0.4, 0.5]))
+    public = public_convergence(results).data
+    detail = convergence(results).data
+    assert public["rhat_max"].value == pytest.approx(detail["rhat_max"].value, rel=1e-12)
+    assert public["ess_min"].value == pytest.approx(min(detail["ess_bulk"].value.min(), detail["ess_tail"].value.min()), rel=1e-12)
+    assert public["acceptance_mean"].value == pytest.approx(0.3) and public["burn_in_iterations"].value == 12
+    assert public["burn_in_converged"].value is True
+    assert (public["chains"].value, public["samples_per_chain"].value) == (5, 300)
+    reasons = {w.code: w.params for w in reliability(results).warnings if w.code.startswith("W_RELIABILITY_CONVERGENCE")}
+    if reasons:  # la raison de HN-41 porte les mêmes valeurs
+        assert reasons["W_RELIABILITY_CONVERGENCE"]["rhat"] == pytest.approx(public["rhat_max"].value, rel=1e-12)
+        assert reasons["W_RELIABILITY_CONVERGENCE"]["ess"] == pytest.approx(public["ess_min"].value, rel=1e-12)
+
+
+def test_public_convergence_gives_reference_thresholds_and_no_verdict(direct):
+    from molonari_twin.questions.thresholds import ReliabilityThresholds
+
+    answer = public_convergence(with_posterior(direct, uniform_samples(kept=300, chains=5)))
+    limits = ReliabilityThresholds()
+    assert [answer.data[name].value for name in ("rhat_green", "rhat_orange", "ess_green", "ess_orange")] == [
+        limits.rhat_green, limits.rhat_orange, limits.ess_green, limits.ess_orange]
+    assert answer.data["thresholds_validated"].value is False  # choix C9 : tant qu'un hydrogéologue ne les a pas validés
+    assert not {"verdict", "levels", "reasons", "criteria", "gr_threshold", "thresholds"} & set(answer.data)
+    assert answer.warnings == []  # pas même d'avertissement W_RELIABILITY_* : aucune couleur
+
+
+def test_public_convergence_ignores_the_threshold_environment(direct, tmp_path, monkeypatch):
+    file = tmp_path / "thresholds.yaml"
+    file.write_text("rhat_green: 1.01\n", encoding="utf-8")
+    monkeypatch.setenv("MOLONARI_THRESHOLDS", str(file))
+    answer = public_convergence(with_posterior(direct, uniform_samples(kept=300, chains=5)))
+    assert answer.data["rhat_green"].value == 1.05  # le rapport doit se reproduire : seuils par défaut
+
+
+def test_public_convergence_with_too_few_iterations_is_undefined_not_empty(direct):
+    data = public_convergence(with_posterior(direct, uniform_samples(kept=3, chains=5))).data
+    assert np.isnan(data["rhat_max"].value) and np.isnan(data["ess_min"].value) and data["samples_per_chain"].value == 3
+
+
+def test_public_convergence_needs_posterior_samples(direct):
+    assert code_of(lambda: public_convergence(direct)) == "E_QUESTION_NO_POSTERIOR"
+
+
 def test_energy_terms_add_up_and_the_implicit_rmse_is_the_rms_residual(direct):
     data = energy_breakdown(direct).data
     _, measured, simulated = __import__("molonari_twin.questions.sensors", fromlist=["sensor_series"]).sensor_series(direct)
@@ -855,7 +1079,7 @@ def test_stored_size_depends_on_store_fields(tmp_path):
         return check_twin(folder).data["stored_bytes"].value
 
     none, sensors, full = sizes("none"), sizes("sensors"), sizes("full")
-    assert none == 0 and 0 < sensors < full
+    assert 0 < none < sensors < full  # q(0, t) est toujours stocké
 
 
 def test_check_of_an_invalid_twin_is_an_answer_not_an_error(tmp_path):
