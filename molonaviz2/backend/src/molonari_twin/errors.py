@@ -57,6 +57,7 @@ MESSAGES: dict[str, str] = {
     "E_MEASURES_NOT_CHRONOLOGICAL": "Dates in {file} are not in chronological order: line {line} ({value}) comes after line {previous_line} ({previous}). The file was probably altered by a spreadsheet; export it again from the logger software.",
     "E_MEASURES_NO_DATE": "No dated measurement found at the start of {file}.",
     "E_MEASURES_TOO_FEW": "Fewer than 2 valid measurements in {file}.",
+    "E_MEASURES_UNIT_UNSUPPORTED": "The column \"{column}\" of {file} is not a voltage in V: only the raw voltage of the pressure sensor is supported.",
     "E_SHAFT_DEPTHS_FORMAT": "Sensor depths must be a list of 4 numbers, e.g. [0.1, 0.2, 0.3, 0.4].",
     "E_SHAFT_DEPTHS_ORDER": "Sensor depths must be 4 strictly increasing positive values (m).",
     "W_LAB_DUPLICATE_NAME": "Duplicate name \"{name}\": file ignored.",

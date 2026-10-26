@@ -8,6 +8,9 @@ mis au format propre de Molonaviz. Le lecteur gère les deux :
   en °C (°F et K acceptés) ; à défaut d'en-tête, lecture par position ;
 - lignes d'événements du logger (valeurs vides) écartées et comptées ;
 - séparateur « , », « ; » ou tabulation ; virgule décimale si le séparateur n'est pas « , ».
+
+Un fichier dont l'en-tête annonce une unité de pression (kPa, psi, bar…) à la place de la tension du capteur
+est refusé (E_MEASURES_UNIT_UNSUPPORTED) : le lire par position donnerait des charges fausses sans le dire.
 """
 
 from __future__ import annotations
@@ -89,6 +92,7 @@ class ParsedMeasures:
 
 _VOLTAGE = re.compile(r"tension|volt|\bv\b|, v", re.IGNORECASE)
 _TEMPERATURE = re.compile(r"temp", re.IGNORECASE)
+_PRESSURE_UNIT = re.compile(r"\b(?:[kmh]?pa|mbar|bar|psi|mmhg|inhg|cmh2o|mh2o)\b", re.IGNORECASE)
 
 
 def _unit(header: str) -> str:
@@ -151,6 +155,10 @@ def _read_measures(path: Path, kind: str) -> ParsedMeasures:
         wanted = 2
         voltage = next((i for i, h in enumerate(value_headers) if _VOLTAGE.search(h)), None)
         temps = [i for i, h in enumerate(value_headers) if _TEMPERATURE.search(h)]
+        if voltage is None:
+            unit = next((h for h in value_headers if _PRESSURE_UNIT.search(h)), None)
+            if unit is not None:
+                raise UserError("E_MEASURES_UNIT_UNSUPPORTED", file=path.name, column=unit)
         if voltage is not None and temps:
             picks = [voltage, next((i for i in temps if i > voltage), temps[0])]
         else:

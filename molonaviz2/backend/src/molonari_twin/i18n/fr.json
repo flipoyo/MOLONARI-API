@@ -92,6 +92,7 @@
  "The Gelman-Rubin threshold must be greater than 1.": "Le seuil de Gelman-Rubin doit être supérieur à 1.",
  "The burn-in needs at least 2 iterations.": "Le burn-in demande au moins 2 itérations.",
  "The code ({version}) is not exactly a published version.": "Le code ({version}) n'est pas exactement une version publiée.",
+ "The column \"{column}\" of {file} is not a voltage in V: only the raw voltage of the pressure sensor is supported.": "La colonne « {column} » de {file} n'est pas une tension en V : seule la tension brute du capteur de pression est prise en charge.",
  "The dates of the cleaned file are not in chronological order.": "Les dates du fichier nettoyé ne sont pas chronologiques.",
  "The diagnostic task failed on purpose at block {block}.": "La tâche de diagnostic a échoué volontairement au bloc {block}.",
  "The display thinning must be a whole number of at least 1 (got {thin}).": "L'éclaircissement d'affichage doit être un entier au moins égal à 1 (reçu : {thin}).",
