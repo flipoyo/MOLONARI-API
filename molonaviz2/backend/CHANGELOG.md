@@ -14,6 +14,22 @@ Jusqu'à 0.6.0-alpha.1, le backend faisait partie du paquet molonaviz2 : son his
 - Tags : `molonari-twin-vX.Y.Z`, posés sur `CGS-MOLO` après la fusion. La CI (`molonaviz2-version`) vérifie que le tag correspond à `pyproject.toml`.
 - La version entre dans `engine_version()` (`molonari-twin X.Y.Z · jax …`), donc dans chaque `twin_id`. Une nouvelle version du backend donne de nouveaux identifiants ; une version du seul frontend n'en change aucun.
 
+## [Non publié]
+
+Issue P2c.1 du plan v3 : les questions du rapport public. Pas de nouvelle version ici : la version est celle de l'alpha.3, donc **aucun identifiant de référence ne change** (le `twin_id` dépend de la configuration et de la version du code, pas du contenu des résultats).
+
+### Ajouté
+- `fields_riverbed_flux.npz` (twins `mcmc`) : q(z = 0, t) en m/s de chacun des `n_field_samples` champs conservés, en float64, **quel que soit `store_fields`** (P2c.1b). C'est un état privé : le rapport n'en publie que l'agrégat. `InversionResult.field_riverbed_flux` et `TwinResults.riverbed_flux`. Un résultat écrit avant n'a pas ce fichier (avertissement `W_FLUX_NO_SAMPLES` dans HN-10).
+- HN-10 `water_flux` : paramètre `level` (0,9 par défaut, hors de ]0, 1[ : `E_QUESTION_PARAMS`) ; en mode `mcmc`, `mean` est le flux moyen a posteriori et son `interval` celui de cette moyenne, tiré des séries stockées ; `mean_best` garde la moyenne du meilleur échantillon ; en mode `direct`, valeur seule, sans `interval`. Nouvelles sorties : `level`, `model`, `uncertainty`, `samples`, `mean_best` (P2c.1a).
+- HN-40 `fit_quality` : `rmse_total` (RMSE totale), `sensor`, `model` (`forward` ou `inversion`), `uncertainty` (`none` ou `posterior`) ; en mode `mcmc`, `median_rmse` et `median_rmse_total` de la médiane a posteriori, en complément du meilleur échantillon (avertissement `W_FIT_NO_MEDIAN` sans le quantile 0,5) (P2c.1c, P2c.1e).
+- `model_difference` (fonction pure et `TwinAPI.model_difference`) : différence directe forward − inversion aux trois capteurs, sans passer par les mesures : écart moyen et RMSE par capteur, puis RMSE totale. Ce n'est pas une question du catalogue (elle porte sur deux twins) ; `E_QUESTION_MODELS_INCOMPARABLE` si les dates de simulation diffèrent (P2c.1d).
+- HN-45 `public_convergence` : R̂ maximal, ESS minimal, acceptation moyenne, convergence du burn-in, chaînes et échantillons par chaîne, seuils de référence (ceux par défaut de `thresholds.py`) et `thresholds_validated`, **sans verdict** ; mode `mcmc` seulement (un twin `direct` reçoit `E_QUESTION_NOT_AVAILABLE`) (P2c.1f). 21 questions au total.
+
+### Modifié
+- `SamplingLayout.stored_bytes` (BN-36, BN-11, interface) compte q(0, t) : `none` ne vaut plus 0.
+- `convergence_extremes` partage le calcul de R̂ maximal et d'ESS minimal entre HN-41 et HN-45 (mêmes valeurs).
+- `API_VERSION` et la version du paquet ne changent pas : à monter au moment de la publication du lot.
+
 ## [0.7.0-alpha.3] - 2026-10-23
 
 Lot C3, suite de la phase 3 du plan twin : fiabilité, diagnostics et accès bruts aux résultats. 11 questions de plus (20 au total), sans charger JAX ni ArviZ. **Les seuils du verdict de fiabilité sont provisoires : ils doivent être validés par un hydrogéologue avant l'API 1.0.0 (choix C9).**
