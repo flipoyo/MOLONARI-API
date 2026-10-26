@@ -46,6 +46,7 @@ def extract_fields_from_payload(payload: dict):
     Sensor = decoder.decode_proto_data(payload.get("data", ""))
     device_eui = normalize_eui(Sensor.UI)
     timestamp = Sensor.time
+    relay_receive_timestamp = Sensor.relay_receive_time
     relay_id = payload.get("deviceInfo").get("devEui")
     relay_ts = payload.get("time")
     gateway_id = payload.get("rxInfo")[0].get("gatewayId")
@@ -55,6 +56,7 @@ def extract_fields_from_payload(payload: dict):
     rec = {
         "device_eui": device_eui,
         "timestamp": timestamp,
+        "relay_receive_time": relay_receive_timestamp,
         "relay_id": relay_id,
         "relay_ts": relay_ts,
         "gateway_id": gateway_id,

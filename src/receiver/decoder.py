@@ -23,7 +23,8 @@ def conversion_volt(value):
 @dataclass
 class Sensor:
     UI: str
-    time: str
+    time: str                   # Time when the data was actually recorded by the sensor
+    relay_receive_time: str     # Time when the data was actually received by the relay
     a0: float
     a1: float
     a2: float
@@ -52,6 +53,7 @@ def decode_proto_data(data_b64: str) -> Sensor | None:
         return Sensor(
             UI = msg.UI,
             time = int_to_iso8601(msg.time),
+            relay_receive_time= int_to_iso8601(msg.relay_receive_time),
             a0=conversion_volt(measurements[0]),
             a1=conversion_volt(measurements[1]),
             a2=conversion_volt(measurements[2]),

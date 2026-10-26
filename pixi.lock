@@ -210,8 +210,10 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/typing_extensions-4.16.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2026e-h5d301ff_0.conda
       - pypi: ./
+      - pypi: https://files.pythonhosted.org/packages/59/4d/99dfd9cfab7f748d52cfb9177e8967d5cec0a50f148d4e3b9a0bf0b1220c/grpcio-1.84.1-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/c4/cb/00451c3cf31790287768bb12c6bec834f5d292eaf3022afc88e14b8afc94/paho_mqtt-2.1.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/db/f3/3996583dd2906297a637af12114deddf7658af6e683fedb83be061983fb5/protobuf-7.36.2-cp310-abi3-manylinux2014_x86_64.whl
+      - pypi: https://files.pythonhosted.org/packages/df/13/08a33fcf457f4a29c891a4f0a524f1c6152e906ad21db037eda289a1612f/grpcio_tools-1.84.1-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
       osx-64:
       - conda: https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2026.10.23-hbd8a1cb_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/colorama-0.4.6-pyhd8ed1ab_1.conda
@@ -340,7 +342,9 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/zlib-ng-2.3.3-h646e873_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/zstd-1.5.7-hbc1a06c_7.conda
       - pypi: ./
+      - pypi: https://files.pythonhosted.org/packages/1f/d5/68c3c5804bc7b05a0a544ac68439ff7eb493d5d394e5361bc94e60b6be0b/grpcio-1.84.1-cp313-cp313-macosx_11_0_universal2.whl
       - pypi: https://files.pythonhosted.org/packages/32/72/98342feb672507c8f3a69e34b4fa8961f608edba5c1a48a6f47156d92cb5/protobuf-7.36.2-cp310-abi3-macosx_10_9_universal2.whl
+      - pypi: https://files.pythonhosted.org/packages/7a/0f/c4d01ef72a5515915fa5d72f2fc482576533048f8e9f0409d78e13865d10/grpcio_tools-1.84.1-cp313-cp313-macosx_11_0_universal2.whl
       - pypi: https://files.pythonhosted.org/packages/c4/cb/00451c3cf31790287768bb12c6bec834f5d292eaf3022afc88e14b8afc94/paho_mqtt-2.1.0-py3-none-any.whl
       osx-arm64:
       - conda: https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2026.10.23-hbd8a1cb_0.conda
@@ -470,7 +474,9 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-ng-2.3.3-h31dac16_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hf451053_7.conda
       - pypi: ./
+      - pypi: https://files.pythonhosted.org/packages/1f/d5/68c3c5804bc7b05a0a544ac68439ff7eb493d5d394e5361bc94e60b6be0b/grpcio-1.84.1-cp313-cp313-macosx_11_0_universal2.whl
       - pypi: https://files.pythonhosted.org/packages/32/72/98342feb672507c8f3a69e34b4fa8961f608edba5c1a48a6f47156d92cb5/protobuf-7.36.2-cp310-abi3-macosx_10_9_universal2.whl
+      - pypi: https://files.pythonhosted.org/packages/7a/0f/c4d01ef72a5515915fa5d72f2fc482576533048f8e9f0409d78e13865d10/grpcio_tools-1.84.1-cp313-cp313-macosx_11_0_universal2.whl
       - pypi: https://files.pythonhosted.org/packages/c4/cb/00451c3cf31790287768bb12c6bec834f5d292eaf3022afc88e14b8afc94/paho_mqtt-2.1.0-py3-none-any.whl
       win-64:
       - conda: https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2026.10.23-h4c7d964_0.conda
@@ -590,8 +596,10 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/zlib-ng-2.3.3-h0261ad2_1.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zstd-1.5.7-h534d264_7.conda
       - pypi: ./
+      - pypi: https://files.pythonhosted.org/packages/68/25/5c315847ab3bd6d3b9f3caad178596eb1affd5aafd02374813b27bddf708/grpcio-1.84.1-cp313-cp313-win_amd64.whl
       - pypi: https://files.pythonhosted.org/packages/8a/55/b77bda4e5e5f5971fb51b07663694690e9afdb9402136c16a522bd621cad/protobuf-7.36.2-cp310-abi3-win_amd64.whl
       - pypi: https://files.pythonhosted.org/packages/c4/cb/00451c3cf31790287768bb12c6bec834f5d292eaf3022afc88e14b8afc94/paho_mqtt-2.1.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/ea/f4/f67a53ccc8497ff549e7fd1042761e17ccf956801ee97666a0daedecaf5f/grpcio_tools-1.84.1-cp313-cp313-win_amd64.whl
 packages:
 - conda: https://conda.anaconda.org/conda-forge/linux-64/_openmp_mutex-4.5-20_gnu.conda
   build_number: 20
@@ -8543,10 +8551,43 @@ packages:
   - setuptools
   - paho-mqtt
   - protobuf
+- pypi: https://files.pythonhosted.org/packages/1f/d5/68c3c5804bc7b05a0a544ac68439ff7eb493d5d394e5361bc94e60b6be0b/grpcio-1.84.1-cp313-cp313-macosx_11_0_universal2.whl
+  name: grpcio
+  version: 1.84.1
+  sha256: af0f0c10281c2b62c68868e0a98de24f89c31308c68dbf19320d30c3a329aba5
+  requires_dist:
+  - typing-extensions~=4.12
+  - grpcio-tools>=1.84.1 ; extra == 'protobuf'
+  requires_python: '>=3.10'
 - pypi: https://files.pythonhosted.org/packages/32/72/98342feb672507c8f3a69e34b4fa8961f608edba5c1a48a6f47156d92cb5/protobuf-7.36.2-cp310-abi3-macosx_10_9_universal2.whl
   name: protobuf
   version: 7.36.2
   sha256: cbc70b17ee27e28894c7fee8bb04be1abead49e936bc70eb60052531eee2079e
+  requires_python: '>=3.10'
+- pypi: https://files.pythonhosted.org/packages/59/4d/99dfd9cfab7f748d52cfb9177e8967d5cec0a50f148d4e3b9a0bf0b1220c/grpcio-1.84.1-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
+  name: grpcio
+  version: 1.84.1
+  sha256: 2ce575e400e0dec9484f5d038fa12d6b3919d493c2beb897a23b9a32fa3bfd12
+  requires_dist:
+  - typing-extensions~=4.12
+  - grpcio-tools>=1.84.1 ; extra == 'protobuf'
+  requires_python: '>=3.10'
+- pypi: https://files.pythonhosted.org/packages/68/25/5c315847ab3bd6d3b9f3caad178596eb1affd5aafd02374813b27bddf708/grpcio-1.84.1-cp313-cp313-win_amd64.whl
+  name: grpcio
+  version: 1.84.1
+  sha256: b7452ccc592e40e4167adec46195d85387c8036f0aadf6f96ab6ed931205d0ce
+  requires_dist:
+  - typing-extensions~=4.12
+  - grpcio-tools>=1.84.1 ; extra == 'protobuf'
+  requires_python: '>=3.10'
+- pypi: https://files.pythonhosted.org/packages/7a/0f/c4d01ef72a5515915fa5d72f2fc482576533048f8e9f0409d78e13865d10/grpcio_tools-1.84.1-cp313-cp313-macosx_11_0_universal2.whl
+  name: grpcio-tools
+  version: 1.84.1
+  sha256: 61e623ba62c36d3ce5747feafbac702f808c590304924e706fbe80b5520d4526
+  requires_dist:
+  - protobuf>=7.35.1,<8.0.0
+  - grpcio>=1.84.1
+  - setuptools>=77.0.1
   requires_python: '>=3.10'
 - pypi: https://files.pythonhosted.org/packages/8a/55/b77bda4e5e5f5971fb51b07663694690e9afdb9402136c16a522bd621cad/protobuf-7.36.2-cp310-abi3-win_amd64.whl
   name: protobuf
@@ -8564,4 +8605,22 @@ packages:
   name: protobuf
   version: 7.36.2
   sha256: 89f23aa53c24553a2416fd4fd1ec06f74fa42b14b546d8883128813f775bbfd2
+  requires_python: '>=3.10'
+- pypi: https://files.pythonhosted.org/packages/df/13/08a33fcf457f4a29c891a4f0a524f1c6152e906ad21db037eda289a1612f/grpcio_tools-1.84.1-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
+  name: grpcio-tools
+  version: 1.84.1
+  sha256: 0747ea030e47a8843c55156ec613efb7564c9567cfffbd8d704d89536c913f03
+  requires_dist:
+  - protobuf>=7.35.1,<8.0.0
+  - grpcio>=1.84.1
+  - setuptools>=77.0.1
+  requires_python: '>=3.10'
+- pypi: https://files.pythonhosted.org/packages/ea/f4/f67a53ccc8497ff549e7fd1042761e17ccf956801ee97666a0daedecaf5f/grpcio_tools-1.84.1-cp313-cp313-win_amd64.whl
+  name: grpcio-tools
+  version: 1.84.1
+  sha256: 735eb3fa966d60c8192c13b2db4af21a1dc232bf7c67903326b3a31a1bbb6769
+  requires_dist:
+  - protobuf>=7.35.1,<8.0.0
+  - grpcio>=1.84.1
+  - setuptools>=77.0.1
   requires_python: '>=3.10'
