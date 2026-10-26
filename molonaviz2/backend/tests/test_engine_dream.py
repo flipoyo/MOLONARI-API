@@ -215,9 +215,12 @@ def test_each_stored_field_is_the_direct_model_of_its_chain_and_iteration():
     np.testing.assert_array_equal(result.field_chain, np.tile(np.arange(7), layout.fields_per_chain))
     for k, (chain, iteration) in enumerate(zip(result.field_chain, result.field_iteration, strict=True)):
         x = result.samples[iteration // result.thin - 1, chain]
-        temperature = np.asarray(sampler._forward(to_physical(jnp.asarray(x)))["temperature"])
+        fields = sampler._forward(to_physical(jnp.asarray(x)))
+        temperature = np.asarray(fields["temperature"])
         expected = temperature[sampler.geom.sensor_index][:, ::3] - 273.15
         np.testing.assert_allclose(result.sensor_temperature[k], expected, rtol=1e-12, atol=0)
+        # P2c.1b : q(z = 0, t) du même échantillon, en float64, aux mêmes dates
+        np.testing.assert_allclose(result.field_riverbed_flux[k], np.asarray(fields["water_flux"])[0, ::3], rtol=1e-12, atol=0)
 
 
 @pytest.mark.slow
