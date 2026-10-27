@@ -24,13 +24,15 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0csensor.proto\"X\n\nSensorData\x12\n\n\x02UI\x18\x01 \x02(\t\x12\x0c\n\x04time\x18\x02 \x02(\x05\x12\x14\n\x0cmeasurements\x18\x03 \x03(\x02\x12\x1a\n\x12relay_receive_time\x18\x04 \x02(\x05')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0csensor.proto\"\\\n\nSensorData\x12\n\n\x02UI\x18\x01 \x02(\t\x12\x0c\n\x04time\x18\x02 \x02(\x05\x12\x1a\n\x12relay_receive_time\x18\x04 \x02(\x05\x12\x18\n\x0cmeasurements\x18\x05 \x03(\rB\x02\x10\x01')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'sensor_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
+  _globals['_SENSORDATA'].fields_by_name['measurements']._loaded_options = None
+  _globals['_SENSORDATA'].fields_by_name['measurements']._serialized_options = b'\020\001'
   _globals['_SENSORDATA']._serialized_start=16
-  _globals['_SENSORDATA']._serialized_end=104
+  _globals['_SENSORDATA']._serialized_end=108
 # @@protoc_insertion_point(module_scope)
