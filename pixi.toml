@@ -19,3 +19,4 @@ grpcio-tools = ">=1.84.1, <2"
 
 [tasks]
 validate-molonaviz-structure = "cd src && python -c \"import molonaviz; print('Molonaviz structure validated')\""
+run-server = "python -m src.receiver.main"
