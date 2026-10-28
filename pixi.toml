@@ -15,6 +15,7 @@ setuptools = "*"
 
 [pypi-dependencies]
 molonaviz = { path = ".", editable = true }
+grpcio-tools = ">=1.84.1, <2"
 
 [tasks]
 validate-molonaviz-structure = "cd src && python -c \"import molonaviz; print('Molonaviz structure validated')\""
