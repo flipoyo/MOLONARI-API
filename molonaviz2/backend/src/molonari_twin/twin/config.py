@@ -120,11 +120,10 @@ MCMC_KEYS = {"priors", "nb_chains", "nb_iter", "burn_in_max", "delta", "n_cr", "
 # Valeurs par défaut des clés 1.1.0 : à ces valeurs, elles n'entrent ni dans la forme canonique ni dans un twin créé.
 MCMC_DEFAULTS_1_1 = {"thin": 1, "fields_per_chain": None, "store_fields": "sensors"}
 
-# Schéma 2.0.0 : le brut (`data`), son nettoyage (`processing`) et la graine (`mcmc.seed`).
+# Schéma 2.0.0 : le brut (`data`) et son nettoyage (`processing`), puis les clés de publication (P2.3). La graine est dans
+# `orx.yaml`, pas dans `twin.yaml`.
 TOP_KEYS_2 = {"schema", "name", "description", "mode", "data", "processing", "sensors", "layers", "numerics", "mcmc", "legacy_twin_id",
               "site_label", "monitoring", "visibility", "report"}
-# Schéma 2.0.0 : le brut (`data`) et son nettoyage (`processing`). La graine est dans `orx.yaml`, pas dans `twin.yaml`.
-TOP_KEYS_2 = {"schema", "name", "description", "mode", "data", "processing", "sensors", "layers", "numerics", "mcmc", "legacy_twin_id"}
 REQUIRED_TOP_2 = ("schema", "name", "mode", "data", "layers")
 DATA_KEYS_2 = {"lab", "point"}
 PROCESSING_KEYS = {"start", "end", "methods", "excluded"}

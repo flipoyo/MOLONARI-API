@@ -16,6 +16,10 @@ Jusqu'à 0.6.0-alpha.1, le backend faisait partie du paquet molonaviz2 : son his
 
 ## [Non publié]
 
+### Corrigé
+
+- Après la fusion de P2.1f, P2.2c et P2.3 : clé `E_TWIN_EXPECTED_TEXT` en double dans `errors.py` retirée ; `TOP_KEYS_2` de `config.py` définie deux fois (la seconde faisait refuser `site_label`, `monitoring`, `visibility` et `report`) ; tests de publication alignés sur `orx.yaml` ; `API_VERSION = 1.0.0-alpha.7` (P2.2c et P2.3 visaient toutes deux alpha.6) ; snapshot OpenAPI et `docs/API_V1.md` régénérés.
+
 Phase 2 du plan twin v3 : issues P2.1 (pipeline du brut, avec BN-03 et BN-04) et P2c.1 (questions du rapport public). Les questions ne chargent toujours pas JAX (23 au total).
 
 - P2.1 : le pipeline du brut au résultat, avec BN-03 et BN-04 (sortis du lot C4, car ils ne dépendent que du pipeline brut).
