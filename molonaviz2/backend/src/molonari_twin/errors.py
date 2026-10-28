@@ -227,7 +227,6 @@ MESSAGES: dict[str, str] = {
     "E_TWIN_RANGE": "expected [min, max].",
     "E_TWIN_REQUIRED": "required.",
     "E_TWIN_SEED_ORX": "the seed is reserved for ORX since schema 2.0.0: write mcmc.seed in orx.yaml (orx layer), not in twin.yaml.",
-    "E_TWIN_EXPECTED_TEXT": "expected a text.",
     "E_TWIN_SCHEMA": "unsupported schema \"{value}\" (expected {expected}).",
     "E_TWIN_SENSOR_DEPTHS": "expected 4 strictly increasing positive depths (m).",
     "E_TWIN_TOO_FEW_MEASUREMENTS": "fewer than 3 measurements in the selected period.",

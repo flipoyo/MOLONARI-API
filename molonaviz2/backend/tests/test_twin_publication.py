@@ -15,7 +15,14 @@ from molonari_twin.twin.config import (
     TwinConfigError,
     load_twin,
 )
-from test_twin_schema import RAW_DIRECT, RAW_MCMC, codes, data_repo, write_twin  # noqa: F401
+from test_twin_schema import (  # noqa: F401
+    RAW_DIRECT,
+    RAW_MCMC,
+    codes,
+    data_repo,
+    write_orx,
+    write_twin,
+)
 
 PUBLIC = """site_label: Rivière du Bas-Rhin, site amont
 monitoring: {status: actif}
@@ -75,8 +82,8 @@ def test_a_direct_twin_reads_them_too(tmp_path, data_repo):
 
 
 def test_the_new_keys_do_not_change_the_twin_id(tmp_path, data_repo):
-    reference = load_twin(write_twin(tmp_path / "a", RAW_MCMC)).twin_id("v1")
-    assert load_twin(write_twin(tmp_path / "b", RAW_MCMC + PUBLIC)).twin_id("v1") == reference
+    reference = load_twin(write_orx(write_twin(tmp_path / "a", RAW_MCMC))).twin_id("v1")
+    assert load_twin(write_orx(write_twin(tmp_path / "b", RAW_MCMC + PUBLIC))).twin_id("v1") == reference
 
 
 # Compatibilité -------------------------------------------------------------------------------------------------
@@ -209,10 +216,10 @@ def test_a_90_percent_report_needs_the_quantiles_05_and_95(tmp_path, data_repo):
     """P2.3e : mcmc.quantiles contient 0,05 et 0,95 si un rapport à 90 % est demandé."""
     cases = {"[0.05, 0.5]": "0.95", "[0.5, 0.95]": "0.05", "[0.5]": "0.05, 0.95"}
     for i, (quantiles, missing) in enumerate(cases.items()):
-        text = RAW_MCMC.replace("  seed: 42\n", f"  seed: 42\n  quantiles: {quantiles}\n")
+        text = RAW_MCMC.replace("  n_field_samples: 7\n", f"  n_field_samples: 7\n  quantiles: {quantiles}\n")
         error = [e for e in _issues(tmp_path / str(i), text) if e.code == "E_TWIN_REPORT_QUANTILES"]
         assert len(error) == 1 and error[0].field == "mcmc.quantiles" and error[0].params["quantiles"] == missing
-    ok = RAW_MCMC.replace("  seed: 42\n", "  seed: 42\n  quantiles: [0.05, 0.25, 0.95]\n")
+    ok = RAW_MCMC.replace("  n_field_samples: 7\n", "  n_field_samples: 7\n  quantiles: [0.05, 0.25, 0.95]\n")
     assert load_twin(write_twin(tmp_path / "ok", ok)).mcmc.quantiles == (0.05, 0.25, 0.95)
 
 
@@ -225,7 +232,7 @@ def _issues(tmp_path, text):
 def test_the_default_report_also_asks_for_90_percent(tmp_path, data_repo):
     """Sans clé `report`, le rapport par défaut demande le flux à 90 % : mcmc.quantiles doit contenir 0,05 et 0,95.
     Un twin direct n'a pas de quantiles : rien à vérifier."""
-    text = RAW_MCMC.replace("  seed: 42\n", "  seed: 42\n  quantiles: [0.5]\n")
+    text = RAW_MCMC.replace("  n_field_samples: 7\n", "  n_field_samples: 7\n  quantiles: [0.5]\n")
     assert refused(tmp_path / "mcmc", text) == [("mcmc.quantiles", "E_TWIN_REPORT_QUANTILES")]
     assert not load_twin(write_twin(tmp_path / "direct", RAW_DIRECT)).report.declared
 
