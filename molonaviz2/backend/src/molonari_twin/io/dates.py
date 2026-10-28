@@ -16,6 +16,18 @@ import pandas as pd
 
 from ..errors import UserError
 
+# Convention provisoire (décision de l'équipe) : UTC+2 TOUTE L'ANNÉE pour les dates des bruts.
+# Les exports HOBOware déclarent « GMT+01:00 » en été comme en hiver, ce qui ne reflète pas l'heure d'été réelle ;
+# tant que l'heure des horloges des loggers n'est pas confirmée, un en-tête qui déclare +01:00 est lu comme +02:00
+# (avertissement W_MEASURES_TIMEZONE_OVERRIDDEN). Les dates elles-mêmes ne bougent pas : elles restent écrites telles
+# quelles, sans fuseau, et seul `utc_offset` change (UTC = date - utc_offset).
+# NOTE PROVISOIRE, à régler les années suivantes : l'heure réelle des loggers (CET en hiver, CEST en été) doit être
+# confirmée auprès des opérateurs terrain, puis la gestion CET/CEST traitée proprement.
+# TODO(fuseau) : remplacer cette constante par la vraie gestion de l'heure d'été et d'hiver.
+PROVISIONAL_UTC_OFFSET = timedelta(hours=2)
+# Le seul décalage d'en-tête qui est remplacé par la convention provisoire.
+HEADER_OFFSET_OVERRIDDEN = timedelta(hours=1)
+
 
 def _formats() -> list[str]:
     dates = []
@@ -106,6 +118,10 @@ def parse_date(value: str | None) -> datetime | None:
 
 
 # Fuseau déclaré par les fichiers (P2.1f) ---------------------------------------------------------------------
+#
+# TODO(fuseau) : la convention ci-dessous (PROVISIONAL_UTC_OFFSET) est PROVISOIRE. À régler les années suivantes :
+# confirmer auprès des opérateurs terrain l'heure réelle des horloges des loggers, puis traiter proprement
+# l'heure d'été et d'hiver (CET/CEST) au lieu d'un décalage fixe toute l'année.
 #
 # Convention : celle des données brutes. Les exports HOBOware déclarent dans l'en-tête de la colonne des dates un
 # décalage FIXE par rapport à UTC (« Date Heure, GMT+01:00 »), sans heure d'été ni nom de zone. Une date peut

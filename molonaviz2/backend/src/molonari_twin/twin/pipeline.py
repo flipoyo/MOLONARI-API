@@ -20,13 +20,18 @@ Sont refusés :
   contredit le fuseau déclaré (E_MEASURES_TIMEZONE_CONFLICT, par le lecteur).
 
 Fuseau des dates (P2.1f). La convention est celle des données brutes : l'en-tête de la colonne des dates de chaque
-export déclare un décalage fixe à UTC (« Date Heure, GMT+01:00 »), sans heure d'été ni nom de zone, et une date peut
-porter le sien. Normalisation : les dates du point restent des dates sans fuseau, écrites dans ce repère (celui de
-la température) ; `utc_offset` donne le décalage, et UTC = date - `utc_offset`. Si la pression est déclarée dans un
-autre décalage que la température, ses dates sont décalées vers celui de la température (exact, avec un
-avertissement), pour que l'association par date reste juste. Le paramètre `timezone` ne choisit rien : c'est une
-vérification (« +01:00 », « UTC », « GMT+1 ») contre ce que déclarent les fichiers. Rien n'est supposé quand rien
-n'est déclaré : les dates restent telles qu'écrites, `utc_offset` est None et un avertissement le dit.
+export déclare un décalage fixe à UTC (« Date Heure, GMT+01:00 »), et une date peut porter le sien. Normalisation :
+les dates du point restent des dates sans fuseau, écrites telles quelles dans le repère du fichier ; `utc_offset` donne
+le décalage, et UTC = date - `utc_offset`. Si la pression est déclarée dans un autre décalage que la température, ses
+dates sont décalées vers celui de la température (exact, avec un avertissement), pour que l'association par date reste
+juste. Le paramètre `timezone` ne choisit rien : c'est une vérification (« +02:00 », « UTC », « GMT+2 ») contre le
+`utc_offset` des fichiers. Rien n'est supposé quand rien n'est déclaré : les dates restent telles qu'écrites,
+`utc_offset` est None et un avertissement le dit.
+
+CONVENTION PROVISOIRE (TODO(fuseau), à régler les années suivantes) : un en-tête « GMT+01:00 » est lu comme UTC+2
+toute l'année (`io.dates.PROVISIONAL_UTC_OFFSET`, avertissement W_MEASURES_TIMEZONE_OVERRIDDEN), car il ne reflète
+pas l'heure d'été réelle. L'heure réelle des loggers doit être confirmée auprès des opérateurs terrain, puis la
+gestion CET/CEST traitée proprement. Les dates ne bougent pas, donc les mesures nettoyées non plus.
 
 Les incertitudes σ des instruments viennent du laboratoire : `Sigma_Meas_P` du capteur de pression, `Sigma_Meas_T`
 du thermomètre de la tige. Elles peuvent être remplacées explicitement.

@@ -71,6 +71,7 @@ MESSAGES: dict[str, str] = {
     "W_LEGACY_POINT_SKIPPED": "{point} : {error}",
     "W_LEGACY_SCHEME_NOT_FOUND": "{point}: scheme not found ({path}).",
     "W_LEGACY_STUDY_EXISTS": "Study \"{name}\" already exists: skipped.",
+    "W_MEASURES_TIMEZONE_OVERRIDDEN": "{file}: the header declares UTC{declared}, but the provisional convention (UTC{applied} all year) is applied to the raw dates, which are kept as written. To be confirmed with the field operators.",
     "W_MEASURES_TIMEZONE_UNDECLARED": "{file}: no time zone declared; the dates are kept as written, in the frame of the logger.",
     "W_POINT_INFO_UNREADABLE": "Could not read \"{value}\" for {field}.",
     "W_PIPELINE_TIMEZONE_SHIFTED": "{file} declares UTC offset {declared} while {reference_file} declares {reference}: its dates were shifted by {shift} to the frame of {reference_file}.",

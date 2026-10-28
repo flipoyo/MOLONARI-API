@@ -13,6 +13,7 @@ import pytest
 from conftest import EXAMPLE_TWINS, FIXTURES
 from molonari_twin.domain.models import CLEANED_COLUMNS
 from molonari_twin.errors import Issue, UserError
+from molonari_twin.io.dates import PROVISIONAL_UTC_OFFSET
 from molonari_twin.processing.cleanup import CleanupSettings, read_cleaned_csv
 from molonari_twin.twin.pipeline import (
     clean_point,
@@ -127,6 +128,7 @@ def test_a_laboratory_sigma_that_is_not_positive_is_refused(tmp_path):
 
 DECLARED = "GMT+01:00"
 PLUS_ONE = timedelta(hours=1)
+PLUS_TWO = timedelta(hours=2)
 
 
 def read_date(text):
@@ -168,27 +170,36 @@ def same_as_default(point, **kwargs):
     return result
 
 
-def test_the_raw_data_declare_a_fixed_offset():
-    """Tous les bruts réels (Point034, 047, 051, 52, 53) déclarent « GMT+01:00 », en été comme en hiver : un décalage
-    fixe, pas l'heure légale de Paris. Il est repris tel quel et ne change pas les dates."""
+def timezone_warnings(raw, code=None):
+    return [w for w in raw.warnings if "TIMEZONE" in w.code and (code is None or w.code == code)]
+
+
+def test_the_raw_data_declare_gmt_plus_1_and_the_provisional_convention_reads_it_as_utc_plus_2():
+    """Tous les bruts réels (Point034, 047, 051, 52, 53) déclarent « GMT+01:00 », en été comme en hiver. Convention
+    PROVISOIRE (TODO(fuseau)) : UTC+2 toute l'année. Les dates restent écrites telles quelles, seul `utc_offset` change."""
+    assert PROVISIONAL_UTC_OFFSET == PLUS_TWO
     raw = read_raw_point(POINT034)
-    assert (raw.temperature.utc_offset, raw.pressure.utc_offset, raw.utc_offset) == (PLUS_ONE, PLUS_ONE, PLUS_ONE)
-    assert not [w for w in raw.warnings if "TIMEZONE" in w.code]
+    assert (raw.temperature.utc_offset, raw.pressure.utc_offset, raw.utc_offset) == (PLUS_TWO, PLUS_TWO, PLUS_TWO)
+    overridden = timezone_warnings(raw)
+    assert sorted((w.code, w.params["file"], w.params["declared"], w.params["applied"]) for w in overridden) == [
+        ("W_MEASURES_TIMEZONE_OVERRIDDEN", "point034_P_measures.csv", "+01:00", "+02:00"),
+        ("W_MEASURES_TIMEZONE_OVERRIDDEN", "point034_T_measures.csv", "+01:00", "+02:00"),
+    ]
     result = run_pipeline(POINT034, LAB)
-    assert result.utc_offset == PLUS_ONE and result.point.utc_offset == PLUS_ONE
+    assert result.utc_offset == PLUS_TWO and result.point.utc_offset == PLUS_TWO
     assert result.cleaned["date"].iloc[0] == pd.Timestamp("2016-06-27 12:00")  # toujours dans le repère du fichier
 
 
-@pytest.mark.parametrize("timezone", ["+01:00", "+0100", "GMT+1", "UTC+01:00", "utc+1"])
-def test_a_requested_time_zone_equal_to_the_declared_one_is_accepted(timezone):
-    assert same_as_default(POINT034, timezone=timezone).utc_offset == PLUS_ONE
-    assert load_point(POINT034, LAB, timezone=timezone).utc_offset == PLUS_ONE
+@pytest.mark.parametrize("timezone", ["+02:00", "+0200", "GMT+2", "UTC+02:00", "utc+2"])
+def test_a_requested_time_zone_equal_to_the_applied_one_is_accepted(timezone):
+    assert same_as_default(POINT034, timezone=timezone).utc_offset == PLUS_TWO
+    assert load_point(POINT034, LAB, timezone=timezone).utc_offset == PLUS_TWO
 
 
-@pytest.mark.parametrize("timezone", ["UTC", "Z", "+02:00", "GMT-05:30"])
+@pytest.mark.parametrize("timezone", ["UTC", "Z", "+01:00", "GMT-05:30"])
 def test_a_requested_time_zone_that_contradicts_the_files_is_a_conflict(timezone):
     error = refusal(lambda: run_pipeline(POINT034, LAB, timezone=timezone))
-    assert error.code == "E_PIPELINE_TIMEZONE_CONFLICT" and error.params["declared"] == "+01:00"
+    assert error.code == "E_PIPELINE_TIMEZONE_CONFLICT" and error.params["declared"] == "+02:00"
 
 
 @pytest.mark.parametrize("timezone", ["Europe/Paris", "CET", "1", "GMT+15:00", "GMT+01:75"])
@@ -280,12 +291,42 @@ def test_an_offset_beyond_the_possible_range_is_refused(point):
     assert refusal(lambda: read_raw_point(point)).code == "E_DATE_OFFSET_INVALID"
 
 
+def test_a_pressure_file_declaring_plus_2_is_no_longer_in_conflict_with_a_temperature_file_declaring_plus_1(point):
+    """Cas de Point2024-1 à 3 (P en GMT+02:00, T en GMT+01:00) : la convention provisoire lit les deux en UTC+2. Il n'y
+    a rien à décaler, et seul l'en-tête +01:00 est signalé."""
+    rewrite_dates(point / "point034_P_measures.csv", write_date, header="GMT+02:00")
+    raw = read_raw_point(point)
+    assert (raw.pressure.utc_offset, raw.temperature.utc_offset, raw.utc_offset) == (PLUS_TWO, PLUS_TWO, PLUS_TWO)
+    assert [(w.code, w.params["file"]) for w in timezone_warnings(raw)] == [("W_MEASURES_TIMEZONE_OVERRIDDEN", "point034_T_measures.csv")]
+    assert same_as_default(point).utc_offset == PLUS_TWO
+
+
+@pytest.mark.parametrize("header, offset", [("GMT+03:00", 3), ("GMT-05:30", -5.5), ("UTC", 0)])
+def test_a_header_other_than_plus_1_or_plus_2_keeps_its_own_offset(point, header, offset):
+    for name in ("point034_P_measures.csv", "point034_T_measures.csv"):
+        path = point / name
+        path.write_text(path.read_text(encoding="utf-8-sig").replace(DECLARED, header), encoding="utf-8")
+    raw = read_raw_point(point)
+    assert raw.utc_offset == timedelta(hours=offset)
+    assert not timezone_warnings(raw)
+
+
+def test_a_header_declaring_plus_2_is_kept_without_a_warning(point):
+    for name in ("point034_P_measures.csv", "point034_T_measures.csv"):
+        path = point / name
+        path.write_text(path.read_text(encoding="utf-8-sig").replace(DECLARED, "GMT+02:00"), encoding="utf-8")
+    raw = read_raw_point(point)
+    assert raw.utc_offset == PLUS_TWO and not timezone_warnings(raw)
+
+
 def test_two_files_in_different_offsets_are_aligned_on_the_temperature_frame(point):
-    """Pression déclarée en GMT+02:00 (dates écrites une heure plus tard) : même instants, donc même résultat, et
-    un avertissement dit que ses dates ont été décalées. C'est le cas de Point2024-1 (P en +02:00, T en +01:00)."""
+    """Température aux dates écrites avec leur décalage explicite +01:00 (jamais remplacé), pression déclarée en
+    GMT+02:00 avec ses dates écrites une heure plus tard : mêmes instants, donc même résultat, et un avertissement dit
+    que les dates de la pression ont été décalées vers le repère de la température."""
+    rewrite_dates(point / "point034_T_measures.csv", as_iso("+01:00"), header="")
     rewrite_dates(point / "point034_P_measures.csv", lambda m: write_date(m + PLUS_ONE), header="GMT+02:00")
     raw = read_raw_point(point)
-    assert (raw.pressure.utc_offset, raw.temperature.utc_offset, raw.utc_offset) == (2 * PLUS_ONE, PLUS_ONE, PLUS_ONE)
+    assert (raw.pressure.utc_offset, raw.temperature.utc_offset, raw.utc_offset) == (PLUS_TWO, PLUS_ONE, PLUS_ONE)
     shifted = [w for w in raw.warnings if w.code == "W_PIPELINE_TIMEZONE_SHIFTED"]
     assert len(shifted) == 1
     assert shifted[0].params == {"file": "point034_P_measures.csv", "declared": "+02:00", "reference_file": "point034_T_measures.csv",
@@ -298,7 +339,7 @@ def test_only_one_file_declaring_its_time_zone_is_ambiguous(point):
     path.write_text(path.read_text(encoding="utf-8-sig").replace(", " + DECLARED, ""), encoding="utf-8")
     error = refusal(lambda: read_raw_point(point))
     assert error.code == "E_PIPELINE_TIMEZONE_AMBIGUOUS"
-    assert error.params == {"declared_file": "point034_T_measures.csv", "declared": "+01:00", "other_file": "point034_P_measures.csv"}
+    assert error.params == {"declared_file": "point034_T_measures.csv", "declared": "+02:00", "other_file": "point034_P_measures.csv"}
 
 
 def test_spreadsheet_formats_are_refused_as_unsupported(point):
@@ -323,7 +364,8 @@ def test_a_missing_measure_file_is_only_a_warning_when_not_required(point):
     (point / "point034_P_measures.csv").unlink()
     raw = read_raw_point(point, require_measures=False)
     assert raw.pressure is None and raw.temperature is not None
-    assert [w.code for w in raw.warnings] == ["E_PIPELINE_NO_PRESSURE_FILE"] and isinstance(raw.warnings[0], Issue)
+    others = [w for w in raw.warnings if "TIMEZONE" not in w.code]
+    assert [w.code for w in others] == ["E_PIPELINE_NO_PRESSURE_FILE"] and isinstance(others[0], Issue)
     (point / "point034_T_measures.csv").unlink()
     assert refusal(lambda: read_raw_point(point, require_measures=False)).code == "E_PIPELINE_NO_TEMPERATURE_FILE"
 

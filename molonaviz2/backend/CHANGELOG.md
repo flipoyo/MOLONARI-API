@@ -24,13 +24,16 @@ Phase 2 du plan twin v3 : issues P2.1 (pipeline du brut, avec BN-03 et BN-04) et
 
 ### P2.1f : dates avec fuseau
 
-- **Convention : celle des données brutes** (décision de l'équipe, P0.5b). Tous les exports HOBOware du dépôt de données (Point034, 047, 051-1, 051-2, 52, 53) déclarent dans l'en-tête de la colonne des dates un décalage **fixe** à UTC, « Date Heure, GMT+01:00 », en été comme en hiver. Les dates restent des dates sans fuseau, écrites dans ce repère : les mesures nettoyées de `Demo_twin_0.molo` ne changent pas. `utc_offset` donne le décalage (UTC = date - `utc_offset`) sur `ParsedMeasures`, `RawPoint`, `LoadedPoint` et `PipelineResult`.
-- Une date peut porter son propre décalage (`2016-06-27T12:00:00+01:00`, `Z`) ; il tient lieu de déclaration sans en-tête, et ne peut pas contredire l'en-tête.
-- Si la pression et la température déclarent deux décalages différents, les dates de la pression sont décalées vers le repère de la température (exact), avec l'avertissement `W_PIPELINE_TIMEZONE_SHIFTED`.
-- `timezone` (pipeline) n'est plus refusé : c'est une **vérification** (`+01:00`, `UTC`, `GMT+1`) contre ce que déclarent les fichiers. Il ne choisit rien.
+> **NOTE PROVISOIRE, à régler les années suivantes (`TODO(fuseau)`).** La convention appliquée aux bruts est **UTC+2 toute l'année** (`io.dates.PROVISIONAL_UTC_OFFSET`), décidée par l'équipe à titre provisoire. L'heure réelle des horloges des loggers (CET en hiver, CEST en été) doit être **confirmée auprès des opérateurs terrain**, puis la gestion CET/CEST traitée proprement à la place de ce décalage fixe.
+
+- **Ce que déclarent les bruts** : tous les exports HOBOware du dépôt de données (Point034, 047, 051-1, 051-2, 52, 53) écrivent dans l'en-tête de la colonne des dates un décalage fixe, « Date Heure, GMT+01:00 », en été comme en hiver. Cet en-tête ne reflète pas l'heure d'été réelle.
+- **Convention provisoire** : un en-tête qui déclare `GMT+01:00` est lu comme `UTC+2`, avec l'avertissement `W_MEASURES_TIMEZONE_OVERRIDDEN` (pas une erreur). Un en-tête `GMT+02:00` est gardé tel quel, sans avertissement. Tout autre décalage d'en-tête garde le comportement décrit plus bas (conflit ou erreur). Une date qui porte elle-même son décalage (`2016-06-27T12:00:00+01:00`) est exacte et n'est jamais remplacée.
+- **Les dates ne bougent pas** : elles restent des dates sans fuseau, écrites telles quelles. Seul `utc_offset` (sur `ParsedMeasures`, `RawPoint`, `LoadedPoint` et `PipelineResult`) change : UTC = date - `utc_offset`. Les mesures nettoyées de `Demo_twin_0.molo` (Point034) ne changent pas.
+- Point2024-1 à 3 (pression `GMT+02:00`, température `GMT+01:00`) : les deux sont lus en UTC+2, il n'y a donc plus de conflit ni de décalage à faire.
+- Si la pression et la température déclarent tout de même deux décalages différents (par exemple des dates à décalage explicite), les dates de la pression sont ramenées exactement dans le repère de la température, avec l'avertissement `W_PIPELINE_TIMEZONE_SHIFTED`.
+- `timezone` (pipeline) n'est plus refusé : c'est une **vérification** (`+02:00`, `UTC+2`, `GMT+2`) contre le `utc_offset` appliqué. Il ne choisit rien.
 - Rien n'est supposé : sans déclaration, les dates restent telles qu'écrites, `utc_offset` est `None` et `W_MEASURES_TIMEZONE_UNDECLARED` le dit.
 - Erreurs : `E_PIPELINE_TIMEZONE` est supprimé et remplacé par `E_PIPELINE_TIMEZONE_INVALID` (nom de zone comme `Europe/Paris`, décalage hors de ±14 h), `E_PIPELINE_TIMEZONE_CONFLICT`, `E_PIPELINE_TIMEZONE_UNDECLARED`, `E_PIPELINE_TIMEZONE_AMBIGUOUS` (un seul des deux fichiers déclare), `E_MEASURES_TIMEZONE_CONFLICT` (une date contredit le fichier), `E_MEASURES_TIMEZONE_MIXED`, `E_MEASURES_TIMEZONE_PARTIAL`, `E_DATE_OFFSET_INVALID`. Ces codes ne sont pas dans le contrat `/v1` : `API_VERSION` ne change pas.
-- À valider : le décalage déclaré est celui de l'ordinateur au lancement ou à l'export, pas une mesure ; rien ne prouve que l'horloge du logger l'a suivi (voir la PR).
 
 ### P2.2 : schéma molonari-twin/2.0.0
 
