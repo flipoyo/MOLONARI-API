@@ -34,6 +34,11 @@ Phase 2 du plan twin v3 : issues P2.1 (pipeline du brut, avec BN-03 et BN-04) et
 - `metadata.json` : `files`, la SHA-256 de chaque fichier de résultats (P2.2f, absent de A3). Pour un twin 2.0.0, `data` donne le laboratoire, le point et l'empreinte des mesures nettoyées.
 - `API_VERSION = 1.0.0-alpha.5` : HN-02 ne donne plus `seed`. Le snapshot OpenAPI et `docs/API_V1.md` sont régénérés.
 
+### P2.4 : tests de déterminisme et `--strict`
+
+- `tests/test_determinism.py` : du brut aux fichiers de résultats, `thin = k` garde exactement une itération sur k (même trajectoire que `thin = 1`, au bit près) ; les chaînes et itérations des champs sont celles des paramètres (recalcul du modèle direct) ; même graine, `posterior.npz` et tous les fichiers de résultats identiques au bit près (aussi entre deux processus) ; deux graines, des chaînes toutes différentes ; `--strict` refuse un dépôt modifié (twin ou code, fichier modifié ou non suivi) et un build `+g…`, sans rien écrire. Aucun changement du code, aucune version.
+- `acceptance` (posterior.npz) est comptée sur les itérations gardées : elle dépend de `thin`. Déterministe, donc non corrigée ici.
+
 ### Ajouté
 - `twin/pipeline.py` : `read_raw_point`, `resolve_instruments`, `load_point`, `clean_point`, `column_inputs` et `run_pipeline`. Il enchaîne les lecteurs (`io/lab_import.py`, `io/point_import.py`), `clean(…, CleanupSettings)` et `ColumnInputs.from_cleaned`, sans dupliquer leur code. Le brut de Point034 redonne exactement les mesures nettoyées de `examples/twins/twin_01/measurements.csv` (1436 dates, ou 1430 dans la fenêtre du twin).
 - σ des instruments : `Sigma_Meas_P` du capteur de pression et `Sigma_Meas_T` du thermomètre de la tige entrent dans `ColumnInputs` ; `sigma_pressure` et `sigma_temperature` peuvent les remplacer.
