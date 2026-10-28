@@ -13,8 +13,11 @@ sont **blanches** : un champ n'est publié que s'il est listé ici, et une quest
 - Les agrégats publiables (flux, échanges, volumes, convergence publique) : leurs grandeurs, sans les séries
   par échantillon (`samples`, `field_time`, `p_infiltration_series`), qui sont des états dérivés (T3).
 
-Les autres questions (HN-20, HN-30, HN-33, HN-40, HN-42, BN-30, BN-32, BN-34, HN-41 dont le verdict n'est pas public)
-n'ont pas encore de projection : leur liste sera fixée avec le générateur (P2c.3), et elles sont refusées d'ici là.
+Livrées avec le générateur (P2c.3) : HN-40 `fit_quality` (RMSE et biais par capteur, RMSE totale ; ni σ, ni RMSE/σ, qui la
+révèlent), la différence entre les deux modèles (`model_difference`, nom `compare` dans le rapport), HN-42 `soil_properties`,
+BN-32 `posterior_samples` et BN-34 `chain_data`. Les autres questions (HN-20, HN-30, HN-33, BN-30 : des états ou des
+mesures ; HN-41 dont le verdict n'est pas public) n'ont pas de projection : elles sont refusées, même déclarées publiques,
+tant que la résolution de la grille de requêtes n'est pas décidée (tension T3).
 """
 
 from __future__ import annotations
@@ -36,6 +39,18 @@ PUBLIC_DATA: dict[str, tuple[str, ...]] = {
         "infiltration_share", "exfiltration_share", "dominant", "reversals", "points", "start", "end", "p_infiltration",
     ),
     "exchanged_volume": ("infiltration", "exfiltration", "net"),
+    # P2c.3 : agrégats (RMSE), PDF a posteriori (résumé, échantillons, chaînes : publics si `posterior` l'est)
+    "fit_quality": ("rmse", "bias", "rmse_total", "sensor", "level", "model", "uncertainty", "median_rmse", "median_rmse_total"),
+    "model_difference": ("mean_difference", "rmse", "rmse_total", "sensor", "points"),
+    "soil_properties": (
+        "layers", "level", *(f"{name}{suffix}" for name in ("k", "K", "n", "lambda_s", "rhos_cs")
+                             for suffix in ("", "_median", "_identifiability")),
+    ),
+    "posterior_samples": ("samples", "iteration", "chain", "layer", "parameter", "parameter_unit", "space"),
+    "chain_data": (
+        "iteration", "chain", "samples.neg_log10_k", "samples.porosity", "samples.lambda_s", "samples.rhos_cs", "energy",
+        "acceptance", "resets", "count",
+    ),
     "public_convergence": (
         "rhat_max", "ess_min", "acceptance_mean", "burn_in_converged", "burn_in_iterations", "chains", "samples_per_chain",
         "rhat_green", "rhat_orange", "ess_green", "ess_orange", "thresholds_validated",
@@ -44,6 +59,9 @@ PUBLIC_DATA: dict[str, tuple[str, ...]] = {
 
 # Éléments de l'environnement de calcul publiés par HN-43 (dans provenance["repositories"]["environment"]).
 PUBLIC_ENVIRONMENT = ("jax", "jaxlib", "numpy", "platform", "processor", "device")
+
+# Paramètres de la demande qui sont un réglage privé (`inversion_settings`) : retirés de la provenance publique (σ des thermomètres).
+PRIVATE_PARAMETERS = ("sigma",)
 
 # Clés de la provenance publique d'une réponse : la question, sa référence, ses paramètres, l'instance du space.
 PUBLIC_PROVENANCE = ("question", "ref", "parameters")
@@ -59,6 +77,8 @@ def public_answer(question_id: str, answer: Answer, instance: str | None = None)
     if question_id == "provenance":
         data.update(_environment(answer))
     provenance = {key: answer.provenance[key] for key in PUBLIC_PROVENANCE if key in answer.provenance}
+    if isinstance(provenance.get("parameters"), dict):
+        provenance["parameters"] = {k: v for k, v in provenance["parameters"].items() if k not in PRIVATE_PARAMETERS}
     if instance is not None:
         provenance["instance"] = instance
     return replace(answer, data=data, provenance=provenance)

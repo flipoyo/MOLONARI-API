@@ -254,7 +254,7 @@ Sorties : `time`, `measured`, `simulated`, `level`, `z`, `sigma`, `field_time`, 
 Per sensor: RMSE, bias (simulated − measured), RMSE/σT, lag-1 autocorrelation of the residuals and, in mcmc mode with stored fields, the share of measurements the predictive band covers; then the total RMSE (root mean square of the three). Arrays are sensor first: (3,). A direct twin is the forward model (`model` forward, `uncertainty` none); an mcmc twin is the inversion model, represented by its best sample, and `median_rmse` and `median_rmse_total` give the RMSE of the posterior median in addition. The direct difference forward − inversion is `TwinAPI.model_difference`, which needs two twins.
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
-- Accès : rapport public si ces éléments sont publics : `raw_data`, `processed_data`. Pas encore de projection publique : refusée dans un rapport (`E_REPORT_NO_PROJECTION`).
+- Accès : rapport public si ces éléments sont publics : `raw_data`, `processed_data`. Projection publique, champs publiés : `rmse`, `bias`, `rmse_total`, `sensor`, `level`, `model`, `uncertainty`, `median_rmse`, `median_rmse_total`.
 - Requête : `POST /v1/twins/{ref}/questions/fit_quality`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -319,7 +319,7 @@ Sorties : `twin_id`, `code_version`, `results_format`, `created_at`, `device`, `
 Per layer: permeability k (m²), hydraulic conductivity K (m/s, k·ρw·g/μ with water at 20 °C: an approximation), porosity n, solid thermal conductivity λs and heat capacity ρs·cs. In mcmc mode the best value, the median, the highest-density interval (computed in the space of the priors, −log₁₀ k for k) and the identifiability (posterior standard deviation over that of a uniform prior: near 1, the data teach nothing). In direct mode, the values of the configuration.
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
-- Accès : rapport public si ces éléments sont publics : `posterior`, `forward_parameters`. Pas encore de projection publique : refusée dans un rapport (`E_REPORT_NO_PROJECTION`).
+- Accès : rapport public si ces éléments sont publics : `posterior`, `forward_parameters`. Projection publique, champs publiés : `layers`, `level`, `k`, `k_median`, `k_identifiability`, `K`, `K_median`, `K_identifiability`, `n`, `n_median`, `n_identifiability`, `lambda_s`, `lambda_s_median`, `lambda_s_identifiability`, `rhos_cs`, `rhos_cs_median`, `rhos_cs_identifiability`.
 - Requête : `POST /v1/twins/{ref}/questions/soil_properties`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -386,7 +386,7 @@ Sorties : `time`, `measured`, `simulated`, `residual`, `rmse`, `field_time`, `cr
 Parameters, energies, acceptance and burn-in resets of the chosen chains, with the computed iteration of each kept sample; read thinning and iteration range as in the computation.
 
 - Modes : mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
-- Accès : rapport public si ces éléments sont publics : `posterior`, `inversion_settings_public`. Pas encore de projection publique : refusée dans un rapport (`E_REPORT_NO_PROJECTION`).
+- Accès : rapport public si ces éléments sont publics : `posterior`, `inversion_settings_public`. Projection publique, champs publiés : `iteration`, `chain`, `samples.neg_log10_k`, `samples.porosity`, `samples.lambda_s`, `samples.rhos_cs`, `energy`, `acceptance`, `resets`, `count`.
 - Requête : `POST /v1/twins/{ref}/questions/chain_data`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -418,7 +418,7 @@ Sorties : `nb_chains`, `burn_in_max`, `nb_iter`, `thin`, `kept_per_chain`, `samp
 The posterior samples as an array (chain, iteration, layer, parameter) in the space of the priors (−log₁₀ k, n, λs, ρs·cs; k = 10^−x in m²), with its axes. Chains, range of computed iterations, burn (kept iterations skipped at the start) and thin choose the samples.
 
 - Modes : mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
-- Accès : rapport public si ces éléments sont publics : `posterior`, `inversion_settings_public`. Pas encore de projection publique : refusée dans un rapport (`E_REPORT_NO_PROJECTION`).
+- Accès : rapport public si ces éléments sont publics : `posterior`, `inversion_settings_public`. Projection publique, champs publiés : `samples`, `iteration`, `chain`, `layer`, `parameter`, `parameter_unit`, `space`.
 - Requête : `POST /v1/twins/{ref}/questions/posterior_samples`
 
 | Paramètre | Type | Défaut | Bornes | Description |
