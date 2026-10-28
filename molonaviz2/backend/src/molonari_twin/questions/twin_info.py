@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
+
 import numpy as np
 
-from ..twin.config import TwinConfig
+from ..twin.config import VISIBILITY_ELEMENTS, TwinConfig
 from ..twin.results import TwinResults
 from .answer import Answer, Quantity
 
@@ -13,10 +15,26 @@ def _date(value):
     return None if value is None else np.datetime64(value, "s")
 
 
+def _report(config: TwinConfig) -> dict[str, Quantity]:
+    """Le rapport demandé : les valeurs par défaut quand la clé `report` est absente (`report_declared` vaut alors faux)."""
+    report = config.report
+    return {
+        "report_declared": Quantity(report.declared, "1"),
+        "report_questions": Quantity(np.array([entry.question for entry in report.entries]), "1"),
+        "report_parameters": Quantity(
+            np.array([json.dumps(entry.parameters, sort_keys=True, ensure_ascii=False, default=str) for entry in report.entries]), "1"),
+        "report_forward": Quantity(report.forward or "", "1"),
+        "report_inversion": Quantity(report.inversion or "", "1"),
+    }
+
+
 def describe(config: TwinConfig) -> Answer:
     """Couches, capteurs, période, mode et réglages principaux, lus dans la configuration (sans calcul).
 
-    La graine de l'inversion n'y figure pas : elle est réservée au niveau ORX (patch « accès » du 26/10, P2c.2g)."""
+    La graine de l'inversion n'y figure pas : elle est réservée au niveau ORX (patch « accès » du 26/10, P2c.2g).
+    S'y ajoutent les clés de publication (P2.3) : `site_label`, `monitoring_status`, la visibilité de chaque élément
+    (`visibility.<élément>`, défauts compris) et le rapport demandé (`report_*`, le rapport par défaut si la clé
+    `report` est absente)."""
     data = {
         "name": Quantity(config.name, "1"),
         "point": Quantity(config.point, "1"),
@@ -30,6 +48,10 @@ def describe(config: TwinConfig) -> Answer:
         "offset": Quantity(float(config.offset), "m"),
         "nb_cells": Quantity(int(config.nb_cells), "1"),
         "sigma_temperature": Quantity(float(config.sigma_temperature), "°C"),
+        "site_label": Quantity(config.site_label, "1"),
+        "monitoring_status": Quantity(config.monitoring_status or "", "1"),
+        **{f"visibility.{element}": Quantity(bool(config.visibility[element]), "1") for element in VISIBILITY_ELEMENTS},
+        **_report(config),
     }
     if config.mcmc is not None:
         mcmc = config.mcmc

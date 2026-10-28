@@ -47,6 +47,19 @@ Phase 2 du plan twin v3 : issues P2.1 (pipeline du brut, avec BN-03 et BN-04) et
 - `metadata.json` : `files`, la SHA-256 de chaque fichier de résultats (P2.2f, absent de A3). Pour un twin 2.0.0, `data` donne le laboratoire, le point et l'empreinte des mesures nettoyées.
 - `API_VERSION = 1.0.0-alpha.5` : HN-02 ne donne plus `seed`. Le snapshot OpenAPI et `docs/API_V1.md` sont régénérés.
 
+### P2.3 : clés de publication du schéma 2.0.0
+
+- Quatre clés nouvelles, lues et validées dans `twin.yaml` 2.0.0 seulement (les twins 1.x les refusent comme clés inconnues, et sont lus sans changement) :
+  - `visibility` : un booléen par élément (`inversion_settings`, `inversion_settings_public`, `forward_parameters`, `posterior`, `states`, `raw_data`, `processed_data`). Défaut : tout privé, sauf la PDF (`posterior`) et les réglages que ses échantillons révèlent (`inversion_settings_public`), qui ne peuvent pas rester privés tant que `posterior` est public (`E_TWIN_VISIBILITY_REVEALED`). **La graine n'est pas un élément** : `visibility.seed` est refusée (`E_TWIN_VISIBILITY_SEED`).
+  - `monitoring: {status: actif | inactif}`.
+  - `site_label` : libellé public du site, une ligne de 120 caractères au plus, qui ne reprend ni le nom du twin ni celui du point (`E_TWIN_SITE_LABEL_DISTINCT`).
+  - `report: {models: {forward, inversion}, entries: [{question, parameters}]}`. Chaque question doit exister et lire une configuration ou des résultats ; ses paramètres sont validés par le modèle de la question ; pas d'entrée en double ; `models` nomme deux dossiers de twins différents. Sans la clé, le rapport par défaut : `water_flux` à 0,9 et `fit_quality`.
+- Contrôles du rapport : un rapport déclaré vide ou sans `water_flux` ni `fit_quality` est refusé (`E_TWIN_REPORT_EMPTY`, `E_TWIN_REPORT_MINIMUM`), de même qu'un twin mcmc sans flux d'eau à 90 % (`E_TWIN_REPORT_LEVEL`) ; `mcmc.quantiles` doit contenir 0,05 et 0,95 dès qu'une entrée, ou le rapport par défaut, demande un intervalle à 90 % (`E_TWIN_REPORT_QUANTILES`).
+- Aucune de ces clés n'entre dans le `twin_id` : elles ne changent pas le résultat. Aucun identifiant de référence ne change.
+- HN-02 (`describe`) donne `site_label`, `monitoring_status`, `visibility.<élément>` (défauts compris) et le rapport demandé (`report_declared`, `report_questions`, `report_parameters`, `report_forward`, `report_inversion`), donc le rapport par défaut quand la clé `report` est absente (`report_declared` vaut alors faux).
+- `API_VERSION = 1.0.0-alpha.6` : sorties de HN-02. Snapshot OpenAPI et `docs/API_V1.md` régénérés.
+- `Visibility.from_config(config)` (`questions/visibility.py`, P2c.2) construit la déclaration à partir de la clé ; `ELEMENTS` y vient de `twin/config.py` (`VISIBILITY_ELEMENTS`), sans second jeu de noms. La projection publique de HN-02 ajoute `site_label` et `monitoring_status` (la carte d'identité) ; ni `visibility.*` ni `report_*` n'y entrent (ils sont dans `report.json`).
+- Reste à faire : refuser dans le générateur (P2c.3) les questions réservées au développeur, lire `report.entries` pour écrire le rapport, et contrôler la comparabilité des deux twins de `report.models` (operating spaces).
 ### P2.2c : la graine dans orx.yaml (couche orx)
 
 - Un twin 2.0.0 lit sa graine dans `orx.yaml`, à côté de `twin.yaml` (couche `orx`, décision P0.7d du 2026-10-28) : `mcmc.seed` et la plateforme de référence (`platform` : `python`, `platform`, `processor`, `device`, `jax`, `jaxlib`, `numpy`, étiquette qui n'entre pas dans le `twin_id`). Nouveau module `twin/orx.py` ; `schema: molonari-orx/1.0.0` est facultatif ; les clés inconnues sont refusées (chemins `orx.mcmc.seed`…).

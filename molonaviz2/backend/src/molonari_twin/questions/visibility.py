@@ -5,7 +5,7 @@ La visibilité porte sur sept éléments (SPEC_RAPPORT_PUBLIC, section 5). Une q
 refuse d'écrire dans le rapport une réponse dont un élément exposé est privé.
 
 `Visibility` est une entrée des fonctions de contrôle : elle ne lit aucun fichier. La clé `visibility` de
-twin.yaml (schéma 2.0.0, P2.3a) se branchera dessus en construisant cet objet. Par défaut tout est privé, sauf
+twin.yaml (schéma 2.0.0, P2.3a) la fournit : `Visibility.from_config(config)`. Par défaut tout est privé, sauf
 la PDF a posteriori (`posterior`) et les réglages que ses échantillons révèlent de toute façon
 (`inversion_settings_public`).
 """
@@ -14,15 +14,9 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 
-ELEMENTS = (
-    "inversion_settings",  # réglages du MCMC qui restent privés : priors, delta, n_cr, c, c_star, seuil R̂, pas, σ
-    "inversion_settings_public",  # nb_chains, nb_iter, thin, burn-in effectif : les échantillons publics les révèlent
-    "forward_parameters",  # paramètres du sol d'un twin direct (k, n, λs, ρs·cs par couche)
-    "posterior",  # PDF a posteriori : résumé, échantillons et données par chaîne
-    "states",  # champs T, q(z, t), flux de chaleur
-    "raw_data",  # données brutes
-    "processed_data",  # données traitées
-)
+from ..twin.config import VISIBILITY_ELEMENTS, TwinConfig
+
+ELEMENTS = VISIBILITY_ELEMENTS  # les noms, les défauts et le contrôle de la clé `visibility` sont ceux de twin/config.py (P2.3a)
 
 # Éléments publics de fait : la PDF publique les révèle, la visibilité par défaut les déclare publics.
 PUBLIC_DE_FAIT = frozenset({"inversion_settings_public"})
@@ -53,6 +47,11 @@ class Visibility:
     states: bool = False
     raw_data: bool = False
     processed_data: bool = False
+
+    @classmethod
+    def from_config(cls, config: TwinConfig) -> Visibility:
+        """La déclaration de la clé `visibility` du twin (défauts compris)."""
+        return cls(**config.visibility)
 
     def is_public(self, element: str) -> bool:
         if element not in ELEMENTS:

@@ -56,6 +56,7 @@ from ..questions import (
     twin_exchanged_volume,
     water_flux,
 )
+from ..twin.config import VISIBILITY_ELEMENTS
 
 
 @dataclass
@@ -114,12 +115,16 @@ BANDS = ("field_time", "credible", "predictive", "coverage", "coverage_per_senso
 CATALOG: tuple[Question, ...] = (
     Question(
         "describe", "HN-02", "discovery", N_("What does this twin contain?"),
-        "Layers, sensors, period, mode and main settings, read from the configuration (no computation needed).",
+        "Layers, sensors, period, mode and main settings, read from the configuration (no computation needed), with the "
+        "publication keys: site label, monitoring status, visibility of each element and the report asked for (the default "
+        "report when the twin has none: `report_declared` is then false).",
         ("D", "M"), p.NoParams, "config",
         lambda twin, _: describe(twin.config),
         outputs=(
             "name", "point", "mode", "description", "start", "end", "layers", "layer_bottoms", "sensor_depths", "offset",
             "nb_cells", "sigma_temperature", "nb_chains", "nb_iter", "burn_in_max", "thin", "store_fields",
+            "site_label", "monitoring_status", *(f"visibility.{element}" for element in VISIBILITY_ELEMENTS),
+            "report_declared", "report_questions", "report_parameters", "report_forward", "report_inversion",
         ),
         exposes=("inversion_settings_public",),  # nb_chains, nb_iter et thin, que les échantillons publics révèlent ; la projection publique retire les réglages privés
     ),
