@@ -14,7 +14,9 @@ Deux familles de schémas coexistent, lues par le même `load_twin` :
   graine (obligatoire en mode mcmc). Plus de `code_version` (les versions sont dans `twin.cgs`), plus de
   `data.measurements`, de `sensors.depths` ni de `sensors.offset` : profondeurs, décalage et σ viennent des fichiers du
   laboratoire et du point (`twin/pipeline.py`), `sensors.sigma_*` les remplace. `legacy_twin_id` garde l'identifiant
-  d'un twin 1.x migré.
+  d'un twin 1.x migré. Quatre clés de publication, absentes des schémas 1.x (P2.3) : `site_label` (libellé public du
+  site), `monitoring: {status}`, `visibility` (ce que le développeur accepte de publier) et `report` (ce que le rapport
+  public contient). Aucune n'entre dans le `twin_id` : elles ne changent pas le résultat.
 
 Règles :
 - `twin_id` = empreinte (SHA-256) de la config canonique. Pour un twin 1.x, elle contient l'empreinte du fichier de
@@ -63,6 +65,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from itertools import pairwise
@@ -111,7 +114,8 @@ MCMC_KEYS = {"priors", "nb_chains", "nb_iter", "burn_in_max", "delta", "n_cr", "
 MCMC_DEFAULTS_1_1 = {"thin": 1, "fields_per_chain": None, "store_fields": "sensors"}
 
 # Schéma 2.0.0 : le brut (`data`), son nettoyage (`processing`) et la graine (`mcmc.seed`).
-TOP_KEYS_2 = {"schema", "name", "description", "mode", "data", "processing", "sensors", "layers", "numerics", "mcmc", "legacy_twin_id"}
+TOP_KEYS_2 = {"schema", "name", "description", "mode", "data", "processing", "sensors", "layers", "numerics", "mcmc", "legacy_twin_id",
+              "site_label", "monitoring", "visibility", "report"}
 REQUIRED_TOP_2 = ("schema", "name", "mode", "data", "layers")
 DATA_KEYS_2 = {"lab", "point"}
 PROCESSING_KEYS = {"start", "end", "methods", "excluded"}
@@ -129,6 +133,56 @@ REMOVED_IN_2_0_0 = {
     "sensors.offset": ("from_data", None),
 }
 INITIAL_CONDITIONS = ("linear",)
+
+# Clés de publication du schéma 2.0.0 (P2.3) -----------------------------------------------------------------
+# Éléments de visibilité (SPEC_RAPPORT_PUBLIC, section 5) et leur défaut : tout privé, sauf la PDF a posteriori et les
+# réglages que ses échantillons révèlent de toute façon. La graine n'en est PAS un : elle est réservée au niveau ORX,
+# et aucune clé ne peut la déclarer publique. `questions/visibility.py` (`ELEMENTS`, `Visibility`) porte les mêmes noms.
+VISIBILITY_DEFAULTS = {
+    "inversion_settings": False,
+    "inversion_settings_public": True,
+    "forward_parameters": False,
+    "posterior": True,
+    "states": False,
+    "raw_data": False,
+    "processed_data": False,
+}
+VISIBILITY_ELEMENTS = tuple(VISIBILITY_DEFAULTS)
+VISIBILITY_REVEALED = "inversion_settings_public"  # public de fait tant que `posterior` est public (échantillons publics)
+MONITORING_STATUS = ("actif", "inactif")
+MONITORING_KEYS = {"status"}
+SITE_LABEL_MAX = 120
+REPORT_KEYS = {"models", "entries"}
+REPORT_MODEL_KEYS = ("forward", "inversion")
+REPORT_ENTRY_KEYS = {"question", "parameters"}
+# Rapport par défaut (twin sans clé `report`) : le flux d'eau à 90 % et la qualité de l'ajustement (HN-10, HN-40).
+DEFAULT_REPORT_ENTRIES = (("water_flux", {"level": 0.9}), ("fit_quality", {}))
+REPORT_REQUIRED = ("water_flux", "fit_quality")  # informations obligatoires du rapport (SPEC_RAPPORT_PUBLIC, section 4)
+REPORT_INTERVAL_LEVEL = 0.9  # un intervalle à 90 % demande les quantiles 0,05 et 0,95 de mcmc.quantiles
+
+
+@dataclass(frozen=True)
+class ReportEntry:
+    """Une entrée de `report.entries` : une question du catalogue et ses paramètres (tels que déclarés)."""
+
+    question: str
+    parameters: dict = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ReportSpec:
+    """Clé `report` : les deux instances comparées (noms de dossiers de twins) et la grille fixe des entrées.
+
+    `declared` vaut False quand le twin n'a pas de clé `report` : c'est alors le rapport par défaut."""
+
+    entries: tuple[ReportEntry, ...]
+    forward: str | None = None
+    inversion: str | None = None
+    declared: bool = False
+
+
+def default_report() -> ReportSpec:
+    return ReportSpec(entries=tuple(ReportEntry(question, dict(parameters)) for question, parameters in DEFAULT_REPORT_ENTRIES))
 
 
 class TwinConfigError(UserError):
@@ -169,6 +223,11 @@ class TwinConfig:
     data_point: str = ""  # dossier du point, relatif à data_root
     processing: CleanupSettings | None = None
     legacy_twin_id: str | None = None  # identifiant 1.x d'un twin migré (étiquette : il n'entre pas dans le twin_id)
+    # Clés de publication (P2.3) : 2.0.0 seulement ; les twins 1.x ont les valeurs par défaut. Hors du twin_id.
+    site_label: str = ""  # libellé public du site, distinct du nom du point (tension T7)
+    monitoring_status: str | None = None  # "actif" | "inactif" ; None : non renseigné
+    visibility: dict[str, bool] = field(default_factory=lambda: dict(VISIBILITY_DEFAULTS))  # tous les éléments, défauts compris
+    report: ReportSpec = field(default_factory=default_report)
     # Lecture du brut, une fois par objet (chargée par load_twin).
     _point: pipeline.LoadedPoint | None = field(default=None, init=False, repr=False, compare=False)
     _cleanup: CleanupResult | None = field(default=None, init=False, repr=False, compare=False)
@@ -425,6 +484,172 @@ def _processing(check: _Checker, raw) -> CleanupSettings:
     return CleanupSettings(start=start, end=end, methods=methods, excluded=sorted(set(excluded)))
 
 
+def _visibility(check: _Checker, raw) -> dict[str, bool]:
+    """Clé `visibility` : un booléen par élément, les défauts pour les autres. La graine n'est pas un élément."""
+    visibility = dict(VISIBILITY_DEFAULTS)
+    if raw is None:
+        return visibility
+    if not isinstance(raw, dict):
+        check.add("visibility", "E_TWIN_EXPECTED_MAPPING")
+        return visibility
+    for key in sorted(set(raw) - set(VISIBILITY_ELEMENTS), key=str):
+        if key == "seed":
+            check.add("visibility.seed", "E_TWIN_VISIBILITY_SEED")
+        else:
+            check.add(f"visibility.{key}", "E_TWIN_UNKNOWN_KEY", keys=", ".join(VISIBILITY_ELEMENTS))
+    for element in VISIBILITY_ELEMENTS:
+        if element in raw:
+            if isinstance(raw[element], bool):
+                visibility[element] = raw[element]
+            else:
+                check.add(f"visibility.{element}", "E_TWIN_EXPECTED_BOOLEAN")
+    # Les échantillons de la PDF publique révèlent ces réglages : ils ne peuvent pas rester privés (SPEC, tension T11).
+    if visibility["posterior"] and not visibility[VISIBILITY_REVEALED]:
+        check.add(f"visibility.{VISIBILITY_REVEALED}", "E_TWIN_VISIBILITY_REVEALED")
+    return visibility
+
+
+def _monitoring(check: _Checker, raw) -> str | None:
+    """Clé `monitoring: {status: actif | inactif}`."""
+    if raw is None:
+        return None
+    section = check.mapping(raw, "monitoring", MONITORING_KEYS, ("status",))
+    status = section.get("status")
+    if "status" in section and status not in MONITORING_STATUS:
+        check.add("monitoring.status", "E_TWIN_ONE_OF", values=", ".join(MONITORING_STATUS))
+        return None
+    return status
+
+
+def _site_label(check: _Checker, raw, names: dict[str, str]) -> str:
+    """Clé `site_label` : un libellé public d'une ligne, qui ne reprend ni le nom du twin ni celui du point.
+
+    `names` : ce que le libellé ne doit pas contenir (clé du message → valeur). Le nom du point reste privé."""
+    if raw is None:
+        return ""
+    if not isinstance(raw, str):
+        check.add("site_label", "E_TWIN_EXPECTED_TEXT")
+        return ""
+    label = raw.strip()
+    if not label:
+        check.add("site_label", "E_TWIN_EMPTY")
+    elif len(label) > SITE_LABEL_MAX or "\n" in label:
+        check.add("site_label", "E_TWIN_SITE_LABEL_FORMAT", n=SITE_LABEL_MAX)
+    else:
+        for other, value in names.items():
+            if value and re.search(rf"(?<!\w){re.escape(value.casefold())}(?!\w)", label.casefold()):
+                check.add("site_label", "E_TWIN_SITE_LABEL_DISTINCT", other=other)
+                break
+    return label
+
+
+def _report_models(check: _Checker, raw) -> tuple[str | None, str | None]:
+    section = check.mapping(raw, "report.models", set(REPORT_MODEL_KEYS))
+    names = []
+    for key in REPORT_MODEL_KEYS:
+        value = section.get(key)
+        if key in section and (not isinstance(value, str) or not value.strip() or Path(value).name != value or value.startswith(".")):
+            check.add(f"report.models.{key}", "E_TWIN_REPORT_MODEL")
+            value = None
+        names.append(value)
+    if names[0] is not None and names[0] == names[1]:
+        check.add("report.models", "E_TWIN_REPORT_MODEL_SAME")
+    return names[0], names[1]
+
+
+def _report_entry(check: _Checker, raw, where: str, catalog: dict):
+    """Une entrée `{question, parameters}`. Rend (ReportEntry, niveau de l'intervalle ou None), ou None si elle est invalide."""
+    from pydantic import ValidationError
+
+    entry = check.mapping(raw, where, REPORT_ENTRY_KEYS, ("question",))
+    name = entry.get("question")
+    if "question" not in entry:
+        return None
+    if not isinstance(name, str) or name not in catalog:
+        check.add(f"{where}.question", "E_TWIN_REPORT_QUESTION", question=name, known=", ".join(sorted(catalog)))
+        return None
+    question = catalog[name]
+    if question.requires not in ("config", "results"):
+        check.add(f"{where}.question", "E_TWIN_REPORT_QUESTION_KIND", question=name)
+        return None
+    parameters = entry.get("parameters")
+    if parameters is None:
+        parameters = {}
+    elif not isinstance(parameters, dict):
+        check.add(f"{where}.parameters", "E_TWIN_EXPECTED_MAPPING")
+        return None
+    try:
+        validated = question.params.model_validate(parameters)
+    except ValidationError as error:
+        for problem in error.errors():
+            path = ".".join(str(part) for part in problem["loc"])
+            check.add(f"{where}.parameters.{path}" if path else f"{where}.parameters", "E_TWIN_REPORT_PARAMETERS", question=name, message=problem["msg"])
+        return None
+    level = getattr(validated, "level", None)
+    return ReportEntry(name, dict(parameters)), (float(level) if level is not None else None)
+
+
+def _report_quantiles(check: _Checker, asked: list[str], quantiles: tuple[float, ...] | None) -> None:
+    """P2.3e : `mcmc.quantiles` contient 0,05 et 0,95 si une entrée (`asked` : ses questions) demande un intervalle à 90 %."""
+    if quantiles is None or not asked:
+        return
+    lower, upper = (1 - REPORT_INTERVAL_LEVEL) / 2, (1 + REPORT_INTERVAL_LEVEL) / 2
+    missing = [q for q in (lower, upper) if not any(abs(q - stored) < 1e-9 for stored in quantiles)]
+    if missing:
+        check.add("mcmc.quantiles", "E_TWIN_REPORT_QUANTILES", quantiles=", ".join(f"{q:g}" for q in missing), question=asked[0])
+
+
+def _report(check: _Checker, raw, mode, quantiles: tuple[float, ...] | None) -> ReportSpec:
+    """Clé `report: {models, entries}`.
+
+    Sans clé : le rapport par défaut. Avec la clé : les questions existent, leurs paramètres sont valides, aucune entrée
+    n'est en double, le flux d'eau et la qualité de l'ajustement y sont (en mode mcmc, le flux avec un intervalle à 90 %),
+    et `mcmc.quantiles` contient 0,05 et 0,95 dès qu'une entrée demande un intervalle à 90 %. `quantiles` : None hors du
+    mode mcmc, ou si `mcmc` est invalide."""
+    if raw is None:
+        _report_quantiles(check, ["water_flux"], quantiles)  # le rapport par défaut demande le flux d'eau à 90 %
+        return default_report()
+    from ..api.catalog import CATALOG  # à l'appel : le catalogue importe ce module
+
+    catalog = {question.id: question for question in CATALOG}
+    before = len(check.issues)
+    section = check.mapping(raw, "report", REPORT_KEYS)
+    forward, inversion = _report_models(check, section["models"]) if section.get("models") is not None else (None, None)
+    raw_entries = section.get("entries")
+    entries: list[ReportEntry] = []
+    levels: list[tuple[ReportEntry, float | None]] = []
+    if "entries" not in section or raw_entries is None:
+        check.add("report.entries", "E_TWIN_REQUIRED")
+    elif not isinstance(raw_entries, list):
+        check.add("report.entries", "E_TWIN_EXPECTED_LIST")
+    elif not raw_entries:
+        check.add("report.entries", "E_TWIN_REPORT_EMPTY")
+    else:
+        seen: dict[tuple[str, str], int] = {}
+        for i, raw_entry in enumerate(raw_entries):
+            parsed = _report_entry(check, raw_entry, f"report.entries[{i}]", catalog)
+            if parsed is None:
+                continue
+            entry, level = parsed
+            key = (entry.question, json.dumps(entry.parameters, sort_keys=True, default=str))
+            if key in seen:
+                check.add(f"report.entries[{i}]", "E_TWIN_REPORT_DUPLICATE", first=seen[key])
+                continue
+            seen[key] = i
+            entries.append(entry)
+            levels.append((entry, level))
+        if len(check.issues) == before:
+            names = {entry.question for entry in entries}
+            for question in REPORT_REQUIRED:
+                if question not in names:
+                    check.add("report.entries", "E_TWIN_REPORT_MINIMUM", question=question)
+            if mode == "mcmc" and not any(e.question == "water_flux" and abs(lv - REPORT_INTERVAL_LEVEL) < 1e-9 for e, lv in levels):
+                check.add("report.entries", "E_TWIN_REPORT_LEVEL", level=f"{REPORT_INTERVAL_LEVEL:g}")
+            asked = [e.question for e, lv in levels if lv is not None and abs(lv - REPORT_INTERVAL_LEVEL) < 1e-9]
+            _report_quantiles(check, asked, quantiles)
+    return ReportSpec(entries=tuple(entries), forward=forward, inversion=inversion, declared=True)
+
+
 def load_twin(path: str | Path, check_data: bool = True, data_folder: str | Path | None = None) -> TwinConfig:
     """Lit et valide un twin. Lève TwinConfigError avec la liste complète des problèmes.
 
@@ -630,6 +855,15 @@ def load_twin(path: str | Path, check_data: bool = True, data_folder: str | Path
         if len(legacy_twin_id) != ID_LENGTH or any(c not in "0123456789abcdef" for c in legacy_twin_id):
             check.add("legacy_twin_id", "E_TWIN_LEGACY_ID", length=ID_LENGTH)
 
+    # Clés de publication (2.0.0). Le libellé du site ne doit contenir ni le nom du twin ni celui du point (privé).
+    site_label, monitoring_status, visibility, report = "", None, dict(VISIBILITY_DEFAULTS), default_report()
+    if v2:
+        point_label = loaded.raw.name if loaded is not None else Path(str(data.get("point", ""))).name
+        site_label = _site_label(check, doc.get("site_label"), {"name": name, "point": point_label})
+        monitoring_status = _monitoring(check, doc.get("monitoring"))
+        visibility = _visibility(check, doc.get("visibility"))
+        report = _report(check, doc.get("report"), mode, mcmc.quantiles if mcmc is not None else None)
+
     config = None
     if not check.issues:
         config = TwinConfig(
@@ -640,6 +874,7 @@ def load_twin(path: str | Path, check_data: bool = True, data_folder: str | Path
             declared_code_version=str(declared_version) if declared_version is not None else None,
             schema_version=schema_version, data_root=root, data_lab=lab_name, data_point=point_name,
             processing=processing, legacy_twin_id=legacy_twin_id,
+            site_label=site_label, monitoring_status=monitoring_status, visibility=visibility, report=report,
         )
         if v2:
             config._point = loaded
