@@ -2,8 +2,7 @@
 
 - Le twin part du brut (schéma 2.0.0) et passe par `run_twin`, donc par le pipeline, le moteur et l'écriture des
   fichiers. Les tests de l'échantillonneur seul sont dans test_engine_dream.py.
-- La graine se donne par `seed()` : aujourd'hui `mcmc.seed` de twin.yaml. Quand elle viendra de la couche orx
-  (P2.2c, `orx.yaml`), seule cette fonction change.
+- La graine est dans `orx.yaml`, à côté de twin.yaml (P2.2c) : `orx_text()` la donne, `write_mcmc_twin()` écrit les deux.
 - Les tests qui calculent un twin mcmc sont `slow` ; ceux du mode strict ne calculent rien (le refus précède le calcul).
 """
 
@@ -32,7 +31,7 @@ layers:
   - {{name: haut, z_low: 0.2}}
   - {{name: bas, z_low: 0.4}}
 mcmc:
-{seed}  nb_chains: {chains}
+  nb_chains: {chains}
   nb_iter: {iterations}
   thin: {thin}
   burn_in_max: 10
@@ -48,13 +47,13 @@ numerics: {nb_cells: 40}
 """
 
 
-def seed(value: int) -> str:
-    """Ligne de graine du twin.yaml (P2.2 : `mcmc.seed`). À remplacer quand la graine viendra de orx.yaml (P2.2c)."""
-    return f"  seed: {value}\n"
+def orx_text(value: int) -> str:
+    """Contenu de orx.yaml : la graine du MCMC, réservée à ORX depuis le schéma 2.0.0 (P2.2c)."""
+    return f"mcmc:\n  seed: {value}\n"
 
 
-def mcmc_text(seed_value: int = 42, thin: int = 3) -> str:
-    return TWIN.format(seed=seed(seed_value), thin=thin, chains=NB_CHAINS, iterations=NB_ITER)
+def mcmc_text(thin: int = 3) -> str:
+    return TWIN.format(thin=thin, chains=NB_CHAINS, iterations=NB_ITER)
 
 
 @pytest.fixture(scope="module")
@@ -66,6 +65,13 @@ def data_repo(tmp_path_factory):
     with pytest.MonkeyPatch.context() as patch:
         patch.setenv("MOLONARI_DATA", str(data))
         yield data
+
+
+def write_mcmc_twin(root, seed_value: int = 42, thin: int = 3, name="twin_01"):
+    """Twin mcmc avec sa couche orx : twin.yaml et, à côté, orx.yaml."""
+    folder = write_twin(root, mcmc_text(thin), name)
+    (folder / "orx.yaml").write_text(orx_text(seed_value), encoding="utf-8")
+    return folder
 
 
 def write_twin(root, text, name="twin_01"):
@@ -89,7 +95,7 @@ class Runs:
 
     def __call__(self, label, seed_value=42, thin=3):
         if label not in self.folders:
-            folder = write_twin(self.root / label, mcmc_text(seed_value, thin))
+            folder = write_mcmc_twin(self.root / label, seed_value, thin)
             self.folders[label] = run_twin(folder).status.results_dir
         return self.folders[label]
 
@@ -212,7 +218,7 @@ def test_two_seeds_give_different_chains_and_different_twin_ids(runs):
 def test_same_seed_in_two_fresh_processes_gives_identical_posterior(tmp_path, data_repo):
     posteriors = []
     for label in ("a", "b"):
-        folder = write_twin(tmp_path / label, mcmc_text())
+        folder = write_mcmc_twin(tmp_path / label)
         completed = subprocess.run([sys.executable, "-m", "molonari_twin", "run", str(folder)], capture_output=True, text=True,
                                    timeout=600, check=False, env={**os.environ, "MOLONARI_LANG": "en"})
         assert completed.returncode == 0, completed.stderr
