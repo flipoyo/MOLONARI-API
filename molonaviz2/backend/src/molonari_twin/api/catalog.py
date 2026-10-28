@@ -303,9 +303,10 @@ CATALOG: tuple[Question, ...] = (
     Question(
         "check", "BN-11", "build", N_("Is this configuration valid, and what will it cost?"),
         "Whether the configuration of a twin folder is valid, with its problems (also given as warnings); if so, the "
-        "twin_id expected for the published code, the state (new, computed, duplicate or modified) and, in mcmc mode, "
-        "the number of samples, the evaluations and the stored size, which depends on `store_fields`. An invalid "
-        "configuration is an answer (`valid` is false), not an error.",
+        "twin_id expected for the published code (empty for a 2.0.0 twin without a seed, which can be read but not "
+        "computed), the state (new, computed, duplicate or modified) and, in mcmc mode, the number of samples, "
+        "the evaluations and the stored size, which depends on `store_fields`. An invalid configuration "
+        "is an answer (`valid` is false), not an error.",
         ("D", "M"), p.NoParams, "folder",
         lambda twin, _: check_twin(twin.folder),
         outputs=(
