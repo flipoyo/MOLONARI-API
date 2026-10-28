@@ -195,3 +195,92 @@ def test_no_public_projection_for_the_seed_anywhere():
     for name, fields in PUBLIC_DATA.items():
         assert "seed" not in fields, name
 
+
+
+# Questions « rapport si public » livrées (P2c.2e) ------------------------------------------------------------
+
+# Éléments exposés par chaque question de la colonne « rapport si public », par mode du twin ('D' direct, 'M' mcmc).
+IF_PUBLIC = {
+    "heat_budget": {"D": {"states"}, "M": {"states"}},  # HN-20
+    "temperature": {"D": {"states"}, "M": {"states"}},  # HN-30
+    "sensor_intervals": {"D": {"raw_data", "processed_data", "states"}, "M": {"raw_data", "processed_data", "states"}},  # HN-33
+    "fit_quality": {"D": {"raw_data", "processed_data"}, "M": {"raw_data", "processed_data"}},  # HN-40
+    "soil_properties": {"D": {"forward_parameters"}, "M": {"posterior"}},  # HN-42
+    "fields": {"D": {"states"}, "M": {"states"}},  # BN-30
+    "posterior_samples": {"D": set(), "M": {"posterior", "inversion_settings_public"}},  # BN-32 (mode M seulement)
+    "chain_data": {"D": set(), "M": {"posterior", "inversion_settings_public"}},  # BN-34 (mode M seulement)
+}
+MODE_NAMES = {"D": "direct", "M": "mcmc"}
+
+
+def test_if_public_table_is_the_catalog_column():
+    assert {q.id for q in CATALOG if q.access == "report_if_public"} == set(IF_PUBLIC)
+    assert {q.ref for q in CATALOG if q.id in IF_PUBLIC} == {
+        "HN-20", "HN-30", "HN-33", "HN-40", "HN-42", "BN-30", "BN-32", "BN-34"}
+
+
+@pytest.mark.parametrize("question_id", sorted(IF_PUBLIC))
+def test_if_public_question_declares_its_exposure(question_id):
+    question = by_id(question_id)
+    assert question.exposes != DEV
+    assert set(question.exposes) <= set(ELEMENTS)
+    for mode, expected in IF_PUBLIC[question_id].items():
+        assert set(exposed_elements(question, MODE_NAMES[mode])) == expected, (question_id, mode)
+
+
+@pytest.mark.parametrize("question_id", sorted(IF_PUBLIC))
+def test_if_public_question_is_refused_while_an_exposed_element_is_private(question_id):
+    question = by_id(question_id)
+    for mode, expected in IF_PUBLIC[question_id].items():
+        if mode not in question.modes:
+            continue
+        for element in expected:
+            only_this_private = Visibility(**{**{e: True for e in ELEMENTS}, element: False})
+            with pytest.raises(UserError) as error:
+                check_publishable(question, only_this_private, MODE_NAMES[mode])
+            assert error.value.code == "E_REPORT_PRIVATE", (question_id, mode, element)
+            assert element in error.value.params["elements"]
+
+
+@pytest.mark.parametrize("question_id", sorted(IF_PUBLIC))
+def test_if_public_question_passes_when_its_elements_are_public(question_id):
+    question = by_id(question_id)
+    for mode in IF_PUBLIC[question_id]:
+        if mode not in question.modes:
+            continue
+        everything_but_that = Visibility(**{e: e in IF_PUBLIC[question_id][mode] for e in ELEMENTS})
+        check_publishable(question, everything_but_that, MODE_NAMES[mode])  # ne lève pas
+
+
+@pytest.mark.parametrize("question_id", sorted(IF_PUBLIC))
+def test_if_public_question_needs_its_whitelist_to_enter_a_report(question_id, twins):
+    # aucune de ces questions n'a encore de projection (P2c.3) : même avec tout public, la réponse n'entre pas telle quelle
+    question = by_id(question_id)
+    assert question_id not in PUBLIC_DATA
+    ref, mode = ("twin_03", "mcmc") if "D" not in question.modes else ("twin_01", "direct")
+    answer = TwinAPI(twins).ask(ref, question_id, {"z": 0.2} if question_id == "temperature" else None)
+    with pytest.raises(UserError) as error:
+        publishable_answer(question, answer, Visibility(**{e: True for e in ELEMENTS}), mode)
+    assert error.value.code == "E_REPORT_NO_PROJECTION"
+
+
+def test_default_visibility_lets_only_the_pdf_questions_in():
+    default = Visibility()
+    allowed = set()
+    for question in CATALOG:
+        if question.id not in IF_PUBLIC:
+            continue
+        for mode in question.modes:
+            try:
+                check_publishable(question, default, MODE_NAMES[mode])
+            except UserError:
+                continue
+            allowed.add((question.id, mode))
+    assert allowed == {("posterior_samples", "M"), ("chain_data", "M"), ("soil_properties", "M")}
+
+
+def test_no_question_exposes_the_seed():
+    for question in CATALOG:
+        if question.exposes != DEV:
+            assert "seed" not in question.exposes, question.id
+    assert "seed" not in by_id("describe").outputs
