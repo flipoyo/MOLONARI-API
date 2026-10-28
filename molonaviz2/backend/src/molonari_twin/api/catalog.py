@@ -98,7 +98,7 @@ CATALOG: tuple[Question, ...] = (
         lambda twin, _: describe(twin.config),
         outputs=(
             "name", "point", "mode", "description", "start", "end", "layers", "layer_bottoms", "sensor_depths", "offset",
-            "nb_cells", "sigma_temperature", "seed", "nb_chains", "nb_iter", "burn_in_max", "thin", "store_fields",
+            "nb_cells", "sigma_temperature", "nb_chains", "nb_iter", "burn_in_max", "thin", "store_fields",
         ),
     ),
     Question(

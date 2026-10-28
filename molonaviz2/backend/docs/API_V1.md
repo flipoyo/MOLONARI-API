@@ -2,7 +2,7 @@
 
 <!-- Fichier généré par tools/gen_api_doc.py à partir du catalogue (molonari_twin.api). Ne pas modifier à la main. -->
 
-Version de l'API : **1.0.0-alpha.4**. Schéma complet : `GET /openapi.json` ; catalogue avec les schémas de
+Version de l'API : **1.0.0-alpha.5**. Schéma complet : `GET /openapi.json` ; catalogue avec les schémas de
 paramètres : `GET /v1/questions` (`?twin=<ref>` : les questions de son mode).
 
 ## Poser une question
@@ -87,7 +87,7 @@ Layers, sensors, period, mode and main settings, read from the configuration (no
 
 Aucun paramètre : le corps de la requête est vide (ou `{}`).
 
-Sorties : `name`, `point`, `mode`, `description`, `start`, `end`, `layers`, `layer_bottoms`, `sensor_depths`, `offset`, `nb_cells`, `sigma_temperature`, `seed`, `nb_chains`, `nb_iter`, `burn_in_max`, `thin`, `store_fields`.
+Sorties : `name`, `point`, `mode`, `description`, `start`, `end`, `layers`, `layer_bottoms`, `sensor_depths`, `offset`, `nb_cells`, `sigma_temperature`, `nb_chains`, `nb_iter`, `burn_in_max`, `thin`, `store_fields`.
 
 ## Données et traitement
 

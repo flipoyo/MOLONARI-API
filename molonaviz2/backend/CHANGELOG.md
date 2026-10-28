@@ -21,6 +21,18 @@ Phase 2 du plan twin v3 : issues P2.1 (pipeline du brut, avec BN-03 et BN-04) et
 - P2.1 : le pipeline du brut au résultat, avec BN-03 et BN-04 (sortis du lot C4, car ils ne dépendent que du pipeline brut).
 - P2c.1 : les questions du rapport public. Pas de nouvelle version ici : la version est celle de l'alpha.3, donc **aucun identifiant de référence ne change** (le `twin_id` dépend de la configuration et de la version du code, pas du contenu des résultats).
 
+### P2.2 : schéma molonari-twin/2.0.0
+
+- Lecture du schéma `molonari-twin/2.0.0` : le twin part du brut. `data: {lab, point}` désigne le laboratoire et le point dans le dépôt de données (chemins relatifs à sa racine, qui ne peuvent en sortir) ; `processing: {start, end, methods, excluded}` règle le nettoyage. Le pipeline du brut (`twin/pipeline.py`) fournit les profondeurs, le décalage et les σ. `sensors.sigma_*` peut les remplacer.
+- Racine du dépôt de données : variable `MOLONARI_DATA`, sinon le dossier `data/` de l'espace de travail cgs (là où se trouve `molonari.cgs`). Le twin.yaml n'en dit pas plus.
+- `mcmc.seed` est obligatoire en mode mcmc (E_TWIN_REQUIRED sinon). Elle entre dans le `twin_id`, car elle détermine le résultat.
+- Clés retirées du 2.0.0, refusées avec leur nouvelle place : `E_TWIN_KEY_MOVED`, `E_TWIN_KEY_FROM_DATA`, `E_TWIN_CODE_VERSION_REMOVED`.
+- `legacy_twin_id` : étiquette d'un twin migré depuis un 1.x (hors du `twin_id`).
+- Identifiant d'un twin 2.0.0 : empreinte de la forme canonique, avec l'empreinte des mesures nettoyées à la place de celle du fichier, la graine dans `mcmc.seed` et la version du code. Le chemin du dépôt n'y entre pas. Les twins 1.x gardent leur forme canonique : `twin_01`, `twin_02`, `twin_03` et `twin_04` ont les mêmes identifiants qu'avant.
+- La graine n'apparaît plus dans HN-02 (`describe`) ni dans `metadata.json["config"]`, quel que soit le schéma (P0.7). Elle reste dans le `twin_id`, qui est une empreinte.
+- `metadata.json` : `files`, la SHA-256 de chaque fichier de résultats (P2.2f, absent de A3). Pour un twin 2.0.0, `data` donne le laboratoire, le point et l'empreinte des mesures nettoyées.
+- `API_VERSION = 1.0.0-alpha.5` : HN-02 ne donne plus `seed`. Le snapshot OpenAPI et `docs/API_V1.md` sont régénérés.
+
 ### Ajouté
 - `twin/pipeline.py` : `read_raw_point`, `resolve_instruments`, `load_point`, `clean_point`, `column_inputs` et `run_pipeline`. Il enchaîne les lecteurs (`io/lab_import.py`, `io/point_import.py`), `clean(…, CleanupSettings)` et `ColumnInputs.from_cleaned`, sans dupliquer leur code. Le brut de Point034 redonne exactement les mesures nettoyées de `examples/twins/twin_01/measurements.csv` (1436 dates, ou 1430 dans la fenêtre du twin).
 - σ des instruments : `Sigma_Meas_P` du capteur de pression et `Sigma_Meas_T` du thermomètre de la tige entrent dans `ColumnInputs` ; `sigma_pressure` et `sigma_temperature` peuvent les remplacer.
@@ -40,6 +52,7 @@ Phase 2 du plan twin v3 : issues P2.1 (pipeline du brut, avec BN-03 et BN-04) et
 - La version du paquet ne change pas : à monter au moment de la publication du lot.
 
 ### Pas encore fait
+- P2.2 : `create_twin` écrit encore du 1.1.0 (mesures nettoyées). La création d'un twin 2.0.0 depuis le brut, la migration d'un 1.x et la graine dans `orx.yaml` (P0.7d) ne sont pas faites.
 - P2.1f, les dates avec fuseau, attend la convention de dates (P0.5b). Un fuseau en paramètre reste refusé : `E_PIPELINE_TIMEZONE` pour le pipeline, `E_QUESTION_PARAMS` pour les questions.
 
 ## [0.7.0-alpha.3] - 2026-10-23

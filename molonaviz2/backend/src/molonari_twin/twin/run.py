@@ -20,7 +20,14 @@ from datetime import datetime
 from pathlib import Path
 
 from ..errors import Issue, UserError
-from .config import TwinConfig, config_path, file_digest, load_twin
+from .config import (
+    TwinConfig,
+    config_path,
+    file_digest,
+    frame_digest,
+    load_twin,
+    without_seed,
+)
 from .provenance import provenance_warnings, strict_problems, twin_provenance
 from .registry import (
     RegistryEntry,
@@ -31,7 +38,7 @@ from .registry import (
     results_dir,
     twins_root,
 )
-from .results import RESULTS_FORMAT, write_results
+from .results import RESULTS_FORMAT, record_file_digests, write_results
 
 TWIN_PREFIX = "twin_"
 
@@ -130,6 +137,7 @@ def run_twin(path_or_config, on_progress: Callable | None = None, should_cancel:
     metadata = _metadata(config, status.twin_id, code_version, device, duration, forward, inversion)
     metadata["provenance"] = provenance
     write_results(partial, forward, inversion, [layer.name for layer in config.layers], metadata)
+    record_file_digests(partial)
     if target.exists():
         shutil.rmtree(target)
     os.replace(partial, target)  # les résultats apparaissent complets ou pas du tout
@@ -156,14 +164,8 @@ def _metadata(config: TwinConfig, twin_id: str, code_version: str, device: str, 
         "duration_s": round(duration, 3),
         "code_version": code_version,
         "device": device,
-        "config": config.canonical(code_version),
-        "data": {
-            "file": config.measurements.name,
-            "sha256": file_digest(config.measurements),
-            "rows": len(measurements),
-            "start": measurements["date"].iloc[0].isoformat(),
-            "end": measurements["date"].iloc[-1].isoformat(),
-        },
+        "config": without_seed(config.canonical(code_version)),
+        "data": _data_section(config, measurements),
         "rmse_celsius": {"t1": float(forward.rmse[0]), "t2": float(forward.rmse[1]), "t3": float(forward.rmse[2]), "total": float(forward.rmse[3])},
         "sensor_cell_depths": [float(d) for d in forward.sensor_depths],
         "flux_convention": "q > 0: infiltration (river to aquifer); q < 0: exfiltration (aquifer to river)",
@@ -188,6 +190,15 @@ def _metadata(config: TwinConfig, twin_id: str, code_version: str, device: str, 
             },
         }
     return metadata
+
+
+def _data_section(config: TwinConfig, measurements) -> dict:
+    """Données du twin dans metadata.json. 1.x : le fichier de mesures et son empreinte. 2.0.0 : le laboratoire et le
+    point dans le dépôt de données, et l'empreinte des mesures nettoyées (celles qui entrent dans le calcul)."""
+    section = {"rows": len(measurements), "start": measurements["date"].iloc[0].isoformat(), "end": measurements["date"].iloc[-1].isoformat()}
+    if config.raw_data:
+        return {"lab": config.data_lab, "point": config.data_point, "cleaned_sha256": frame_digest(measurements), **section}
+    return {"file": config.measurements.name, "sha256": file_digest(config.measurements), **section}
 
 
 def list_twins(twins_folder: Path) -> list[Path]:

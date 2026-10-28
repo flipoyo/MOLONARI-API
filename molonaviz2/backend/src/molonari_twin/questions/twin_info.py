@@ -28,7 +28,6 @@ def describe(config: TwinConfig) -> Answer:
         "offset": Quantity(float(config.offset), "m"),
         "nb_cells": Quantity(int(config.nb_cells), "1"),
         "sigma_temperature": Quantity(float(config.sigma_temperature), "°C"),
-        "seed": Quantity(int(config.seed), "1"),
     }
     if config.mcmc is not None:
         mcmc = config.mcmc

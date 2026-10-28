@@ -6,8 +6,8 @@ Fichiers du format 1.x (inchangés en 2.0.0) :
                     la rivière alimente la nappe ; négatif : exfiltration), moyenne sur la
                     colonne, et quantiles pour le mode mcmc ;
 - residuals.csv     t₁–t₃ mesurés, simulés et résidus (simulé − mesuré), en °C ;
-- metadata.json     identité, config canonique, empreinte des données, version du code,
-                    appareil, durée, RMSE, diagnostic mcmc ;
+- metadata.json     identité, config canonique (sans la graine), empreinte des données, version du code,
+                    appareil, durée, RMSE, diagnostic mcmc ; à partir de 2.0.0, `files` : SHA-256 de chaque fichier ;
 - mcmc uniquement : posterior_summary.csv et posterior_samples.csv.
 
 Ajouts du format 2.0.0 (metadata.json : results_format, instruments, conventions) :
@@ -92,7 +92,27 @@ def write_results(folder: Path, forward: ForwardResult, inversion: InversionResu
         pd.DataFrame(samples).to_csv(folder / "posterior_samples.csv", index=False, float_format=FLOAT_FORMAT)
         _write_arrays(folder, forward, inversion, layer_names)
 
+    _write_metadata(folder, metadata)
+
+
+def _write_metadata(folder: Path, metadata: dict) -> None:
     (folder / "metadata.json").write_text(json.dumps(metadata, indent=2, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+
+
+def record_file_digests(folder: Path) -> None:
+    """Ajoute à metadata.json (2.0.0) l'empreinte SHA-256 de chaque fichier du dossier, metadata.json excepté (il contient
+    la date d'exécution). Ainsi `reproduce` peut vérifier chaque fichier, pas seulement les données. Les empreintes sont
+    dans `files`, triées par nom."""
+    import hashlib
+
+    metadata_path = folder / "metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    files = {}
+    for path in sorted(folder.iterdir()):
+        if path.is_file() and path.name != "metadata.json":
+            files[path.name] = hashlib.sha256(path.read_bytes()).hexdigest()
+    metadata["files"] = files
+    _write_metadata(folder, metadata)
 
 
 def _write_arrays(folder: Path, forward: ForwardResult, inversion: InversionResult, layer_names: list[str]) -> None:
