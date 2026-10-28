@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import time
@@ -77,16 +78,38 @@ def twin_status(path_or_config, code_version: str | None = None) -> TwinStatus:
 
     config = path_or_config if isinstance(path_or_config, TwinConfig) else load_twin(path_or_config)
     code_version = code_version or api.engine_version()
-    twin_id = config.twin_id(code_version)
     twins_folder = config.folder.parent
     entries = read_registry(twins_folder)
     named = entry_for_name(entries, config.name)
+    if not config.has_seed:
+        return _status_without_seed(config, code_version, twins_folder, named)
+    twin_id = config.twin_id(code_version)
     if named is not None and named.twin_id != twin_id:
         return TwinStatus(config, twin_id, "modified", previous_id=named.twin_id)
     source = computed_entry(entries, twin_id)
     if source is not None and (twins_root(twins_folder) / source.results / "metadata.json").is_file():
         return TwinStatus(config, twin_id, "computed" if source.name == config.name else "duplicate", source)
     return TwinStatus(config, twin_id, "new")
+
+
+def _status_without_seed(config: TwinConfig, code_version: str, twins_folder: Path, named: RegistryEntry | None) -> TwinStatus:
+    """État d'un twin 2.0.0 mcmc sans `orx.yaml` (lecture du dev). Le `twin_id` contient la graine : il n'est pas calculable
+    ici, et c'est celui du registre qui sert. Le twin est « modified » si sa recette sans graine n'est plus celle que
+    `metadata.json["config"]` a gardée ; « new » (`twin_id` vide) si le registre ne le connaît pas. Un changement de la
+    seule graine ne se voit pas : seul ORX peut le voir."""
+    if named is None:
+        return TwinStatus(config, "", "new")
+    metadata = twins_root(twins_folder) / named.results / "metadata.json"
+    try:
+        stored = json.loads(metadata.read_text(encoding="utf-8")).get("config")
+    except (OSError, ValueError):
+        return TwinStatus(config, "", "new")
+    if json.loads(json.dumps(config.canonical(code_version, with_seed=False))) != stored:
+        return TwinStatus(config, "", "modified", previous_id=named.twin_id)
+    source = computed_entry(read_registry(twins_folder), named.twin_id)
+    if source is None:
+        return TwinStatus(config, "", "new")
+    return TwinStatus(config, named.twin_id, "computed" if source.name == config.name else "duplicate", source)
 
 
 def run_twin(path_or_config, on_progress: Callable | None = None, should_cancel: Callable[[], bool] | None = None,
@@ -96,8 +119,9 @@ def run_twin(path_or_config, on_progress: Callable | None = None, should_cancel:
     from .. import __version__
     from ..engine import api
 
-    status = twin_status(path_or_config)
-    config = status.config
+    config = path_or_config if isinstance(path_or_config, TwinConfig) else load_twin(path_or_config)
+    config.require_seed()  # calculer est une opération ORX : sans graine (orx.yaml), le twin se lit mais ne se lance pas
+    status = twin_status(config)
     twins_folder = status.twins_folder
     if status.state == "modified":
         raise UserError(

@@ -1,12 +1,19 @@
 """Lecture des fichiers de terrain : dates, laboratoire, point (info + mesures HOBO)."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pandas as pd
 import pytest
 from conftest import FIXTURES
 from molonari_twin.errors import UserError
-from molonari_twin.io.dates import parse_date, parse_dates
+from molonari_twin.io.dates import (
+    format_offset,
+    parse_date,
+    parse_dates,
+    parse_header_offset,
+    parse_offset_parameter,
+    split_cell_offset,
+)
 from molonari_twin.io.lab_import import import_lab_directory, parse_shaft
 from molonari_twin.io.point_import import (
     find_point_files,
@@ -16,6 +23,62 @@ from molonari_twin.io.point_import import (
 )
 
 # Dates ---------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "header, expected",
+    [
+        ("Date Heure, GMT+01:00", timedelta(hours=1)),
+        ("Date Time, GMT-05:30", -timedelta(hours=5, minutes=30)),
+        ("Date Heure, GMT+0200", timedelta(hours=2)),
+        ("Date Heure, UTC", timedelta(0)),
+        ("Date Heure", None),
+        (None, None),
+    ],
+)
+def test_header_offset(header, expected):
+    assert parse_header_offset(header) == expected
+
+
+@pytest.mark.parametrize("header", ["Date, GMT+15:00", "Date, GMT+01:61"])
+def test_header_offset_out_of_range(header):
+    with pytest.raises(UserError) as error:
+        parse_header_offset(header)
+    assert error.value.code == "E_DATE_OFFSET_INVALID"
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        ("2016-06-27T12:00:00+01:00", ("2016-06-27T12:00:00", timedelta(hours=1))),
+        ("2016-06-27T12:00:00Z", ("2016-06-27T12:00:00", timedelta(0))),
+        ("2016-06-27 12:00 -0530", ("2016-06-27 12:00", -timedelta(hours=5, minutes=30))),
+        ("06/27/16 12:00:00 PM +02", ("06/27/16 12:00:00 PM", timedelta(hours=2))),
+        # sans heure, un tiret ou un chiffre final n'est pas un décalage
+        ("27-06-2016", ("27-06-2016", None)),
+        ("2016-06-27 12:00", ("2016-06-27 12:00", None)),
+    ],
+)
+def test_cell_offset(value, expected):
+    assert split_cell_offset(value) == expected
+
+
+@pytest.mark.parametrize("value, expected", [("UTC", 0), ("Z", 0), ("+01:00", 1), ("GMT+1", 1), ("utc-05:30", -5.5), ("+0200", 2)])
+def test_offset_parameter(value, expected):
+    assert parse_offset_parameter(value) == timedelta(hours=expected)
+
+
+@pytest.mark.parametrize("value", ["Europe/Paris", "CET", "1", "", "UTC+15", "+01:75"])
+def test_offset_parameter_refuses_what_is_not_a_fixed_offset(value):
+    with pytest.raises(UserError) as error:
+        parse_offset_parameter(value)
+    assert error.value.code == "E_PIPELINE_TIMEZONE_INVALID"
+
+
+def test_format_offset():
+    assert [format_offset(timedelta(hours=1)), format_offset(timedelta(0)), format_offset(-timedelta(hours=5, minutes=30))] == [
+        "+01:00", "+00:00", "-05:30"]
+
 
 
 @pytest.mark.parametrize(

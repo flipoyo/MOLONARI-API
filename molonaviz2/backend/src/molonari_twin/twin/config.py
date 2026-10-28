@@ -10,8 +10,9 @@ Deux familles de schémas coexistent, lues par le même `load_twin` :
   (`data.measurements`), la graine au niveau supérieur (`seed`, 0 par défaut), `code_version` facultatif.
   Ils sont lus sans changement, et leur `twin_id` ne bouge pas.
 - 2.0.0 (`molonari-twin/2.0.0`) : le brut. `data: {lab, point}` désigne le laboratoire et le point dans le dépôt de
-  données (chemins relatifs à sa racine), `processing: {start, end, methods, excluded}` le nettoyage, `mcmc.seed` la
-  graine (obligatoire en mode mcmc). Plus de `code_version` (les versions sont dans `twin.cgs`), plus de
+  données (chemins relatifs à sa racine), `processing: {start, end, methods, excluded}` le nettoyage. La graine du MCMC
+  n'est plus dans `twin.yaml` (refusée, E_TWIN_SEED_ORX) mais dans `orx.yaml` (couche `orx`, `twin/orx.py`) : sans elle le
+  twin reste lisible, mais `run_twin` le refuse (E_TWIN_REQUIRED, `orx.mcmc.seed`). Plus de `code_version` (les versions sont dans `twin.cgs`), plus de
   `data.measurements`, de `sensors.depths` ni de `sensors.offset` : profondeurs, décalage et σ viennent des fichiers du
   laboratoire et du point (`twin/pipeline.py`), `sensors.sigma_*` les remplace. `legacy_twin_id` garde l'identifiant
   d'un twin 1.x migré. Quatre clés de publication, absentes des schémas 1.x (P2.3) : `site_label` (libellé public du
@@ -57,6 +58,11 @@ Le même point, en schéma 2.0.0 depuis le brut (mode mcmc) :
     layers:
       - {name: couche 1, z_low: 0.4}
     mcmc:
+      nb_iter: 300
+
+et, dans `orx.yaml` à côté (couche `orx`) :
+
+    mcmc:
       seed: 42
 """
 
@@ -88,6 +94,7 @@ from ..engine.column import ColumnInputs
 from ..errors import Issue, UserError
 from ..processing.cleanup import METHODS, VARIABLES, CleanupResult, CleanupSettings
 from . import pipeline
+from .orx import read_orx
 
 # Schémas lus, avec leur version. molonaviz-twin/1 est l'ancien nom de 1.0.0.
 SCHEMA_2_0_0 = "molonari-twin/2.0.0"
@@ -116,14 +123,18 @@ MCMC_DEFAULTS_1_1 = {"thin": 1, "fields_per_chain": None, "store_fields": "senso
 # Schéma 2.0.0 : le brut (`data`), son nettoyage (`processing`) et la graine (`mcmc.seed`).
 TOP_KEYS_2 = {"schema", "name", "description", "mode", "data", "processing", "sensors", "layers", "numerics", "mcmc", "legacy_twin_id",
               "site_label", "monitoring", "visibility", "report"}
+# Schéma 2.0.0 : le brut (`data`) et son nettoyage (`processing`). La graine est dans `orx.yaml`, pas dans `twin.yaml`.
+TOP_KEYS_2 = {"schema", "name", "description", "mode", "data", "processing", "sensors", "layers", "numerics", "mcmc", "legacy_twin_id"}
 REQUIRED_TOP_2 = ("schema", "name", "mode", "data", "layers")
 DATA_KEYS_2 = {"lab", "point"}
 PROCESSING_KEYS = {"start", "end", "methods", "excluded"}
 SENSOR_KEYS_2 = {"sigma_temperature", "sigma_pressure"}  # remplacent les σ du laboratoire
-MCMC_KEYS_2 = MCMC_KEYS | {"seed"}
-# Clés des schémas 1.x retirées du 2.0.0, avec ce qui les remplace : ("moved", nouvelle clé), ("from_data", None) ou ("versions", None).
+MCMC_KEYS_2 = MCMC_KEYS
+# Clés des schémas 1.x retirées du 2.0.0, avec ce qui les remplace : ("moved", nouvelle clé), ("from_data", None),
+# ("versions", None) ou ("orx", None) pour la graine, réservée à la couche `orx` (`mcmc.seed` l'est aussi : P0.7).
 REMOVED_IN_2_0_0 = {
-    "seed": ("moved", "mcmc.seed"),
+    "seed": ("orx", None),
+    "mcmc.seed": ("orx", None),
     "code_version": ("versions", None),
     "point": ("moved", "data.point"),
     "data.measurements": ("moved", "data.lab, data.point"),
@@ -212,7 +223,9 @@ class TwinConfig:
     start: datetime | None = None  # en 2.0.0 : processing.start
     end: datetime | None = None  # en 2.0.0 : processing.end
     mcmc: InversionConfig | None = None
-    seed: int = 0  # 1.x : 0 par défaut ; 2.0.0 : mcmc.seed, obligatoire en mode mcmc (0 en mode direct, qui n'a pas de graine)
+    # 1.x : `seed` de twin.yaml (0 par défaut). 2.0.0 : `mcmc.seed` de orx.yaml, obligatoire pour calculer un twin mcmc ; None
+    # sans elle (le twin reste lisible), 0 en mode direct qui n'a pas de graine.
+    seed: int | None = 0
     description: str = ""
     point: str = ""  # libellé ; en 2.0.0 : nom du point lu dans son fichier info (ou son dossier)
     declared_code_version: str | None = None
@@ -228,6 +241,8 @@ class TwinConfig:
     monitoring_status: str | None = None  # "actif" | "inactif" ; None : non renseigné
     visibility: dict[str, bool] = field(default_factory=lambda: dict(VISIBILITY_DEFAULTS))  # tous les éléments, défauts compris
     report: ReportSpec = field(default_factory=default_report)
+    orx_path: Path | None = None  # orx.yaml de la couche `orx`, s'il existe (2.0.0)
+    reference_platform: dict[str, str] | None = None  # plateforme de référence de orx.yaml (étiquette, hors du twin_id)
     # Lecture du brut, une fois par objet (chargée par load_twin).
     _point: pipeline.LoadedPoint | None = field(default=None, init=False, repr=False, compare=False)
     _cleanup: CleanupResult | None = field(default=None, init=False, repr=False, compare=False)
@@ -248,6 +263,17 @@ class TwinConfig:
     @property
     def experimental(self) -> bool:
         return self.mode == "mcmc"
+
+    @property
+    def has_seed(self) -> bool:
+        """Faux pour un twin 2.0.0 en mode mcmc dont la couche `orx` ne donne pas de graine : il se lit, il ne se calcule pas."""
+        return self.mode != "mcmc" or self.seed is not None
+
+    def require_seed(self) -> int:
+        """La graine, ou TwinConfigError (E_TWIN_REQUIRED, `orx.mcmc.seed`) : c'est le refus de `run_twin` (P2.2c)."""
+        if not self.has_seed:
+            raise TwinConfigError([Issue("orx.mcmc.seed", "E_TWIN_REQUIRED", prefixed=True)])
+        return int(self.seed or 0)
 
     # Données ---------------------------------------------------------------------------
     def cleanup(self) -> CleanupResult:
@@ -282,11 +308,14 @@ class TwinConfig:
         return self.mcmc
 
     # Identité --------------------------------------------------------------------------
-    def canonical(self, code_version: str) -> dict:
+    def canonical(self, code_version: str, with_seed: bool = True) -> dict:
         """Forme canonique : tout ce qui détermine le résultat, et rien d'autre.
 
         1.x : figée (le `twin_id` d'un twin 1.x ne change pas). 2.0.0 : mêmes sections, avec l'empreinte des mesures
-        nettoyées à la place de celle du fichier, la graine dans `mcmc` et toujours la version du code."""
+        nettoyées à la place de celle du fichier, la graine dans `mcmc` et toujours la version du code.
+        `with_seed=False` : la recette sans la graine, celle que le dev lit (c'est `without_seed(canonical)`, et la
+        seule forme possible d'un twin 2.0.0 sans `orx.yaml`). Avec la graine, un twin mcmc 2.0.0 qui n'en a pas est
+        refusé (`require_seed`)."""
         if self.raw_data:
             data = {"cleaned_sha256": frame_digest(self.load_measurements())}
         else:
@@ -321,9 +350,9 @@ class TwinConfig:
                 "quantiles": [float(q) for q in mcmc.quantiles],
                 **{key: getattr(mcmc, key) for key, default in MCMC_DEFAULTS_1_1.items() if getattr(mcmc, key) != default},
             }
-            if self.raw_data:
-                canonical["mcmc"]["seed"] = int(self.seed)
-            else:
+            if with_seed and self.raw_data:
+                canonical["mcmc"]["seed"] = self.require_seed()
+            elif with_seed:
                 canonical["seed"] = int(self.seed)
         return canonical
 
@@ -390,6 +419,8 @@ class _Checker:
         kind, new = REMOVED_IN_2_0_0[where]
         if kind == "moved":
             self.add(where, "E_TWIN_KEY_MOVED", new=new)
+        elif kind == "orx":
+            self.add(where, "E_TWIN_SEED_ORX")
         elif kind == "from_data":
             self.add(where, "E_TWIN_KEY_FROM_DATA")
         else:
@@ -773,20 +804,24 @@ def load_twin(path: str | Path, check_data: bool = True, data_folder: str | Path
             if "z_low" in values:
                 layers.append(LayerSpec(**values))
 
-    # Graine : au niveau supérieur et facultative (0) avant le 2.0.0 ; `mcmc.seed` obligatoire ensuite (mode mcmc).
-    seed = 0 if v2 else check.number(doc.get("seed", 0), "seed", integer=True, minimum=0)
+    # Graine : au niveau supérieur et facultative (0) avant le 2.0.0. Ensuite elle vient de `orx.yaml` (couche `orx`) : son
+    # absence ne gêne pas la lecture (`seed` est None), elle est refusée par `run_twin` (`require_seed`).
+    orx = None
+    if v2:
+        orx, orx_issues = read_orx(path.parent)
+        check.issues.extend(orx_issues)
+        seed = orx.seed if orx is not None else None
+        if mode != "mcmc":
+            seed = 0
+    else:
+        seed = check.number(doc.get("seed", 0), "seed", integer=True, minimum=0)
     mcmc = None
     if mode == "mcmc":
         if v2:
             allowed = MCMC_KEYS_2
         else:
             allowed = MCMC_KEYS if schema_version is not None and schema_version >= (1, 1, 0) else MCMC_KEYS - MCMC_KEYS_1_1
-        raw_mcmc = check.mapping(doc.get("mcmc", {}) or {}, "mcmc", allowed)
-        if v2:
-            if "seed" in raw_mcmc:
-                seed = check.number(raw_mcmc["seed"], "mcmc.seed", integer=True, minimum=0)
-            else:
-                check.add("mcmc.seed", "E_TWIN_REQUIRED")
+        raw_mcmc = check.mapping(doc.get("mcmc", {}) or {}, "mcmc", allowed, v2=v2)
         priors = []
         raw_priors = raw_mcmc.get("priors")
         if raw_priors is None:
@@ -875,6 +910,7 @@ def load_twin(path: str | Path, check_data: bool = True, data_folder: str | Path
             schema_version=schema_version, data_root=root, data_lab=lab_name, data_point=point_name,
             processing=processing, legacy_twin_id=legacy_twin_id,
             site_label=site_label, monitoring_status=monitoring_status, visibility=visibility, report=report,
+            orx_path=orx.path if orx is not None else None, reference_platform=orx.platform if orx is not None else None,
         )
         if v2:
             config._point = loaded

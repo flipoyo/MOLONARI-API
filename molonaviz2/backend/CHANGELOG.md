@@ -22,11 +22,24 @@ Phase 2 du plan twin v3 : issues P2.1 (pipeline du brut, avec BN-03 et BN-04) et
 - P2c.1 : les questions du rapport public. Pas de nouvelle version ici : la version est celle de l'alpha.3, donc **aucun identifiant de référence ne change** (le `twin_id` dépend de la configuration et de la version du code, pas du contenu des résultats).
 - P2c.2 : visibilité des questions et projections publiques. Chaque question déclare ce qu'elle **expose** (`Question.exposes`, colonne « Accès » du catalogue ; obligatoire). `questions/visibility.py` (`Visibility`, défaut : tout privé sauf la PDF), `questions/public.py` (liste blanche de HN-02 et HN-43 et des agrégats publiables), `api/publication.py` (refus : `E_REPORT_DEV_ONLY`, `E_REPORT_PRIVATE`, `E_REPORT_NO_PROJECTION`). La graine sort de HN-02 et de HN-43 (patch « accès » : elle est réservée au niveau ORX). **`API_VERSION` passe à 1.0.0-alpha.5** : le champ `seed` disparaît de la réponse de HN-02 ; le reste de `/v1` ne change pas.
 
+### P2.1f : dates avec fuseau
+
+> **NOTE PROVISOIRE, à régler les années suivantes (`TODO(fuseau)`).** La convention appliquée aux bruts est **UTC+2 toute l'année** (`io.dates.PROVISIONAL_UTC_OFFSET`), décidée par l'équipe à titre provisoire. L'heure réelle des horloges des loggers (CET en hiver, CEST en été) doit être **confirmée auprès des opérateurs terrain**, puis la gestion CET/CEST traitée proprement à la place de ce décalage fixe.
+
+- **Ce que déclarent les bruts** : tous les exports HOBOware du dépôt de données (Point034, 047, 051-1, 051-2, 52, 53) écrivent dans l'en-tête de la colonne des dates un décalage fixe, « Date Heure, GMT+01:00 », en été comme en hiver. Cet en-tête ne reflète pas l'heure d'été réelle.
+- **Convention provisoire** : un en-tête qui déclare `GMT+01:00` est lu comme `UTC+2`, avec l'avertissement `W_MEASURES_TIMEZONE_OVERRIDDEN` (pas une erreur). Un en-tête `GMT+02:00` est gardé tel quel, sans avertissement. Tout autre décalage d'en-tête garde le comportement décrit plus bas (conflit ou erreur). Une date qui porte elle-même son décalage (`2016-06-27T12:00:00+01:00`) est exacte et n'est jamais remplacée.
+- **Les dates ne bougent pas** : elles restent des dates sans fuseau, écrites telles quelles. Seul `utc_offset` (sur `ParsedMeasures`, `RawPoint`, `LoadedPoint` et `PipelineResult`) change : UTC = date - `utc_offset`. Les mesures nettoyées de `Demo_twin_0.molo` (Point034) ne changent pas.
+- Point2024-1 à 3 (pression `GMT+02:00`, température `GMT+01:00`) : les deux sont lus en UTC+2, il n'y a donc plus de conflit ni de décalage à faire.
+- Si la pression et la température déclarent tout de même deux décalages différents (par exemple des dates à décalage explicite), les dates de la pression sont ramenées exactement dans le repère de la température, avec l'avertissement `W_PIPELINE_TIMEZONE_SHIFTED`.
+- `timezone` (pipeline) n'est plus refusé : c'est une **vérification** (`+02:00`, `UTC+2`, `GMT+2`) contre le `utc_offset` appliqué. Il ne choisit rien.
+- Rien n'est supposé : sans déclaration, les dates restent telles qu'écrites, `utc_offset` est `None` et `W_MEASURES_TIMEZONE_UNDECLARED` le dit.
+- Erreurs : `E_PIPELINE_TIMEZONE` est supprimé et remplacé par `E_PIPELINE_TIMEZONE_INVALID` (nom de zone comme `Europe/Paris`, décalage hors de ±14 h), `E_PIPELINE_TIMEZONE_CONFLICT`, `E_PIPELINE_TIMEZONE_UNDECLARED`, `E_PIPELINE_TIMEZONE_AMBIGUOUS` (un seul des deux fichiers déclare), `E_MEASURES_TIMEZONE_CONFLICT` (une date contredit le fichier), `E_MEASURES_TIMEZONE_MIXED`, `E_MEASURES_TIMEZONE_PARTIAL`, `E_DATE_OFFSET_INVALID`. Ces codes ne sont pas dans le contrat `/v1` : `API_VERSION` ne change pas.
+
 ### P2.2 : schéma molonari-twin/2.0.0
 
 - Lecture du schéma `molonari-twin/2.0.0` : le twin part du brut. `data: {lab, point}` désigne le laboratoire et le point dans le dépôt de données (chemins relatifs à sa racine, qui ne peuvent en sortir) ; `processing: {start, end, methods, excluded}` règle le nettoyage. Le pipeline du brut (`twin/pipeline.py`) fournit les profondeurs, le décalage et les σ. `sensors.sigma_*` peut les remplacer.
 - Racine du dépôt de données : variable `MOLONARI_DATA`, sinon le dossier `data/` de l'espace de travail cgs (là où se trouve `molonari.cgs`). Le twin.yaml n'en dit pas plus.
-- `mcmc.seed` est obligatoire en mode mcmc (E_TWIN_REQUIRED sinon). Elle entre dans le `twin_id`, car elle détermine le résultat.
+- ~~`mcmc.seed` obligatoire dans `twin.yaml`~~ : remplacé par la couche `orx` (P2.2c, ci-dessous). La graine entre dans le `twin_id`, car elle détermine le résultat.
 - Clés retirées du 2.0.0, refusées avec leur nouvelle place : `E_TWIN_KEY_MOVED`, `E_TWIN_KEY_FROM_DATA`, `E_TWIN_CODE_VERSION_REMOVED`.
 - `legacy_twin_id` : étiquette d'un twin migré depuis un 1.x (hors du `twin_id`).
 - Identifiant d'un twin 2.0.0 : empreinte de la forme canonique, avec l'empreinte des mesures nettoyées à la place de celle du fichier, la graine dans `mcmc.seed` et la version du code. Le chemin du dépôt n'y entre pas. Les twins 1.x gardent leur forme canonique : `twin_01`, `twin_02`, `twin_03` et `twin_04` ont les mêmes identifiants qu'avant.
@@ -47,6 +60,19 @@ Phase 2 du plan twin v3 : issues P2.1 (pipeline du brut, avec BN-03 et BN-04) et
 - `API_VERSION = 1.0.0-alpha.6` : sorties de HN-02. Snapshot OpenAPI et `docs/API_V1.md` régénérés.
 - `Visibility.from_config(config)` (`questions/visibility.py`, P2c.2) construit la déclaration à partir de la clé ; `ELEMENTS` y vient de `twin/config.py` (`VISIBILITY_ELEMENTS`), sans second jeu de noms. La projection publique de HN-02 ajoute `site_label` et `monitoring_status` (la carte d'identité) ; ni `visibility.*` ni `report_*` n'y entrent (ils sont dans `report.json`).
 - Reste à faire : refuser dans le générateur (P2c.3) les questions réservées au développeur, lire `report.entries` pour écrire le rapport, et contrôler la comparabilité des deux twins de `report.models` (operating spaces).
+### P2.2c : la graine dans orx.yaml (couche orx)
+
+- Un twin 2.0.0 lit sa graine dans `orx.yaml`, à côté de `twin.yaml` (couche `orx`, décision P0.7d du 2026-10-28) : `mcmc.seed` et la plateforme de référence (`platform` : `python`, `platform`, `processor`, `device`, `jax`, `jaxlib`, `numpy`, étiquette qui n'entre pas dans le `twin_id`). Nouveau module `twin/orx.py` ; `schema: molonari-orx/1.0.0` est facultatif ; les clés inconnues sont refusées (chemins `orx.mcmc.seed`…).
+- **Sans `orx.yaml` (ou sans graine), un twin 2.0.0 reste lisible** : `load_twin`, HN-02, les questions de résultats et BN-11 répondent. `TwinConfig.seed` vaut `None` (`has_seed` est faux) et `twin_id` lève `E_TWIN_REQUIRED` (`orx.mcmc.seed`). Le dev retrouve les résultats par le registre (nom du twin → `twin_id`), et une recette modifiée après le calcul est toujours détectée (E_TWIN_FROZEN) par comparaison avec `metadata.json["config"]`, qui est la recette sans graine. Seul un changement de la graine seule échappe au dev.
+- **`run_twin` refuse un twin sans graine** avant tout calcul, y compris pour renvoyer un résultat existant : `TwinConfigError` (`E_TWIN_CONFIG_INVALID`) dont le problème est `orx.mcmc.seed` / `E_TWIN_REQUIRED`. Il en va de même pour la commande `run` et la tâche `twin.run`.
+- Un `twin.yaml` 2.0.0 qui contient une graine (`mcmc.seed`, ou `seed` au niveau supérieur) est refusé : `E_TWIN_SEED_ORX`, avec la place du fichier. Avant, `seed` donnait `E_TWIN_KEY_MOVED`.
+- Les twins 1.x gardent leur `seed` dans `twin.yaml` et sont lus sans changement : un `orx.yaml` à côté d'eux est ignoré, et leurs identifiants de référence ne bougent pas (`twin_01` et `twin_02` 7501fd11570bbe5c, `twin_03` ab5eaa6782784ab4, `twin_04` 50cde3108f8f26ea).
+- Le `twin_id` d'un twin 2.0.0 ne change pas : la forme canonique garde la graine dans `mcmc.seed`, donc un même twin donne le même identifiant que lorsqu'il l'avait dans `twin.yaml`. La graine reste absente de HN-02, de HN-43 et de `metadata.json["config"]`.
+- BN-11 (`check`) : `twin_id` est vide pour un twin 2.0.0 sans graine, avec l'avertissement `W_TWIN_NO_SEED`. `API_VERSION = 1.0.0-alpha.6`. Nouveaux codes : `E_TWIN_SEED_ORX`, `E_TWIN_EXPECTED_TEXT`, `W_TWIN_NO_SEED` (traduits). Le snapshot OpenAPI et `docs/API_V1.md` sont régénérés.
+### P2.4 : tests de déterminisme et `--strict`
+
+- `tests/test_determinism.py` : du brut aux fichiers de résultats, `thin = k` garde exactement une itération sur k (même trajectoire que `thin = 1`, au bit près) ; les chaînes et itérations des champs sont celles des paramètres (recalcul du modèle direct) ; même graine, `posterior.npz` et tous les fichiers de résultats identiques au bit près (aussi entre deux processus) ; deux graines, des chaînes toutes différentes ; `--strict` refuse un dépôt modifié (twin ou code, fichier modifié ou non suivi) et un build `+g…`, sans rien écrire. Aucun changement du code, aucune version.
+- `acceptance` (posterior.npz) est comptée sur les itérations gardées : elle dépend de `thin`. Déterministe, donc non corrigée ici.
 
 ### Ajouté
 - `twin/pipeline.py` : `read_raw_point`, `resolve_instruments`, `load_point`, `clean_point`, `column_inputs` et `run_pipeline`. Il enchaîne les lecteurs (`io/lab_import.py`, `io/point_import.py`), `clean(…, CleanupSettings)` et `ColumnInputs.from_cleaned`, sans dupliquer leur code. Le brut de Point034 redonne exactement les mesures nettoyées de `examples/twins/twin_01/measurements.csv` (1436 dates, ou 1430 dans la fenêtre du twin).
@@ -68,7 +94,7 @@ Phase 2 du plan twin v3 : issues P2.1 (pipeline du brut, avec BN-03 et BN-04) et
 
 ### Pas encore fait
 - P2.2 : `create_twin` écrit encore du 1.1.0 (mesures nettoyées). La création d'un twin 2.0.0 depuis le brut, la migration d'un 1.x et la graine dans `orx.yaml` (P0.7d) ne sont pas faites.
-- P2.1f, les dates avec fuseau, attend la convention de dates (P0.5b). Un fuseau en paramètre reste refusé : `E_PIPELINE_TIMEZONE` pour le pipeline, `E_QUESTION_PARAMS` pour les questions.
+- Les questions refusent encore un fuseau dans leurs paramètres de date (`E_QUESTION_PARAMS`) : leurs dates sont dans le repère des données du twin, que le pipeline expose désormais (`utc_offset`). À reprendre avec le contrat de dates de l'API.
 
 ## [0.7.0-alpha.3] - 2026-10-23
 
