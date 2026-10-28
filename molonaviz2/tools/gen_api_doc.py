@@ -34,6 +34,24 @@ REQUIRES = {
 MODES = {"D": "direct", "M": "mcmc"}
 
 
+def _access(question) -> str:
+    """Colonne « Accès » du catalogue : ce que la question peut donner au rapport public (P2c.2)."""
+    from molonari_twin.questions import PUBLIC_DATA
+
+    if question.access == "dev":
+        return "développeur seulement (jamais dans le rapport public)."
+    if question.access == "report":
+        text = "rapport public (agrégats : rien de privé"
+        text += ", réglages que les échantillons publics révèlent)." if question.exposes else ")."
+    else:
+        text = "rapport public si ces éléments sont publics : " + ", ".join(f"`{e}`" for e in question.exposes) + "."
+    if question.id in PUBLIC_DATA:
+        text += " Projection publique, champs publiés : " + ", ".join(f"`{n}`" for n in PUBLIC_DATA[question.id]) + "."
+    else:
+        text += " Pas encore de projection publique : refusée dans un rapport (`E_REPORT_NO_PROJECTION`)."
+    return text
+
+
 def _type(schema: dict) -> str:
     if "anyOf" in schema:
         return " ou ".join(_type(option) for option in schema["anyOf"])
@@ -106,6 +124,8 @@ def render() -> str:
         "",
         "`{data: {nom: {value, unit, interval}}, provenance, warnings}`. `interval` vaut `[bas, haut]`, de la forme de",
         "`value`, ou `null`. La provenance donne la question, ses paramètres, le twin, son `twin_id` et ses résultats.",
+        "L'API est celle du développeur : elle est complète. Le rapport public n'en publie qu'une projection (liste blanche",
+        "de champs), et seulement les questions dont les éléments exposés sont publics (ligne « Accès » de chaque question).",
         "",
         "- **JSON** (par défaut) : un tableau s'écrit `{dtype, shape, data}`, valeurs à plat dans l'ordre C. NaN et",
         "  dates absentes valent `null`, ±∞ s'écrivent `\"inf\"` et `\"-inf\"`. Un flottant scalaire non fini s'écrit",
@@ -143,6 +163,7 @@ def render() -> str:
                 "",
                 f"- Modes : {', '.join(MODES[m] for m in question.modes)} ; depuis l'API {question.since} ; exige "
                 + REQUIRES[question.requires],
+                f"- Accès : {_access(question)}",
                 f"- Requête : `POST /v1/{'' if question.requires == 'none' else 'twins/{ref}/'}questions/{question.id}`",
                 "",
                 *_parameters(question),

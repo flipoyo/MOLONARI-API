@@ -22,17 +22,23 @@ from .intervals import (
 )
 from .parameters import parameters_catalog
 from .predictive import coverage, observed_at, predictive_band, sensor_samples
+from .public import PUBLIC_DATA, public_answer
 from .reliability import reliability
 from .sensors import residuals, sensor_report
 from .soil import soil_properties
 from .temperature import temperature_at
 from .twin_info import describe, describe_sampling, provenance
+from .visibility import ELEMENTS, PUBLIC_DE_FAIT, Visibility
 from .volumes import exchanged_volume
 
 __all__ = [
+    "ELEMENTS",
     "MEASUREMENT_LEVELS",
+    "PUBLIC_DATA",
+    "PUBLIC_DE_FAIT",
     "Answer",
     "Quantity",
+    "Visibility",
     "chain_data",
     "check_twin",
     "convergence",
@@ -53,6 +59,7 @@ __all__ = [
     "predictive_band",
     "processing_preview",
     "provenance",
+    "public_answer",
     "public_convergence",
     "raw_series",
     "reliability",

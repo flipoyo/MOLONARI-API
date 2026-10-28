@@ -116,7 +116,7 @@ def probe_question(requires, run):
     from molonari_twin.api import Question
     from molonari_twin.contract import params as p
 
-    return Question("probe", "BN-10", "build", "probe", "Probe.", ("D", "M"), p.NoParams, requires, run)
+    return Question("probe", "BN-10", "build", "probe", "Probe.", ("D", "M"), p.NoParams, requires, run, exposes=())
 
 
 @pytest.fixture

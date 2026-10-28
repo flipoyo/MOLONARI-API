@@ -1,0 +1,10 @@
+syntax = "proto2";
+
+// Must match encode.h in the firmware (same tags and types).
+// Max LoRaWAN payload at DR0 is 51 bytes. Current encoded size: 44 bytes.
+message SensorData {
+  required string UI = 1;
+  required int32 time = 2;
+  required int32 relay_receive_time = 4;
+  repeated uint32 measurements = 5 [packed = true];
+}

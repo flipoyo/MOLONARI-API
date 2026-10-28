@@ -9,6 +9,12 @@ décrit dans docs/CATALOGUE_QUESTIONS.md (espace cgs).
 Ce qu'une question exige : `none` (aucun twin), `folder` (le dossier d'un twin, même à la configuration invalide),
 `config` (une configuration valide) ou `results` (des résultats calculés).
 
+Ce qu'une question expose (`exposes`, colonne « Accès » du catalogue) : les éléments de visibilité que sa réponse
+**révèle** (`questions/visibility.py`), et non ceux dont elle dépend. `()` : des agrégats, qui n'ont rien de privé
+(accès « rapport ») ; une liste : la réponse n'entre dans le rapport public que si ces éléments sont publics (accès
+« rapport si public ») ; `DEV` : réservée au développeur, jamais publiée (accès « dév. »). Le champ est obligatoire :
+une question sans déclaration ne se construit pas. Le contrôle est dans api/publication.py.
+
 Ajouter une question : une fonction pure dans questions/, un modèle de paramètres dans contract/params.py, une
 entrée ici. Le serveur, la documentation (docs/API_V1.md) et les tests la prennent alors en compte.
 """
@@ -24,6 +30,7 @@ from ..contract import params as p
 from ..domain.compute import INVERTED_PARAMETERS
 from ..i18n import N_
 from ..questions import (
+    PUBLIC_DE_FAIT,
     Answer,
     chain_data,
     check_twin,
@@ -64,6 +71,12 @@ class TwinContext:
     folder: Path | None = None
 
 
+DEV = "dev"
+"""Valeur de `Question.exposes` d'une question réservée au développeur : jamais publiée."""
+
+Exposure = tuple[str, ...] | Literal["dev"]
+
+
 @dataclass(frozen=True)
 class Question:
     id: str
@@ -77,10 +90,18 @@ class Question:
     run: Callable[[TwinContext, p.Params], Answer] = field(repr=False)
     since: str = "1.0.0"
     outputs: tuple[str, ...] = ()  # noms des grandeurs de la réponse (certaines selon le mode ou les données)
+    exposes: Exposure = field(kw_only=True)  # éléments de visibilité révélés par la réponse (obligatoire), ou DEV
 
     @property
     def level(self) -> str:
         return "high" if self.ref.startswith("HN-") else "low"
+
+    @property
+    def access(self) -> Literal["report", "report_if_public", "dev"]:
+        """Colonne « Accès » du catalogue : `report` (rien de privé), `report_if_public` (selon la visibilité) ou `dev`."""
+        if self.exposes == DEV:
+            return "dev"
+        return "report" if set(self.exposes) <= PUBLIC_DE_FAIT else "report_if_public"
 
 
 # Sorties de soil_properties : une par propriété ; médiane et identifiabilité en mode M seulement.
@@ -100,6 +121,7 @@ CATALOG: tuple[Question, ...] = (
             "name", "point", "mode", "description", "start", "end", "layers", "layer_bottoms", "sensor_depths", "offset",
             "nb_cells", "sigma_temperature", "nb_chains", "nb_iter", "burn_in_max", "thin", "store_fields",
         ),
+        exposes=("inversion_settings_public",),  # nb_chains, nb_iter et thin, que les échantillons publics révèlent ; la projection publique retire les réglages privés
     ),
     Question(
         "water_flux", "HN-10", "water", N_("What is the water flux through the riverbed?"),
@@ -111,6 +133,7 @@ CATALOG: tuple[Question, ...] = (
         ("D", "M"), p.FluxParams, "results",
         lambda twin, a: water_flux(twin.results, a.start, a.end, a.level),
         outputs=("mean", "median", "p5", "p95", "points", "start", "end", "level", "model", "uncertainty", "mean_best", "samples"),
+        exposes=(),
     ),
     Question(
         "exchange_direction", "HN-11", "water", N_("Does the river feed the aquifer?"),
@@ -124,6 +147,7 @@ CATALOG: tuple[Question, ...] = (
             "infiltration_share", "exfiltration_share", "dominant", "reversals", "points", "start", "end",
             "p_infiltration", "p_infiltration_series", "field_time", "samples",
         ),
+        exposes=(),
     ),
     Question(
         "exchanged_volume", "HN-12", "water", N_("What volume of water crossed 1 m² of riverbed?"),
@@ -132,6 +156,7 @@ CATALOG: tuple[Question, ...] = (
         ("D", "M"), p.VolumeParams, "results",
         lambda twin, a: twin_exchanged_volume(twin.results, a.start, a.end, a.area),
         outputs=("infiltration", "exfiltration", "net"),
+        exposes=(),
     ),
     Question(
         "heat_budget", "HN-20", "heat", N_("Which processes carry the heat?"),
@@ -144,6 +169,7 @@ CATALOG: tuple[Question, ...] = (
             "advective", "conductive", "lateral", "total", "advective_share", "conductive_share", "lateral_share",
             "dominant", "depth", "points", "start", "end",
         ),
+        exposes=("states",),
     ),
     Question(
         "temperature", "HN-30", "temperature", N_("What is the temperature at a depth and a date?"),
@@ -152,6 +178,7 @@ CATALOG: tuple[Question, ...] = (
         ("D", "M"), p.TemperatureParams, "results",
         lambda twin, a: temperature_at(twin.results, a.z, a.t),
         outputs=("temperature", "depth", "time"),
+        exposes=("states",),
     ),
     Question(
         "sensor_intervals", "HN-33", "temperature", N_("What uncertainty surrounds each measurement point?"),
@@ -161,6 +188,7 @@ CATALOG: tuple[Question, ...] = (
         ("D", "M"), p.IntervalParams, "results",
         lambda twin, a: sensor_report(twin.results, a.level, a.sigma, a.seed),
         outputs=("time", "measured", "simulated", "level", "z", "sigma") + BANDS,
+        exposes=("raw_data", "processed_data", "states"),  # mesures et températures simulées aux capteurs
     ),
     Question(
         "fit_quality", "HN-40", "reliability", N_("Does the model reproduce the measurements?"),
@@ -176,6 +204,7 @@ CATALOG: tuple[Question, ...] = (
             "rmse", "bias", "rmse_over_sigma", "lag1_autocorrelation", "sigma", "level", "coverage_per_sensor", "rmse_total",
             "sensor", "model", "uncertainty", "median_rmse", "median_rmse_total",
         ),
+        exposes=("raw_data", "processed_data"),  # RMSE et biais : des agrégats, obligatoires au rapport (SPEC_RAPPORT_PUBLIC, section 4)
     ),
     Question(
         "reliability", "HN-41", "reliability", N_("Can I trust this result?"),
@@ -188,6 +217,7 @@ CATALOG: tuple[Question, ...] = (
         outputs=(
             "verdict", "criteria", "levels", "reasons", "threshold_names", "thresholds", "thresholds_validated", "level",
         ),
+        exposes=(),
     ),
     Question(
         "public_convergence", "HN-45", "reliability", N_("Has the sampling converged?"),
@@ -202,6 +232,7 @@ CATALOG: tuple[Question, ...] = (
             "rhat_max", "ess_min", "acceptance_mean", "burn_in_converged", "burn_in_iterations", "chains", "samples_per_chain",
             "rhat_green", "rhat_orange", "ess_green", "ess_orange", "thresholds_validated",
         ),
+        exposes=(),
     ),
     Question(
         "provenance", "HN-43", "reliability", N_("Where does this result come from?"),
@@ -213,6 +244,7 @@ CATALOG: tuple[Question, ...] = (
             "twin_id", "code_version", "results_format", "created_at", "device", "duration", "data_file", "data_sha256",
             "reproduce",
         ),
+        exposes=(),  # la projection publique ne garde que versions, plateforme et durée
     ),
     Question(
         "residuals", "BN-31", "raw_results", N_("Residuals at each sensor"),
@@ -221,6 +253,7 @@ CATALOG: tuple[Question, ...] = (
         ("D", "M"), p.ResidualParams, "results",
         lambda twin, a: residuals(twin.results, a.intervals, a.level, a.sigma, a.seed),
         outputs=("time", "measured", "simulated", "residual", "rmse") + BANDS,
+        exposes=DEV,
     ),
     Question(
         "chain_data", "BN-34", "raw_results", N_("Everything about one or more chains"),
@@ -232,6 +265,7 @@ CATALOG: tuple[Question, ...] = (
             "iteration", "chain", *(f"samples.{name}" for name in INVERTED_PARAMETERS), "energy", "acceptance", "resets",
             "count",
         ),
+        exposes=("posterior", "inversion_settings_public"),
     ),
     Question(
         "sampling_layout", "BN-36", "raw_results", N_("How was this twin sampled?"),
@@ -244,6 +278,7 @@ CATALOG: tuple[Question, ...] = (
             "fields_total", "field_interval", "nb_cells", "field_cells", "nb_times", "field_times", "space_step",
             "time_step", "store_fields", "stored_bytes",
         ),
+        exposes=DEV,
     ),
     Question(
         "soil_properties", "HN-42", "reliability", N_("Which soil properties were estimated?"),
@@ -255,6 +290,7 @@ CATALOG: tuple[Question, ...] = (
         ("D", "M"), p.SoilParams, "results",
         lambda twin, a: soil_properties(twin.results, a.level, [layer.name for layer in twin.config.layers]),
         outputs=("layers", "level", *SOIL_OUTPUTS),
+        exposes=("posterior", "forward_parameters"),  # mode M : la PDF ; mode D : les paramètres écrits dans la configuration
     ),
     Question(
         "posterior_samples", "BN-32", "raw_results", N_("Posterior samples of the parameters"),
@@ -264,6 +300,7 @@ CATALOG: tuple[Question, ...] = (
         ("M",), p.PosteriorParams, "results",
         lambda twin, a: posterior_samples(twin.results, a.chains, a.iter_range, a.burn, a.thin),
         outputs=("samples", "iteration", "chain", "layer", "parameter", "parameter_unit", "space"),
+        exposes=("posterior", "inversion_settings_public"),
     ),
     Question(
         "convergence", "BN-40", "diagnostics", N_("Have the chains converged?"),
@@ -277,6 +314,7 @@ CATALOG: tuple[Question, ...] = (
             "mean_energy", "chain_ess_bulk", "rhat_without_chain", "layer", "parameter", "samples_per_chain",
             "burn_in_converged", "burn_in_iterations",
         ),
+        exposes=DEV,
     ),
     Question(
         "energy_breakdown", "BN-43", "diagnostics", N_("What is the energy made of?"),
@@ -285,6 +323,7 @@ CATALOG: tuple[Question, ...] = (
         ("D", "M"), p.SigmaParams, "results",
         lambda twin, a: energy_breakdown(twin.results, a.sigma),
         outputs=("n_points", "sigma", "log_term", "residual_term", "energy", "implicit_rmse", "reference", "ratio"),
+        exposes=DEV,
     ),
     Question(
         "parameters_catalog", "BN-10", "build", N_("Which parameters can be set?"),
@@ -299,6 +338,7 @@ CATALOG: tuple[Question, ...] = (
             "priors.parameter", "priors.label", "priors.low", "priors.high", "priors.physical_low", "priors.physical_high",
             "layer_keys.name", "layer_keys.description", "mcmc_keys.name", "mcmc_keys.description",
         ),
+        exposes=DEV,
     ),
     Question(
         "check", "BN-11", "build", N_("Is this configuration valid, and what will it cost?"),
@@ -313,6 +353,7 @@ CATALOG: tuple[Question, ...] = (
             "valid", "name", "mode", "twin_id", "twin_id_local", "state", "duplicate_of", "samples", "max_evaluations",
             "stored_bytes", "store_fields", "issue_codes", "issue_fields", "issue_messages",
         ),
+        exposes=DEV,
     ),
     Question(
         "fields", "BN-30", "raw_results", N_("Complete fields"),
@@ -322,6 +363,7 @@ CATALOG: tuple[Question, ...] = (
         ("D", "M"), p.FieldsParams, "results",
         lambda twin, a: result_fields(twin.results, a.variables, a.start, a.end, a.depth_range, a.time_step),
         outputs=("depth", "time", "temperature", "water_flux", "heat_flux_advective", "heat_flux_conductive"),
+        exposes=("states",),
     ),
     Question(
         "raw_series", "BN-03", "data", N_("Raw measurements of a point"),
@@ -335,6 +377,7 @@ CATALOG: tuple[Question, ...] = (
             "temperature_time", "temperature", "temperature_dropped", "pressure_time", "voltage", "pressure_temperature",
             "pressure_dropped",
         ),
+        exposes=DEV,
     ),
     Question(
         "processing_preview", "BN-04", "data", N_("Effect of a cleaning"),
@@ -350,5 +393,6 @@ CATALOG: tuple[Question, ...] = (
             "kept_count", "total_count", "unmatched_temperature", "unmatched_pressure", "sigma_pressure",
             "sigma_temperature",
         ),
+        exposes=DEV,
     ),
 )
