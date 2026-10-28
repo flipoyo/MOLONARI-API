@@ -4,6 +4,7 @@
     molonari-twin id <twin_xx>           étape 3 : affiche le twin_id et l'état dans le registre
     molonari-twin run <twin_xx>          étapes 4-6 : exécute (ou signale un doublon) et range les résultats
     molonari-twin list <dossier twins>   liste les twins et leur état
+    molonari-twin report <twin_xx>       écrit le rapport public (« Public Report/ ») d'un twin calculé et de son space
     molonari-twin serve --local          API HTTP sur 127.0.0.1 (extra `server`), calculs dans des workers
 
 (aussi `python -m molonari_twin …`, et `molonaviz2 twin …` depuis l'application)
@@ -58,6 +59,9 @@ def main(argv: list[str]) -> int:
     sub.choices["run"].add_argument("--strict", action="store_true",
                                     help="refuse an unpublished code version or modified or untagged repositories")
     sub.add_parser("list").add_argument("folder", help="twins folder")
+    report_parser = sub.add_parser("report")
+    report_parser.add_argument("twin", help="twin_xx folder or twin.yaml (the twin that carries the report key)")
+    report_parser.add_argument("--output", default=None, help="folder to write (default: 'Public Report' in the twin folder)")
     serve_parser = sub.add_parser("serve")
     serve_parser.add_argument("--local", action="store_true", help="listen on 127.0.0.1 (default, and the only mode until authentication exists)")
     serve_parser.add_argument("--host", default="127.0.0.1", help=argparse.SUPPRESS)
@@ -82,6 +86,15 @@ def main(argv: list[str]) -> int:
             status = twin_status(args.twin)
             print(status.twin_id)
             print(f"{status.config.name}: {state_label(status)}")
+        elif args.command == "report":
+            from ..report import generate_report
+
+            result = generate_report(args.twin, args.output)
+            for skipped, reason in zip(result.skipped, result.reasons, strict=True):
+                print(tr("Skipped: {question} ({model}): {reason}").format(
+                    question=skipped["question"], model=skipped["model"], reason=render(reason, tr)))
+            print(tr("Public report written: {folder} ({entries} entries, {figures} figures, {skipped} skipped).").format(
+                folder=result.folder, entries=result.entries, figures=result.figures, skipped=len(result.skipped)))
         elif args.command == "run":
             shown = []
 

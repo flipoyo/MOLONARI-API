@@ -16,7 +16,7 @@ EXAMPLES = Path(__file__).resolve().parents[2] / "examples" / "twins"
 
 # Modules et paquets de premier niveau de molonari_twin ("__init__" : le paquet lui-même).
 MODULES = {"__init__", "__main__", "errors", "gitinfo", "i18n", "domain", "io", "processing", "engine", "twin", "storage", "questions", "facade",
-           "tasks", "server", "contract", "api"}
+           "tasks", "server", "contract", "api", "report"}
 
 # Imports interdits au backend (préfixes de noms de modules) : Qt, bibliothèques graphiques, frontend.
 FORBIDDEN = ["PySide6", "pyqtgraph", "matplotlib", "molonaviz2"]
@@ -85,7 +85,7 @@ HOOKED = textwrap.dedent(
         importlib.import_module(info.name)
 
     from molonari_twin.twin.cli import main
-    for command in ("validate", "id", "run"):
+    for command in ("validate", "id", "run", "report"):
         code = main([command, {twin!r}])
         assert code == 0, (command, code)
 

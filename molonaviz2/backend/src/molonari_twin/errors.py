@@ -170,6 +170,10 @@ MESSAGES: dict[str, str] = {
     "E_REPORT_DEV_ONLY": "Question \"{question}\" is reserved for the twin developer: a public report never contains it.",
     "E_REPORT_NO_PROJECTION": "Question \"{question}\" has no public projection yet: it cannot enter a public report.",
     "E_REPORT_PRIVATE": "Question \"{question}\" exposes elements the developer has not made public: {elements}.",
+    # rapport public : générateur (P2c.3)
+    "E_REPORT_EMPTY": "Nothing can be published: the report would have no entry.",
+    "E_REPORT_MODEL_MODE": "Twin \"{ref}\" is in {mode} mode, but the report expects a {role} twin ({expected} mode).",
+    "W_NO_UNCERTAINTY": "Forward model: its parameters are fixed, so this result has no confidence interval.",
     # twin
     "E_NO_CLEANED_MEASURES": "No cleaned measurements yet: apply a cleaning first.",
     "E_STRICT_DIRTY": "The {target} repository has uncommitted changes.",

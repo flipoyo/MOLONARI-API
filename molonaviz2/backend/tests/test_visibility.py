@@ -135,7 +135,7 @@ def test_public_answer_keeps_only_the_whitelist(twins):
             if question.id not in PUBLIC_DATA:
                 continue
             answer = api.ask(ref, question.id)
-            public = publishable_answer(question, answer, Visibility(), mode, instance=f"{ref}@test")
+            public = publishable_answer(question, answer, Visibility(**{e: True for e in ELEMENTS}), mode, instance=f"{ref}@test")
             allowed = set(PUBLIC_DATA[question.id]) | (set(PUBLIC_ENVIRONMENT) if question.id == "provenance" else set())
             assert set(public.data) <= allowed, (ref, question.id)
             assert set(public.provenance) <= {"question", "ref", "parameters", "instance"}, (ref, question.id)
@@ -186,7 +186,7 @@ def test_hn43_keeps_everything_for_the_developer(twins):
 
 
 def test_the_gate_list_is_not_empty_and_matches_the_catalog():
-    assert set(PUBLIC_DATA) <= {q.id for q in CATALOG if q.access != "dev"}
+    assert set(PUBLIC_DATA) - {"model_difference"} <= {q.id for q in CATALOG if q.access != "dev"}  # model_difference : la comparaison, hors catalogue
     assert {q.id for q in CATALOG if q.access == "report"} - set(PUBLIC_DATA) <= {"reliability"}
     assert {"describe", "provenance"} <= set(PUBLIC_DATA)
 
@@ -211,6 +211,7 @@ IF_PUBLIC = {
     "chain_data": {"D": set(), "M": {"posterior", "inversion_settings_public"}},  # BN-34 (mode M seulement)
 }
 MODE_NAMES = {"D": "direct", "M": "mcmc"}
+WITH_PROJECTION = {"fit_quality", "soil_properties", "posterior_samples", "chain_data"}  # P2c.3
 
 
 def test_if_public_table_is_the_catalog_column():
@@ -254,7 +255,10 @@ def test_if_public_question_passes_when_its_elements_are_public(question_id):
 
 @pytest.mark.parametrize("question_id", sorted(IF_PUBLIC))
 def test_if_public_question_needs_its_whitelist_to_enter_a_report(question_id, twins):
-    # aucune de ces questions n'a encore de projection (P2c.3) : même avec tout public, la réponse n'entre pas telle quelle
+    # Les états et les mesures (HN-20, HN-30, HN-33, BN-30) n'ont pas de projection tant que la grille de requêtes n'est pas
+    # décidée (T3) : même avec tout public, la réponse n'entre pas telle quelle. Les agrégats et la PDF en ont une (P2c.3).
+    if question_id in WITH_PROJECTION:
+        pytest.skip("projection livrée avec le générateur (P2c.3)")
     question = by_id(question_id)
     assert question_id not in PUBLIC_DATA
     ref, mode = ("twin_03", "mcmc") if "D" not in question.modes else ("twin_01", "direct")
@@ -284,3 +288,22 @@ def test_no_question_exposes_the_seed():
         if question.exposes != DEV:
             assert "seed" not in question.exposes, question.id
     assert "seed" not in by_id("describe").outputs
+
+
+def test_projections_of_the_report_questions_are_whitelists_without_private_settings():
+    assert set(PUBLIC_DATA) >= WITH_PROJECTION | {"model_difference"}
+    for question_id in WITH_PROJECTION:
+        assert not {"sigma", "rmse_over_sigma", "lag1_autocorrelation", "seed"} & set(PUBLIC_DATA[question_id]), question_id
+
+
+def test_projections_of_the_report_questions_only_keep_declared_outputs(twins):
+    api = TwinAPI(twins)
+    everything = Visibility(**{e: True for e in ELEMENTS})
+    for ref, mode in (("twin_01", "direct"), ("twin_03", "mcmc")):
+        for question_id in sorted(WITH_PROJECTION):
+            question = by_id(question_id)
+            if ("D" if mode == "direct" else "M") not in question.modes:
+                continue
+            public = publishable_answer(question, api.ask(ref, question_id), everything, mode)
+            assert public.data and set(public.data) <= set(PUBLIC_DATA[question_id]), (ref, question_id)
+            assert "sigma" not in public.data and "sigma" not in public.provenance.get("parameters", {}), (ref, question_id)
