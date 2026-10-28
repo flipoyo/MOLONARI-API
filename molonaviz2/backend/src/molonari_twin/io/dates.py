@@ -10,7 +10,7 @@ from __future__ import annotations
 import itertools
 import re
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pandas as pd
 
@@ -103,3 +103,73 @@ def parse_date(value: str | None) -> datetime | None:
         except ValueError:
             continue
     raise UserError("E_DATE_FORMAT_UNKNOWN", value=text)
+
+
+# Fuseau déclaré par les fichiers (P2.1f) ---------------------------------------------------------------------
+#
+# Convention : celle des données brutes. Les exports HOBOware déclarent dans l'en-tête de la colonne des dates un
+# décalage FIXE par rapport à UTC (« Date Heure, GMT+01:00 »), sans heure d'été ni nom de zone. Une date peut
+# aussi porter son propre décalage (« 2016-06-27T12:00:00+01:00 »). Rien n'est supposé quand rien n'est déclaré.
+
+_HEADER_OFFSET = re.compile(r"\b(?:GMT|UTC)\s*(?:(?P<sign>[+\-\u2212])\s*(?P<h>\d{1,2})(?::?(?P<m>\d{2}))?)?(?![\w:])", re.IGNORECASE)
+# Décalage en fin de date, seulement après une heure (« 12:00:00+01:00 », « 12:00 PM Z ») : « 27-06-2016 » n'en a pas.
+_CELL_OFFSET = re.compile(r"(?<=\d:\d\d)(?P<time>(?::\d\d)?(?:\s*[AaPp][Mm])?)\s*(?P<z>Z|(?P<sign>[+\-])(?P<h>\d{2})(?::?(?P<m>\d{2}))?)$")
+
+
+def _offset(sign: str | None, hours: str | None, minutes: str | None) -> timedelta:
+    delta = timedelta(hours=int(hours or 0), minutes=int(minutes or 0))
+    return -delta if sign in ("-", "\u2212") else delta
+
+
+def parse_header_offset(header: str | None) -> timedelta | None:
+    """Décalage à UTC déclaré par l'en-tête d'une colonne de dates (« Date Heure, GMT+01:00 »), None s'il n'y en a
+    pas. « GMT » ou « UTC » seul vaut UTC. Un décalage hors de ±14 h est refusé (E_DATE_OFFSET_INVALID)."""
+    if not header:
+        return None
+    match = _HEADER_OFFSET.search(header)
+    if match is None:
+        return None
+    delta = _offset(match["sign"], match["h"], match["m"])
+    if abs(delta) > timedelta(hours=14) or (match["m"] and int(match["m"]) > 59):
+        raise UserError("E_DATE_OFFSET_INVALID", value=match.group(0).strip())
+    return delta
+
+
+def split_cell_offset(value: str) -> tuple[str, timedelta | None]:
+    """Sépare une date de son décalage explicite éventuel (« 2016-06-27T12:00:00+01:00 » → date, +1 h)."""
+    text = normalize(value)
+    match = _CELL_OFFSET.search(text)
+    if match is None:
+        return text, None
+    z = match["z"]
+    delta = timedelta() if z.upper() == "Z" else _offset(match["sign"], match["h"], match["m"])
+    if abs(delta) > timedelta(hours=14) or (match["m"] and int(match["m"]) > 59):
+        raise UserError("E_DATE_OFFSET_INVALID", value=z)
+    return text[: match.start("z")].rstrip(), delta
+
+
+def parse_offset_parameter(value: str) -> timedelta:
+    """Décalage donné en paramètre : « UTC », « Z », « +01:00 », « GMT+1 », « UTC-05:30 ». Un nom de zone
+    (« Europe/Paris ») n'est pas un décalage fixe : refusé (E_PIPELINE_TIMEZONE_INVALID)."""
+    text = str(value).strip()
+    if not text:
+        raise UserError("E_PIPELINE_TIMEZONE_INVALID", value=text)
+    candidate = text if re.match(r"(?i)^(gmt|utc|z)\b", text) else f"UTC{text}"
+    if text.upper() == "Z":
+        return timedelta()
+    match = re.fullmatch(r"(?i)(?:gmt|utc)\s*(?:(?P<sign>[+\-\u2212])\s*(?P<h>\d{1,2})(?::?(?P<m>\d{2}))?)?", candidate)
+    if match is None:
+        raise UserError("E_PIPELINE_TIMEZONE_INVALID", value=text)
+    delta = _offset(match["sign"], match["h"], match["m"])
+    if abs(delta) > timedelta(hours=14) or (match["m"] and int(match["m"]) > 59):
+        raise UserError("E_PIPELINE_TIMEZONE_INVALID", value=text)
+    return delta
+
+
+def format_offset(delta: timedelta | None) -> str:
+    """« +01:00 » (« UTC » pour zéro, « non déclaré » pour None, repris par les messages)."""
+    if delta is None:
+        return "none"
+    minutes = int(delta.total_seconds() // 60)
+    sign = "-" if minutes < 0 else "+"
+    return f"{sign}{abs(minutes) // 60:02d}:{abs(minutes) % 60:02d}"
