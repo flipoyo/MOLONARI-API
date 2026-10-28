@@ -16,14 +16,12 @@ Jusqu'à 0.6.0-alpha.1, le backend faisait partie du paquet molonaviz2 : son his
 
 ## [Non publié]
 
-### Corrigé
-
-- Après la fusion de P2.1f, P2.2c et P2.3 : clé `E_TWIN_EXPECTED_TEXT` en double dans `errors.py` retirée ; `TOP_KEYS_2` de `config.py` définie deux fois (la seconde faisait refuser `site_label`, `monitoring`, `visibility` et `report`) ; tests de publication alignés sur `orx.yaml` ; `API_VERSION = 1.0.0-alpha.7` (P2.2c et P2.3 visaient toutes deux alpha.6) ; snapshot OpenAPI et `docs/API_V1.md` régénérés.
+## [0.8.0-alpha.1] - 2026-10-28
 
 Phase 2 du plan twin v3 : issues P2.1 (pipeline du brut, avec BN-03 et BN-04) et P2c.1 (questions du rapport public). Les questions ne chargent toujours pas JAX (23 au total).
 
 - P2.1 : le pipeline du brut au résultat, avec BN-03 et BN-04 (sortis du lot C4, car ils ne dépendent que du pipeline brut).
-- P2c.1 : les questions du rapport public. Pas de nouvelle version ici : la version est celle de l'alpha.3, donc **aucun identifiant de référence ne change** (le `twin_id` dépend de la configuration et de la version du code, pas du contenu des résultats).
+- P2c.1 : les questions du rapport public. Le contenu des résultats n'entre pas dans le `twin_id` (configuration et version du code seulement) : ce lot n'a changé aucun identifiant. Ceux de cette version sont en bas de la section.
 - P2c.2 : visibilité des questions et projections publiques. Chaque question déclare ce qu'elle **expose** (`Question.exposes`, colonne « Accès » du catalogue ; obligatoire). `questions/visibility.py` (`Visibility`, défaut : tout privé sauf la PDF), `questions/public.py` (liste blanche de HN-02 et HN-43 et des agrégats publiables), `api/publication.py` (refus : `E_REPORT_DEV_ONLY`, `E_REPORT_PRIVATE`, `E_REPORT_NO_PROJECTION`). La graine sort de HN-02 et de HN-43 (patch « accès » : elle est réservée au niveau ORX). **`API_VERSION` passe à 1.0.0-alpha.5** : le champ `seed` disparaît de la réponse de HN-02 ; le reste de `/v1` ne change pas.
 
 ### P2.1f : dates avec fuseau
@@ -78,6 +76,10 @@ Phase 2 du plan twin v3 : issues P2.1 (pipeline du brut, avec BN-03 et BN-04) et
 - `tests/test_determinism.py` : du brut aux fichiers de résultats, `thin = k` garde exactement une itération sur k (même trajectoire que `thin = 1`, au bit près) ; les chaînes et itérations des champs sont celles des paramètres (recalcul du modèle direct) ; même graine, `posterior.npz` et tous les fichiers de résultats identiques au bit près (aussi entre deux processus) ; deux graines, des chaînes toutes différentes ; `--strict` refuse un dépôt modifié (twin ou code, fichier modifié ou non suivi) et un build `+g…`, sans rien écrire. Aucun changement du code, aucune version.
 - `acceptance` (posterior.npz) est comptée sur les itérations gardées : elle dépend de `thin`. Déterministe, donc non corrigée ici.
 
+### Corrigé
+
+- Après la fusion de P2.1f, P2.2c et P2.3 : clé `E_TWIN_EXPECTED_TEXT` en double dans `errors.py` retirée ; `TOP_KEYS_2` de `config.py` définie deux fois (la seconde faisait refuser `site_label`, `monitoring`, `visibility` et `report`) ; tests de publication et de déterminisme (les `slow`, que la CI lance) alignés sur `orx.yaml` ; `API_VERSION = 1.0.0-alpha.7` (P2.2c et P2.3 visaient toutes deux alpha.6) ; snapshot OpenAPI et `docs/API_V1.md` régénérés.
+
 ### Ajouté
 - `twin/pipeline.py` : `read_raw_point`, `resolve_instruments`, `load_point`, `clean_point`, `column_inputs` et `run_pipeline`. Il enchaîne les lecteurs (`io/lab_import.py`, `io/point_import.py`), `clean(…, CleanupSettings)` et `ColumnInputs.from_cleaned`, sans dupliquer leur code. Le brut de Point034 redonne exactement les mesures nettoyées de `examples/twins/twin_01/measurements.csv` (1436 dates, ou 1430 dans la fenêtre du twin).
 - σ des instruments : `Sigma_Meas_P` du capteur de pression et `Sigma_Meas_T` du thermomètre de la tige entrent dans `ColumnInputs` ; `sigma_pressure` et `sigma_temperature` peuvent les remplacer.
@@ -99,6 +101,11 @@ Phase 2 du plan twin v3 : issues P2.1 (pipeline du brut, avec BN-03 et BN-04) et
 ### Pas encore fait
 - P2.2 : `create_twin` écrit encore du 1.1.0 (mesures nettoyées). La création d'un twin 2.0.0 depuis le brut, la migration d'un 1.x et la graine dans `orx.yaml` (P0.7d) ne sont pas faites.
 - Les questions refusent encore un fuseau dans leurs paramètres de date (`E_QUESTION_PARAMS`) : leurs dates sont dans le repère des données du twin, que le pipeline expose désormais (`utc_offset`). À reprendre avec le contrat de dates de l'API.
+
+### Identifiants de référence (0.8.0-alpha.1)
+- `twin_01` et `twin_02` : `8c7952b3efe34b53` ; `twin_03` : `8724404bf1d92706` ; `twin_04` : `f7d4db454041be34`.
+- Ils changent par rapport à 0.7.0-alpha.3 parce que la version du code entre dans `engine_version()`, pas parce que le calcul a changé : avec la version `0.7.0-alpha.3`, le code de cette version redonne `7501fd11570bbe5c`, `ab5eaa6782784ab4` et `50cde3108f8f26ea`.
+- Calculés avec la version publiée (`release_version()`, sans suffixe local).
 
 ## [0.7.0-alpha.3] - 2026-10-23
 
