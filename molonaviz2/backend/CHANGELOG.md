@@ -45,7 +45,8 @@ Phase 2 du plan twin v3 : issues P2.1 (pipeline du brut, avec BN-03 et BN-04) et
 - Aucune de ces clés n'entre dans le `twin_id` : elles ne changent pas le résultat. Aucun identifiant de référence ne change.
 - HN-02 (`describe`) donne `site_label`, `monitoring_status`, `visibility.<élément>` (défauts compris) et le rapport demandé (`report_declared`, `report_questions`, `report_parameters`, `report_forward`, `report_inversion`), donc le rapport par défaut quand la clé `report` est absente (`report_declared` vaut alors faux).
 - `API_VERSION = 1.0.0-alpha.6` : sorties de HN-02. Snapshot OpenAPI et `docs/API_V1.md` régénérés.
-- Reste à faire : brancher `Visibility` (`questions/visibility.py`, P2c.2) sur `TwinConfig.visibility`, refuser dans le générateur (P2c.3) les questions réservées au développeur, et contrôler la comparabilité des deux twins de `report.models` (operating spaces).
+- `Visibility.from_config(config)` (`questions/visibility.py`, P2c.2) construit la déclaration à partir de la clé ; `ELEMENTS` y vient de `twin/config.py` (`VISIBILITY_ELEMENTS`), sans second jeu de noms. La projection publique de HN-02 ajoute `site_label` et `monitoring_status` (la carte d'identité) ; ni `visibility.*` ni `report_*` n'y entrent (ils sont dans `report.json`).
+- Reste à faire : refuser dans le générateur (P2c.3) les questions réservées au développeur, lire `report.entries` pour écrire le rapport, et contrôler la comparabilité des deux twins de `report.models` (operating spaces).
 
 ### Ajouté
 - `twin/pipeline.py` : `read_raw_point`, `resolve_instruments`, `load_point`, `clean_point`, `column_inputs` et `run_pipeline`. Il enchaîne les lecteurs (`io/lab_import.py`, `io/point_import.py`), `clean(…, CleanupSettings)` et `ColumnInputs.from_cleaned`, sans dupliquer leur code. Le brut de Point034 redonne exactement les mesures nettoyées de `examples/twins/twin_01/measurements.csv` (1436 dates, ou 1430 dans la fenêtre du twin).

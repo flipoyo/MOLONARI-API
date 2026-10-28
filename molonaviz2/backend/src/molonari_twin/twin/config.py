@@ -137,15 +137,15 @@ INITIAL_CONDITIONS = ("linear",)
 # Clés de publication du schéma 2.0.0 (P2.3) -----------------------------------------------------------------
 # Éléments de visibilité (SPEC_RAPPORT_PUBLIC, section 5) et leur défaut : tout privé, sauf la PDF a posteriori et les
 # réglages que ses échantillons révèlent de toute façon. La graine n'en est PAS un : elle est réservée au niveau ORX,
-# et aucune clé ne peut la déclarer publique. `questions/visibility.py` (`ELEMENTS`, `Visibility`) porte les mêmes noms.
+# et aucune clé ne peut la déclarer publique. `questions/visibility.py` (`ELEMENTS`, `Visibility.from_config`) en est construit.
 VISIBILITY_DEFAULTS = {
-    "inversion_settings": False,
-    "inversion_settings_public": True,
-    "forward_parameters": False,
-    "posterior": True,
-    "states": False,
-    "raw_data": False,
-    "processed_data": False,
+    "inversion_settings": False,  # réglages du MCMC qui restent privés : priors, delta, n_cr, c, c_star, seuil R̂, pas, σ
+    "inversion_settings_public": True,  # nb_chains, nb_iter, thin, burn-in effectif : les échantillons publics les révèlent
+    "forward_parameters": False,  # paramètres du sol d'un twin direct (k, n, λs, ρs·cs par couche)
+    "posterior": True,  # PDF a posteriori : résumé, échantillons et données par chaîne
+    "states": False,  # champs T, q(z, t), flux de chaleur
+    "raw_data": False,  # données brutes
+    "processed_data": False,  # données traitées
 }
 VISIBILITY_ELEMENTS = tuple(VISIBILITY_DEFAULTS)
 VISIBILITY_REVEALED = "inversion_settings_public"  # public de fait tant que `posterior` est public (échantillons publics)

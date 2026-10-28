@@ -4,7 +4,6 @@
 Les clés inconnues restent refusées, les nouvelles sont validées, un twin sans `report` a le rapport par défaut (que
 HN-02 affiche), et aucune de ces clés n'entre dans le `twin_id`. La graine n'est jamais un élément de visibilité."""
 
-import importlib
 
 import pytest
 from conftest import EXAMPLE_TWINS
@@ -274,11 +273,21 @@ def test_no_key_and_no_answer_gives_the_seed(tmp_path, data_repo):
     assert not [element for element in VISIBILITY_ELEMENTS if "seed" in element]
 
 
-def test_the_visibility_names_are_those_of_the_questions():
-    """Quand `questions/visibility.py` est présent (P2c.2), ses éléments et ses défauts sont ceux du schéma."""
-    try:
-        module = importlib.import_module("molonari_twin.questions.visibility")
-    except ModuleNotFoundError:
-        pytest.skip("questions/visibility.py n'est pas dans cette branche (P2c.2)")
-    assert tuple(module.ELEMENTS) == VISIBILITY_ELEMENTS
-    assert module.Visibility(**VISIBILITY_DEFAULTS) == module.Visibility()
+def test_the_visibility_of_the_questions_is_built_from_the_key(tmp_path, data_repo):
+    """`questions/visibility.py` (P2c.2) prend ses noms et sa déclaration dans la configuration : rien n'est dupliqué."""
+    from molonari_twin.questions import ELEMENTS, Visibility
+
+    assert tuple(ELEMENTS) == VISIBILITY_ELEMENTS and Visibility() == Visibility(**VISIBILITY_DEFAULTS)
+    config = load_twin(write_twin(tmp_path, RAW_MCMC + PUBLIC))
+    visibility = Visibility.from_config(config)
+    assert visibility.to_dict() == config.visibility
+    assert visibility.is_public("states") and visibility.is_public("posterior") and not visibility.is_public("raw_data")
+    assert Visibility.from_config(load_twin(write_twin(tmp_path / "default", RAW_DIRECT))) == Visibility()
+
+
+def test_the_public_description_gives_the_site_label_and_the_monitoring_but_not_the_declaration(tmp_path, data_repo):
+    from molonari_twin.questions import public_answer
+
+    public = public_answer("describe", describe(load_twin(write_twin(tmp_path, RAW_MCMC + PUBLIC))))
+    assert public.data["site_label"].value == "Rivière du Bas-Rhin, site amont" and public.data["monitoring_status"].value == "actif"
+    assert not [name for name in public.data if name.startswith(("visibility.", "report_")) or name in ("name", "point", "description")]
