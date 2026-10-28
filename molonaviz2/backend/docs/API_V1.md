@@ -2,7 +2,7 @@
 
 <!-- Fichier généré par tools/gen_api_doc.py à partir du catalogue (molonari_twin.api). Ne pas modifier à la main. -->
 
-Version de l'API : **1.0.0-alpha.5**. Schéma complet : `GET /openapi.json` ; catalogue avec les schémas de
+Version de l'API : **1.0.0-alpha.6**. Schéma complet : `GET /openapi.json` ; catalogue avec les schémas de
 paramètres : `GET /v1/questions` (`?twin=<ref>` : les questions de son mode).
 
 ## Poser une question
@@ -348,7 +348,7 @@ Sorties : `settings.name`, `settings.minimum`, `settings.maximum`, `settings.def
 
 **Is this configuration valid, and what will it cost?** — *Cette configuration est-elle valide, et que coûtera-t-elle ?*
 
-Whether the configuration of a twin folder is valid, with its problems (also given as warnings); if so, the twin_id expected for the published code, the state (new, computed, duplicate or modified) and, in mcmc mode, the number of samples, the evaluations and the stored size, which depends on `store_fields`. An invalid configuration is an answer (`valid` is false), not an error.
+Whether the configuration of a twin folder is valid, with its problems (also given as warnings); if so, the twin_id expected for the published code (empty for a 2.0.0 twin without a seed, which can be read but not computed), the state (new, computed, duplicate or modified) and, in mcmc mode, the number of samples, the evaluations and the stored size, which depends on `store_fields`. An invalid configuration is an answer (`valid` is false), not an error.
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige le dossier d'un twin, dont la configuration peut être invalide.
 - Accès : développeur seulement (jamais dans le rapport public).

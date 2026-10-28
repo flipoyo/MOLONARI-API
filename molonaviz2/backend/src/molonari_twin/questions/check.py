@@ -10,13 +10,14 @@ from pathlib import Path
 
 import numpy as np
 
+from ..errors import Issue
 from ..twin.config import TwinConfigError, load_twin
 from .answer import Answer, Quantity
 
 
 def check_twin(folder: Path) -> Answer:
     """Problèmes (codes, champs, messages ; aussi en avertissements), et si la configuration est valide : `twin_id`
-    prévu pour la version publiée du code, `twin_id_local` (celui du code chargé : il diffère pour un build local),
+    prévu pour la version publiée du code (vide pour un twin 2.0.0 sans graine, qui se lit mais ne se calcule pas), `twin_id_local` (celui du code chargé : il diffère pour un build local),
     `state` (new, computed, duplicate ou modified) et, en mode mcmc, le coût de l'échantillonnage."""
     from ..engine.api import release_version
     from ..engine.layout import sampling_layout
@@ -31,11 +32,13 @@ def check_twin(folder: Path) -> Answer:
     else:
         issues, warnings = [], []
         status = twin_status(config)
+        if not config.has_seed:  # twin 2.0.0 sans couche orx : valide et lisible, mais son twin_id contient la graine
+            warnings.append(Issue("orx.mcmc.seed", "W_TWIN_NO_SEED", prefixed=True))
         data = {
             "valid": Quantity(True, "1"),
             "name": Quantity(config.name, "1"),
             "mode": Quantity(config.mode, "1"),
-            "twin_id": Quantity(config.twin_id(release_version()), "1"),
+            "twin_id": Quantity(config.twin_id(release_version()) if config.has_seed else "", "1"),
             "twin_id_local": Quantity(status.twin_id, "1"),
             "state": Quantity(status.state, "1"),
             "duplicate_of": Quantity(status.source.name if status.state == "duplicate" else "", "1"),

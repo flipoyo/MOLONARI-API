@@ -39,7 +39,7 @@ Phase 2 du plan twin v3 : issues P2.1 (pipeline du brut, avec BN-03 et BN-04) et
 
 - Lecture du schéma `molonari-twin/2.0.0` : le twin part du brut. `data: {lab, point}` désigne le laboratoire et le point dans le dépôt de données (chemins relatifs à sa racine, qui ne peuvent en sortir) ; `processing: {start, end, methods, excluded}` règle le nettoyage. Le pipeline du brut (`twin/pipeline.py`) fournit les profondeurs, le décalage et les σ. `sensors.sigma_*` peut les remplacer.
 - Racine du dépôt de données : variable `MOLONARI_DATA`, sinon le dossier `data/` de l'espace de travail cgs (là où se trouve `molonari.cgs`). Le twin.yaml n'en dit pas plus.
-- `mcmc.seed` est obligatoire en mode mcmc (E_TWIN_REQUIRED sinon). Elle entre dans le `twin_id`, car elle détermine le résultat.
+- ~~`mcmc.seed` obligatoire dans `twin.yaml`~~ : remplacé par la couche `orx` (P2.2c, ci-dessous). La graine entre dans le `twin_id`, car elle détermine le résultat.
 - Clés retirées du 2.0.0, refusées avec leur nouvelle place : `E_TWIN_KEY_MOVED`, `E_TWIN_KEY_FROM_DATA`, `E_TWIN_CODE_VERSION_REMOVED`.
 - `legacy_twin_id` : étiquette d'un twin migré depuis un 1.x (hors du `twin_id`).
 - Identifiant d'un twin 2.0.0 : empreinte de la forme canonique, avec l'empreinte des mesures nettoyées à la place de celle du fichier, la graine dans `mcmc.seed` et la version du code. Le chemin du dépôt n'y entre pas. Les twins 1.x gardent leur forme canonique : `twin_01`, `twin_02`, `twin_03` et `twin_04` ont les mêmes identifiants qu'avant.
@@ -47,6 +47,15 @@ Phase 2 du plan twin v3 : issues P2.1 (pipeline du brut, avec BN-03 et BN-04) et
 - `metadata.json` : `files`, la SHA-256 de chaque fichier de résultats (P2.2f, absent de A3). Pour un twin 2.0.0, `data` donne le laboratoire, le point et l'empreinte des mesures nettoyées.
 - `API_VERSION = 1.0.0-alpha.5` : HN-02 ne donne plus `seed`. Le snapshot OpenAPI et `docs/API_V1.md` sont régénérés.
 
+### P2.2c : la graine dans orx.yaml (couche orx)
+
+- Un twin 2.0.0 lit sa graine dans `orx.yaml`, à côté de `twin.yaml` (couche `orx`, décision P0.7d du 2026-10-28) : `mcmc.seed` et la plateforme de référence (`platform` : `python`, `platform`, `processor`, `device`, `jax`, `jaxlib`, `numpy`, étiquette qui n'entre pas dans le `twin_id`). Nouveau module `twin/orx.py` ; `schema: molonari-orx/1.0.0` est facultatif ; les clés inconnues sont refusées (chemins `orx.mcmc.seed`…).
+- **Sans `orx.yaml` (ou sans graine), un twin 2.0.0 reste lisible** : `load_twin`, HN-02, les questions de résultats et BN-11 répondent. `TwinConfig.seed` vaut `None` (`has_seed` est faux) et `twin_id` lève `E_TWIN_REQUIRED` (`orx.mcmc.seed`). Le dev retrouve les résultats par le registre (nom du twin → `twin_id`), et une recette modifiée après le calcul est toujours détectée (E_TWIN_FROZEN) par comparaison avec `metadata.json["config"]`, qui est la recette sans graine. Seul un changement de la graine seule échappe au dev.
+- **`run_twin` refuse un twin sans graine** avant tout calcul, y compris pour renvoyer un résultat existant : `TwinConfigError` (`E_TWIN_CONFIG_INVALID`) dont le problème est `orx.mcmc.seed` / `E_TWIN_REQUIRED`. Il en va de même pour la commande `run` et la tâche `twin.run`.
+- Un `twin.yaml` 2.0.0 qui contient une graine (`mcmc.seed`, ou `seed` au niveau supérieur) est refusé : `E_TWIN_SEED_ORX`, avec la place du fichier. Avant, `seed` donnait `E_TWIN_KEY_MOVED`.
+- Les twins 1.x gardent leur `seed` dans `twin.yaml` et sont lus sans changement : un `orx.yaml` à côté d'eux est ignoré, et leurs identifiants de référence ne bougent pas (`twin_01` et `twin_02` 7501fd11570bbe5c, `twin_03` ab5eaa6782784ab4, `twin_04` 50cde3108f8f26ea).
+- Le `twin_id` d'un twin 2.0.0 ne change pas : la forme canonique garde la graine dans `mcmc.seed`, donc un même twin donne le même identifiant que lorsqu'il l'avait dans `twin.yaml`. La graine reste absente de HN-02, de HN-43 et de `metadata.json["config"]`.
+- BN-11 (`check`) : `twin_id` est vide pour un twin 2.0.0 sans graine, avec l'avertissement `W_TWIN_NO_SEED`. `API_VERSION = 1.0.0-alpha.6`. Nouveaux codes : `E_TWIN_SEED_ORX`, `E_TWIN_EXPECTED_TEXT`, `W_TWIN_NO_SEED` (traduits). Le snapshot OpenAPI et `docs/API_V1.md` sont régénérés.
 ### P2.4 : tests de déterminisme et `--strict`
 
 - `tests/test_determinism.py` : du brut aux fichiers de résultats, `thin = k` garde exactement une itération sur k (même trajectoire que `thin = 1`, au bit près) ; les chaînes et itérations des champs sont celles des paramètres (recalcul du modèle direct) ; même graine, `posterior.npz` et tous les fichiers de résultats identiques au bit près (aussi entre deux processus) ; deux graines, des chaînes toutes différentes ; `--strict` refuse un dépôt modifié (twin ou code, fichier modifié ou non suivi) et un build `+g…`, sans rien écrire. Aucun changement du code, aucune version.
