@@ -66,8 +66,13 @@ def test_same_seed_same_result():
     first = run_inversion(inputs, small_config())
     second = run_inversion(inputs, small_config())
     np.testing.assert_array_equal(first.samples, second.samples)
+    np.testing.assert_array_equal(first.energies, second.energies)
+    np.testing.assert_array_equal(first.acceptance, second.acceptance)
+    np.testing.assert_array_equal(first.best_parameters, second.best_parameters)
     other = run_inversion(inputs, small_config(seed=2))
     assert not np.array_equal(first.samples, other.samples)
+    # deux graines : chaque chaîne diffère, pas seulement l'une d'elles (le pipeline complet est dans test_determinism.py, P2.4)
+    assert all(not np.array_equal(first.samples[:, c], other.samples[:, c]) for c in range(first.samples.shape[1]))
 
 
 def test_result_content():
