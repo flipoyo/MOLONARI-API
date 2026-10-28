@@ -49,7 +49,8 @@ def test_raw_series_of_point034(api):
     assert data["voltage"].value[0] == 1.26787 and data["temperature"].value[:, 0].tolist() == [13.81, 13.834, 13.858, 13.81]
     assert answer.provenance == {"question": "raw_series", "ref": "BN-03",
                                  "parameters": {"point_folder": POINT, "start": None, "end": None}}
-    assert answer.warnings == []
+    # Convention de fuseau provisoire (P2.1f, TODO(fuseau)) : l'en-tête GMT+01:00 est lu UTC+2, et la réponse le dit.
+    assert sorted(w.code for w in answer.warnings) == ["W_MEASURES_TIMEZONE_OVERRIDDEN"] * 2
 
 
 def test_raw_series_period_is_included_at_both_ends():
@@ -70,7 +71,7 @@ def test_raw_series_answers_with_the_file_that_exists(api, tmp_path):
     (folder / "point034_P_measures.csv").unlink()
     answer = api.ask_global("raw_series", {"point_folder": str(folder)})
     assert "temperature" in answer.data and "voltage" not in answer.data
-    assert [w.code for w in answer.warnings] == ["E_PIPELINE_NO_PRESSURE_FILE"]
+    assert sorted(w.code for w in answer.warnings) == ["E_PIPELINE_NO_PRESSURE_FILE", "W_MEASURES_TIMEZONE_OVERRIDDEN"]
 
 
 def test_raw_series_refuses_unsupported_formats(api, tmp_path):

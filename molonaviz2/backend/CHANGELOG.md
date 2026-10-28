@@ -22,6 +22,19 @@ Phase 2 du plan twin v3 : issues P2.1 (pipeline du brut, avec BN-03 et BN-04) et
 - P2c.1 : les questions du rapport public. Pas de nouvelle version ici : la version est celle de l'alpha.3, donc **aucun identifiant de référence ne change** (le `twin_id` dépend de la configuration et de la version du code, pas du contenu des résultats).
 - P2c.2 : visibilité des questions et projections publiques. Chaque question déclare ce qu'elle **expose** (`Question.exposes`, colonne « Accès » du catalogue ; obligatoire). `questions/visibility.py` (`Visibility`, défaut : tout privé sauf la PDF), `questions/public.py` (liste blanche de HN-02 et HN-43 et des agrégats publiables), `api/publication.py` (refus : `E_REPORT_DEV_ONLY`, `E_REPORT_PRIVATE`, `E_REPORT_NO_PROJECTION`). La graine sort de HN-02 et de HN-43 (patch « accès » : elle est réservée au niveau ORX). **`API_VERSION` passe à 1.0.0-alpha.5** : le champ `seed` disparaît de la réponse de HN-02 ; le reste de `/v1` ne change pas.
 
+### P2.1f : dates avec fuseau
+
+> **NOTE PROVISOIRE, à régler les années suivantes (`TODO(fuseau)`).** La convention appliquée aux bruts est **UTC+2 toute l'année** (`io.dates.PROVISIONAL_UTC_OFFSET`), décidée par l'équipe à titre provisoire. L'heure réelle des horloges des loggers (CET en hiver, CEST en été) doit être **confirmée auprès des opérateurs terrain**, puis la gestion CET/CEST traitée proprement à la place de ce décalage fixe.
+
+- **Ce que déclarent les bruts** : tous les exports HOBOware du dépôt de données (Point034, 047, 051-1, 051-2, 52, 53) écrivent dans l'en-tête de la colonne des dates un décalage fixe, « Date Heure, GMT+01:00 », en été comme en hiver. Cet en-tête ne reflète pas l'heure d'été réelle.
+- **Convention provisoire** : un en-tête qui déclare `GMT+01:00` est lu comme `UTC+2`, avec l'avertissement `W_MEASURES_TIMEZONE_OVERRIDDEN` (pas une erreur). Un en-tête `GMT+02:00` est gardé tel quel, sans avertissement. Tout autre décalage d'en-tête garde le comportement décrit plus bas (conflit ou erreur). Une date qui porte elle-même son décalage (`2016-06-27T12:00:00+01:00`) est exacte et n'est jamais remplacée.
+- **Les dates ne bougent pas** : elles restent des dates sans fuseau, écrites telles quelles. Seul `utc_offset` (sur `ParsedMeasures`, `RawPoint`, `LoadedPoint` et `PipelineResult`) change : UTC = date - `utc_offset`. Les mesures nettoyées de `Demo_twin_0.molo` (Point034) ne changent pas.
+- Point2024-1 à 3 (pression `GMT+02:00`, température `GMT+01:00`) : les deux sont lus en UTC+2, il n'y a donc plus de conflit ni de décalage à faire.
+- Si la pression et la température déclarent tout de même deux décalages différents (par exemple des dates à décalage explicite), les dates de la pression sont ramenées exactement dans le repère de la température, avec l'avertissement `W_PIPELINE_TIMEZONE_SHIFTED`.
+- `timezone` (pipeline) n'est plus refusé : c'est une **vérification** (`+02:00`, `UTC+2`, `GMT+2`) contre le `utc_offset` appliqué. Il ne choisit rien.
+- Rien n'est supposé : sans déclaration, les dates restent telles qu'écrites, `utc_offset` est `None` et `W_MEASURES_TIMEZONE_UNDECLARED` le dit.
+- Erreurs : `E_PIPELINE_TIMEZONE` est supprimé et remplacé par `E_PIPELINE_TIMEZONE_INVALID` (nom de zone comme `Europe/Paris`, décalage hors de ±14 h), `E_PIPELINE_TIMEZONE_CONFLICT`, `E_PIPELINE_TIMEZONE_UNDECLARED`, `E_PIPELINE_TIMEZONE_AMBIGUOUS` (un seul des deux fichiers déclare), `E_MEASURES_TIMEZONE_CONFLICT` (une date contredit le fichier), `E_MEASURES_TIMEZONE_MIXED`, `E_MEASURES_TIMEZONE_PARTIAL`, `E_DATE_OFFSET_INVALID`. Ces codes ne sont pas dans le contrat `/v1` : `API_VERSION` ne change pas.
+
 ### P2.2 : schéma molonari-twin/2.0.0
 
 - Lecture du schéma `molonari-twin/2.0.0` : le twin part du brut. `data: {lab, point}` désigne le laboratoire et le point dans le dépôt de données (chemins relatifs à sa racine, qui ne peuvent en sortir) ; `processing: {start, end, methods, excluded}` règle le nettoyage. Le pipeline du brut (`twin/pipeline.py`) fournit les profondeurs, le décalage et les σ. `sensors.sigma_*` peut les remplacer.
@@ -59,7 +72,7 @@ Phase 2 du plan twin v3 : issues P2.1 (pipeline du brut, avec BN-03 et BN-04) et
 
 ### Pas encore fait
 - P2.2 : `create_twin` écrit encore du 1.1.0 (mesures nettoyées). La création d'un twin 2.0.0 depuis le brut, la migration d'un 1.x et la graine dans `orx.yaml` (P0.7d) ne sont pas faites.
-- P2.1f, les dates avec fuseau, attend la convention de dates (P0.5b). Un fuseau en paramètre reste refusé : `E_PIPELINE_TIMEZONE` pour le pipeline, `E_QUESTION_PARAMS` pour les questions.
+- Les questions refusent encore un fuseau dans leurs paramètres de date (`E_QUESTION_PARAMS`) : leurs dates sont dans le repère des données du twin, que le pipeline expose désormais (`utc_offset`). À reprendre avec le contrat de dates de l'API.
 
 ## [0.7.0-alpha.3] - 2026-10-23
 

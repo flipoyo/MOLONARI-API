@@ -14,8 +14,24 @@ Sont refusés :
 - un fichier dont les dates ne sont pas chronologiques (E_MEASURES_NOT_CHRONOLOGICAL, par le lecteur) ;
 - un point sans fichier de pression ou de température, sans fichier info, ou dont le capteur, la tige ou le
   thermomètre n'est pas dans le laboratoire ;
-- un fuseau horaire en paramètre : les dates restent sans fuseau, dans le repère du logger (P2.1f, en attente de
-  la convention de dates).
+- un fuseau en paramètre qui n'est pas un décalage fixe (« Europe/Paris »), qui contredit celui des fichiers
+  (E_PIPELINE_TIMEZONE_CONFLICT) ou que les fichiers ne déclarent pas (E_PIPELINE_TIMEZONE_UNDECLARED) ;
+- des fichiers de mesures dont un seul déclare son fuseau (E_PIPELINE_TIMEZONE_AMBIGUOUS), ou dont une date
+  contredit le fuseau déclaré (E_MEASURES_TIMEZONE_CONFLICT, par le lecteur).
+
+Fuseau des dates (P2.1f). La convention est celle des données brutes : l'en-tête de la colonne des dates de chaque
+export déclare un décalage fixe à UTC (« Date Heure, GMT+01:00 »), et une date peut porter le sien. Normalisation :
+les dates du point restent des dates sans fuseau, écrites telles quelles dans le repère du fichier ; `utc_offset` donne
+le décalage, et UTC = date - `utc_offset`. Si la pression est déclarée dans un autre décalage que la température, ses
+dates sont décalées vers celui de la température (exact, avec un avertissement), pour que l'association par date reste
+juste. Le paramètre `timezone` ne choisit rien : c'est une vérification (« +02:00 », « UTC », « GMT+2 ») contre le
+`utc_offset` des fichiers. Rien n'est supposé quand rien n'est déclaré : les dates restent telles qu'écrites,
+`utc_offset` est None et un avertissement le dit.
+
+CONVENTION PROVISOIRE (TODO(fuseau), à régler les années suivantes) : un en-tête « GMT+01:00 » est lu comme UTC+2
+toute l'année (`io.dates.PROVISIONAL_UTC_OFFSET`, avertissement W_MEASURES_TIMEZONE_OVERRIDDEN), car il ne reflète
+pas l'heure d'été réelle. L'heure réelle des loggers doit être confirmée auprès des opérateurs terrain, puis la
+gestion CET/CEST traitée proprement. Les dates ne bougent pas, donc les mesures nettoyées non plus.
 
 Les incertitudes σ des instruments viennent du laboratoire : `Sigma_Meas_P` du capteur de pression, `Sigma_Meas_T`
 du thermomètre de la tige. Elles peuvent être remplacées explicitement.
@@ -26,6 +42,7 @@ Rien ici ne charge JAX : les questions BN-03 et BN-04 s'appuient sur ce module.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -33,6 +50,7 @@ import pandas as pd
 from ..domain.models import Lab, PressureSensor, Shaft, Thermometer
 from ..engine.column import ColumnInputs
 from ..errors import Issue, UserError
+from ..io.dates import format_offset, parse_offset_parameter
 from ..io.lab_import import ImportIssue, import_lab_directory
 from ..io.point_import import (
     ParsedMeasures,
@@ -59,6 +77,7 @@ class RawPoint:
     temperature: ParsedMeasures | None
     pressure: ParsedMeasures | None
     warnings: list[Issue] = field(default_factory=list)
+    utc_offset: timedelta | None = None  # décalage à UTC des dates (UTC = date - utc_offset), None si non déclaré
 
     @property
     def name(self) -> str:
@@ -84,6 +103,10 @@ class LoadedPoint:
     instruments: Instruments
 
     @property
+    def utc_offset(self) -> timedelta | None:
+        return self.raw.utc_offset
+
+    @property
     def offset(self) -> float:
         return float(self.raw.info.offset or 0.0) if self.raw.info else 0.0
 
@@ -98,11 +121,46 @@ class PipelineResult:
     def cleaned(self) -> pd.DataFrame:
         return self.cleanup.cleaned
 
+    @property
+    def utc_offset(self) -> timedelta | None:
+        return self.point.raw.utc_offset
 
-def refuse_timezone(timezone: str | None) -> None:
-    """Un fuseau en paramètre est refusé tant que la convention de dates n'est pas fixée (P0.5b, puis P2.1f)."""
-    if timezone is not None:
-        raise UserError("E_PIPELINE_TIMEZONE")
+
+def check_timezone(timezone: str | None, declared: timedelta | None) -> None:
+    """Vérifie le fuseau demandé contre celui des fichiers (la convention est celle des données brutes)."""
+    if timezone is None:
+        return
+    requested = parse_offset_parameter(timezone)
+    if declared is None:
+        raise UserError("E_PIPELINE_TIMEZONE_UNDECLARED", requested=format_offset(requested))
+    if requested != declared:
+        raise UserError("E_PIPELINE_TIMEZONE_CONFLICT", requested=format_offset(requested), declared=format_offset(declared))
+
+
+def align_time_frames(files: PointFiles, temperature: ParsedMeasures | None, pressure: ParsedMeasures | None) -> tuple[timedelta | None, list[Issue]]:
+    """Met les dates de pression dans le repère de la température ; retourne le décalage commun et les avertissements.
+
+    Les dates sont sans fuseau, écrites au décalage déclaré par chaque fichier. Deux déclarations différentes se
+    ramènent exactement l'une à l'autre ; une déclaration d'un côté seulement ne le permet pas (refusé)."""
+    parsed = [m for m in (temperature, pressure) if m is not None]
+    warnings = [w for m in parsed for w in m.warnings]
+    if temperature is None or pressure is None:
+        return (parsed[0].utc_offset if parsed else None), warnings
+    reference, other = temperature.utc_offset, pressure.utc_offset
+    if (reference is None) != (other is None):
+        t_name, p_name = files.temperature.name, files.pressure.name
+        declared_file, other_file = (t_name, p_name) if reference is not None else (p_name, t_name)
+        raise UserError(
+            "E_PIPELINE_TIMEZONE_AMBIGUOUS",
+            declared_file=declared_file, declared=format_offset(reference if reference is not None else other), other_file=other_file,
+        )
+    if reference is not None and other != reference:
+        pressure.frame["date"] = pressure.frame["date"] + (reference - other)
+        warnings.append(
+            Issue(None, "W_PIPELINE_TIMEZONE_SHIFTED", file=files.pressure.name, declared=format_offset(other), reference_file=files.temperature.name,
+                  reference=format_offset(reference), shift=format_offset(reference - other))
+        )
+    return reference, warnings
 
 
 # Lecture d'un point -------------------------------------------------------------------------------------------
@@ -156,7 +214,8 @@ def read_raw_point(folder: Path, require_measures: bool = True) -> RawPoint:
         warnings += info.warnings
     temperature = _read(read_temperature_file, files.temperature) if files.temperature else None
     pressure = _read(read_pressure_file, files.pressure) if files.pressure else None
-    return RawPoint(folder, files, info, temperature, pressure, warnings)
+    utc_offset, time_warnings = align_time_frames(files, temperature, pressure)
+    return RawPoint(folder, files, info, temperature, pressure, warnings + time_warnings, utc_offset)
 
 
 # Instruments --------------------------------------------------------------------------------------------------
@@ -208,10 +267,14 @@ def load_point(
     sigma_temperature: float | None = None,
     sigma_pressure: float | None = None,
 ) -> LoadedPoint:
-    """Étapes 1 à 3 : le laboratoire, les fichiers du point, puis ses instruments. Rien n'est encore nettoyé."""
-    refuse_timezone(timezone)
+    """Étapes 1 à 3 : le laboratoire, les fichiers du point, puis ses instruments. Rien n'est encore nettoyé.
+
+    `timezone` : vérification du fuseau déclaré par les fichiers (voir l'en-tête du module)."""
+    if timezone is not None:
+        parse_offset_parameter(timezone)  # un nom de zone est refusé avant de lire quoi que ce soit
     imported = import_lab_directory(lab_folder)
     raw = read_raw_point(point_folder)
+    check_timezone(timezone, raw.utc_offset)
     instruments = resolve_instruments(raw, imported.lab, sigma_temperature, sigma_pressure)
     return LoadedPoint(raw, imported.lab, imported.issues, instruments)
 
@@ -241,7 +304,7 @@ def run_pipeline(
     """Du brut au résultat : lit le laboratoire et le point, nettoie, et prépare les entrées d'une colonne.
 
     `settings` : fenêtre de dates, méthodes de valeurs aberrantes et dates écartées (aucun nettoyage par défaut).
-    `timezone` est refusé (E_PIPELINE_TIMEZONE) : les dates restent sans fuseau."""
+    `timezone` (« +01:00 », « UTC ») est vérifié contre le fuseau que déclarent les fichiers, il ne le remplace pas."""
     point = load_point(point_folder, lab_folder, timezone, sigma_temperature, sigma_pressure)
     cleanup = clean_point(point, settings)
     return PipelineResult(point, cleanup, column_inputs(point, cleanup))
