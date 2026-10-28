@@ -20,6 +20,7 @@ uv run molonari-twin validate examples/twins/twin_01
 uv run molonari-twin id       examples/twins/twin_01
 uv run molonari-twin run      examples/twins/twin_01   # --strict : code publié et dépôts propres exigés
 uv run molonari-twin list     examples/twins
+uv run molonari-twin report   examples/twins/twin_03   # écrit « Public Report/ » (rapport public du twin et de son space)
 python -m molonari_twin …                              # équivalent
 ```
 
