@@ -16,6 +16,18 @@ Jusqu'à 0.6.0-alpha.1, le backend faisait partie du paquet molonaviz2 : son his
 
 ## [Non publié]
 
+### P2c.3 : générateur de rapport public et `molonari-twin report`
+
+- `molonari_twin/report/` : `generate_report(twin)` écrit `Public Report/` dans le dossier du twin (`--output` pour un autre dossier). Le **space** (provisoire, jusqu'aux operating spaces, P2b.1) est celui que désigne la clé `report` du twin donné : `report.models.forward` (twin direct) et `report.models.inversion` (twin mcmc), dossiers frères ; sans `report.models`, le twin seul. Le générateur tourne au niveau **dev** : il ne lit ni `orx.yaml` ni la graine, et pose ses questions par `TwinAPI`.
+- Entrées, dans un ordre fixe : par modèle `describe`, `provenance` et les `report.entries` (flux d'eau et RMSE au minimum) ; convergence publique (inversion) ; `compare` (forward − inversion) si les deux modèles sont là ; par défaut, si la visibilité le permet, HN-42 (propriétés du sol) et, pour l'inversion, BN-32 et BN-34 (toujours en npz). Une entrée obligatoire refusée fait échouer le rapport (rien n'est écrit) ; une entrée par défaut refusée est notée dans `skipped` avec son code. Un rapport sans entrée est refusé (`E_REPORT_EMPTY`).
+- `report.json` (`report_format` 1.0.0) : `space`, `twin_semver` (null : SemVer composé en attente de P0.4), `generated_at` (date du calcul, jamais l'horloge : deux générations donnent les mêmes octets), `generator_version`, `platform`, `visibility`, `entries[]` (`file`, `format`, `question`, `ref`, `model`, `uncertainty`, `parameters`, `sha256`), `skipped[]`, `figures[]` (`file`, `from_entry`, `sha256`), `signature` et `license` (null). `recipe_sha256` est l'empreinte de la recette dev, sans graine ni sel (T12).
+- Étiquettes : `model` (`forward`, `inversion`, ou `both` pour `compare`) et `uncertainty` (`none`, `posterior`). Un résultat forward n'a aucun intervalle et porte `W_NO_UNCERTAINTY` (nouveau code, traduit).
+- Une entrée est la réponse `Answer` en JSON, ou en npz au-delà de `NPZ_THRESHOLD` (1 Mio, provisoire : décision P0.5f). Figures : SVG écrits à la main (flux d'eau, RMSE), sans matplotlib.
+- Visibilité appliquée : la plus stricte des twins du space, élément par élément (un élément n'est comparé qu'aux twins où il existe).
+- Écriture atomique (`Public Report.partial/`, puis remplacement) : un échec laisse l'ancien rapport intact et aucun dossier partiel ; un fichier étranger est retiré à la régénération.
+- Projections publiques de HN-40 (RMSE, biais, RMSE totale ; ni σ ni RMSE/σ), HN-42, BN-32, BN-34 et de la comparaison (`questions/public.py`). `sigma` est retiré de la provenance publique. Les questions d'états ou de mesures (HN-20, HN-30, HN-33, BN-30) restent sans projection (T3).
+- Nouveaux codes : `E_REPORT_EMPTY`, `E_REPORT_MODEL_MODE`, `W_NO_UNCERTAINTY` (traduits). `API_VERSION` ne change pas (aucune route ni sortie de `/v1` nouvelle).
+
 ## [0.8.0-alpha.1] - 2026-10-28
 
 Phase 2 du plan twin v3 : issues P2.1 (pipeline du brut, avec BN-03 et BN-04) et P2c.1 (questions du rapport public). Les questions ne chargent toujours pas JAX (23 au total).
