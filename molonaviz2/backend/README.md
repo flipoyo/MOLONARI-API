@@ -21,6 +21,8 @@ uv run molonari-twin id       examples/twins/twin_01
 uv run molonari-twin run      examples/twins/twin_01   # --strict : code publié et dépôts propres exigés
 uv run molonari-twin list     examples/twins
 uv run molonari-twin report   examples/twins/twin_03   # écrit « Public Report/ » (rapport public du twin et de son space)
+uv run molonari-twin questions examples/twins/twin_03  # le catalogue (--json : celui de /v1) ; --level {user,admin}, user par défaut
+uv run molonari-twin ask      examples/twins/twin_03 water_flux --params '{"level": 0.8}'   # pose une question à un twin calculé
 python -m molonari_twin …                              # équivalent
 ```
 
@@ -30,7 +32,7 @@ Messages en français par défaut ; `MOLONARI_LANG=en` les affiche en anglais (l
 
 ```bash
 uv sync --package molonari-twin --extra server   # FastAPI et uvicorn (extra optionnel)
-uv run molonari-twin serve --local --twins-folder examples/twins   # http://127.0.0.1:8765
+uv run molonari-twin serve --local --level admin --twins-folder examples/twins   # http://127.0.0.1:8765
 curl -X POST http://127.0.0.1:8765/v1/twins/twin_03/run         # 202 + task_id
 curl -N http://127.0.0.1:8765/v1/tasks/<task_id>/events         # progression (SSE)
 curl -X DELETE http://127.0.0.1:8765/v1/tasks/<task_id>         # annulation
@@ -39,6 +41,8 @@ curl -X DELETE http://127.0.0.1:8765/v1/tasks/<task_id>         # annulation
 L'API ne calcule jamais dans son processus. Elle confie chaque calcul à un `TaskRunner` (`molonari_twin.tasks`). En local, `LocalTaskRunner` exécute chaque tâche dans un sous-processus. Son état est gardé dans une base SQLite, par défaut `$XDG_CACHE_HOME/molonari-twin/tasks.sqlite`.
 
 L'annulation est d'abord coopérative : le DREAM la lit à chaque bloc. Si elle n'est pas honorée, le worker est terminé après un délai de grâce. Un timeout dur s'applique de la même façon.
+
+Niveaux d'accès (`--level`, `user` par défaut) : le **user** n'interroge que les échanges d'eau, la chaleur et la température (5 questions, réponses par liste blanche) et ne lance ni ne suit de tâche (403) ; l'**admin** a tout. Sans authentification, ce niveau oriente l'usage, ce n'est pas une sécurité. Voir [docs/API_V1.md](docs/API_V1.md).
 
 Le flux SSE reprend après `Last-Event-ID`. Seule l'adresse `127.0.0.1` est acceptée tant que l'authentification n'existe pas (phase 5, avec Celery). Schéma OpenAPI : `/openapi.json`.
 

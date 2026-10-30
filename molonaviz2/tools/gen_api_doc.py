@@ -52,6 +52,17 @@ def _access(question) -> str:
     return text
 
 
+def _level(question) -> str:
+    """Ligne « Niveau » : qui peut poser la question (T11), et ce que le user en reçoit."""
+    from molonari_twin.api.access import USER_DATA, USER_QUESTIONS, WATER_QUESTIONS
+    from molonari_twin.questions import PUBLIC_DATA
+
+    if question.id not in USER_QUESTIONS:
+        return "admin seulement (le niveau `user` la refuse : 403 `E_ACCESS_ADMIN_ONLY`)."
+    names = PUBLIC_DATA[question.id] if question.id in WATER_QUESTIONS else USER_DATA[question.id]
+    return "`user` et `admin`. Le `user` reçoit : " + ", ".join(f"`{n}`" for n in names) + "."
+
+
 def _type(schema: dict) -> str:
     if "anyOf" in schema:
         return " ou ".join(_type(option) for option in schema["anyOf"])
@@ -120,6 +131,40 @@ def render() -> str:
         "n'écoute que sur 127.0.0.1 : elles refusent par une erreur codée ce qu'elles ne savent pas lire.",
         "Calculer un twin passe par `POST /v1/twins/{ref}/run`, puis par le suivi de la tâche (`/v1/tasks/…`).",
         "",
+        "## Niveaux d'accès",
+        "",
+        "`molonari-twin serve --local --level {user,admin}` (`user` par défaut) et `molonari-twin questions|ask --level …`.",
+        "Le **user** n'interroge que les échanges d'eau, la chaleur et la température : `water_flux`, `exchange_direction`,",
+        "`exchanged_volume`, `heat_budget` et `temperature`, sur les twins direct et mcmc (`sensor_intervals` n'en fait pas partie :",
+        "elle révèle les mesures). Tout le reste est réservé à l'**admin**, qui a l'API complète.",
+        "",
+        "Au niveau `user` :",
+        "",
+        "- `GET /v1/questions` ne liste que ces cinq questions ; toute autre question, `POST /v1/twins/{ref}/run`, `/v1/tasks/*` et",
+        "  `POST /v1/questions/{id}` d'une question sans twin sont refusés en **403** (`E_ACCESS_ADMIN_ONLY`, avant toute autre",
+        "  vérification). `GET /v1/info` reste accessible.",
+        "- Une réponse est réduite à une liste blanche de grandeurs (ligne « Niveau » de chaque question) et à la provenance",
+        "  `{question, ref, parameters}` : ni graine, ni chemin, ni `twin_id`, ni nom de point, ni échantillons. La réduction",
+        "  s'applique aussi à l'archive npz. Les trois questions d'eau ont la projection du rapport public ; la chaleur et la",
+        "  température ont une liste à elles, qui ne change rien au rapport (elles y restent refusées).",
+        "- `temperature` exige toujours `z` ou `t` (`E_QUESTION_PARAMS`).",
+        "",
+        "**Ce n'est pas une sécurité** : sans authentification, le niveau oriente l'usage (un guide), il ne contrôle aucune identité.",
+        "`create_app` (le serveur) reste à `admin` par défaut ; `serve --local` le lance à `user`.",
+        "",
+        "## En ligne de commande",
+        "",
+        "```bash",
+        "molonari-twin questions [<twin>] [--level {user,admin}] [--json]",
+        "molonari-twin ask <twin> <question> [--params '{\"z\": 0.2}'] [--level {user,admin}] [--json]",
+        "```",
+        "",
+        "Une couche mince sur `TwinAPI`, sans FastAPI. `<twin>` est un dossier de twin ou un `twin.yaml`. Avec `--json`, la",
+        "sortie est celle de l'API (`GET /v1/questions`, `POST /v1/twins/{ref}/questions/{id}`), et une erreur est écrite sur la",
+        "sortie standard comme celle de l'API, avec le code de sortie 1 ; `--params` a le contenu du corps du POST. Sans `--json`,",
+        "le texte donne le libellé, les valeurs, les unités et les avertissements (un long tableau est résumé : nombre, minimum,",
+        "maximum).",
+        "",
         "## Réponse",
         "",
         "`{data: {nom: {value, unit, interval}}, provenance, warnings}`. `interval` vaut `[bas, haut]`, de la forme de",
@@ -164,6 +209,7 @@ def render() -> str:
                 f"- Modes : {', '.join(MODES[m] for m in question.modes)} ; depuis l'API {question.since} ; exige "
                 + REQUIRES[question.requires],
                 f"- Accès : {_access(question)}",
+                f"- Niveau : {_level(question)}",
                 f"- Requête : `POST /v1/{'' if question.requires == 'none' else 'twins/{ref}/'}questions/{question.id}`",
                 "",
                 *_parameters(question),

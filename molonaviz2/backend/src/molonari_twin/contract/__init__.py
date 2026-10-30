@@ -1,6 +1,7 @@
 """Contrat de l'API /v1 : modèles des requêtes et des réponses, codec des réponses aux questions, version.
 
     models.py  modèles pydantic (tâches, erreurs, questions, réponses)
+    catalog.py Question → QuestionOut, liste → QuestionsOut (le catalogue de GET /v1/questions et de `molonari-twin questions`)
     codec.py   Answer ⇄ JSON et Answer ⇄ npz (tableaux binaires)
 
 Le contrat ne contient aucune logique métier, et n'importe ni FastAPI, ni JAX, ni Qt : le client HTTP de la

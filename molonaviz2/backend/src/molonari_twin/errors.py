@@ -174,6 +174,18 @@ MESSAGES: dict[str, str] = {
     "E_REPORT_EMPTY": "Nothing can be published: the report would have no entry.",
     "E_REPORT_MODEL_MODE": "Twin \"{ref}\" is in {mode} mode, but the report expects a {role} twin ({expected} mode).",
     "W_NO_UNCERTAINTY": "Forward model: its parameters are fixed, so this result has no confidence interval.",
+    # niveaux d'accès aux questions (T11)
+    "E_ACCESS_ADMIN_ONLY": "\"{name}\" is reserved for the admin level: the user level only asks about water exchanges, heat and temperature.",
+    # virtual lab (lab.yaml, lab build) et données traitées (processed_data)
+    "E_LAB_BUILD_EMPTY": "No measurement is left for point \"{point}\" after the cleaning declared in {file}.",
+    "E_LAB_CONFIG_INVALID": "{issues}",
+    "E_LAB_DATA_ROOT": "the data repository is unknown: set {env} or put the laboratory in a cgs workspace (molonari.cgs).",
+    "E_LAB_POINT_UNKNOWN": "Point \"{point}\" is not in {file} (points: {known}).",
+    "W_LAB_CODE_VERSION": "{file} was written for code {declared} but the code is {current}: the processed data are built with the current code.",
+    "E_PROCESSED_DIGEST": "The measurements of {folder} have the fingerprint {found}, but its manifest says {expected}: build the processed data again.",
+    "E_PROCESSED_MANIFEST_KEY": "The manifest {path} is missing a valid value for: {keys}.",
+    "E_PROCESSED_MANIFEST_UNREADABLE": "The manifest {path} is not a readable JSON object.",
+    "E_PROCESSED_SCHEMA": "The manifest {path} has the unsupported schema \"{value}\" (expected {expected}).",
     # twin
     "E_NO_CLEANED_MEASURES": "No cleaned measurements yet: apply a cleaning first.",
     "E_STRICT_DIRTY": "The {target} repository has uncommitted changes.",
@@ -225,6 +237,7 @@ MESSAGES: dict[str, str] = {
     "E_TWIN_MCMC_ONLY": "only allowed in mcmc mode.",
     "E_TWIN_MINIMUM": "must be at least {v}.",
     "E_TWIN_MODE": "must be \"direct\" or \"mcmc\".",
+    "E_TWIN_PROCESSED_EXCLUSIVE": "cannot be combined with {other}: the processed data are already cleaned.",
     "E_TWIN_PER_LAYER": "expected one entry per layer ({n}).",
     "E_TWIN_POSITIVE": "must be positive.",
     "E_TWIN_QUANTILES": "expected a list of numbers between 0 and 1.",
