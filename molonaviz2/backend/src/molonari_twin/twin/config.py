@@ -244,7 +244,7 @@ class TwinConfig:
     data_processed: str = ""  # data.processed : dossier des données traitées, relatif à data_root ; vide si le twin part du brut
     legacy_twin_id: str | None = None  # identifiant 1.x d'un twin migré (étiquette : il n'entre pas dans le twin_id)
     # Clés de publication (P2.3) : 2.0.0 seulement ; les twins 1.x ont les valeurs par défaut. Hors du twin_id.
-    site_label: str = ""  # libellé public du site, distinct du nom du point (tension T7)
+    site_label: str = ""  # libellé public du site, facultatif ; le point est publié à part
     monitoring_status: str | None = None  # "actif" | "inactif" ; None : non renseigné
     visibility: dict[str, bool] = field(default_factory=lambda: dict(VISIBILITY_DEFAULTS))  # tous les éléments, défauts compris
     report: ReportSpec = field(default_factory=default_report)
@@ -577,9 +577,9 @@ def _monitoring(check: _Checker, raw) -> str | None:
 
 
 def _site_label(check: _Checker, raw, names: dict[str, str]) -> str:
-    """Clé `site_label` : un libellé public d'une ligne, qui ne reprend ni le nom du twin ni celui du point.
+    """Clé `site_label` : un libellé public d'une ligne, qui ne reprend pas le nom du twin.
 
-    `names` : ce que le libellé ne doit pas contenir (clé du message → valeur). Le nom du point reste privé."""
+    `names` : ce que le libellé ne doit pas contenir (clé du message → valeur). Le point, lui, est public."""
     if raw is None:
         return ""
     if not isinstance(raw, str):
@@ -951,9 +951,7 @@ def load_twin(path: str | Path, check_data: bool = True, data_folder: str | Path
     # Clés de publication (2.0.0). Le libellé du site ne doit contenir ni le nom du twin ni celui du point (privé).
     site_label, monitoring_status, visibility, report = "", None, dict(VISIBILITY_DEFAULTS), default_report()
     if v2:
-        point_label = (loaded.raw.name if loaded is not None else processed.point if processed is not None
-                       else Path(str(data.get("point", ""))).name)
-        site_label = _site_label(check, doc.get("site_label"), {"name": name, "point": point_label})
+        site_label = _site_label(check, doc.get("site_label"), {"name": name})
         monitoring_status = _monitoring(check, doc.get("monitoring"))
         visibility = _visibility(check, doc.get("visibility"))
         report = _report(check, doc.get("report"), mode, mcmc.quantiles if mcmc is not None else None)

@@ -149,12 +149,13 @@ def test_projection_does_not_change_the_original_answer(twins):
     assert (answer.provenance, set(answer.data)) == before
 
 
-def test_hn02_public_projection_has_no_seed_name_point_or_settings(twins):
+def test_hn02_public_projection_gives_the_point_but_no_seed_name_or_settings(twins):
     api = TwinAPI(twins)
     for ref in ("twin_01", "twin_03"):
         answer = api.ask(ref, "describe")
         public = publishable_answer(by_id("describe"), answer, Visibility(), "mcmc" if ref == "twin_03" else "direct")
-        assert not {"seed", "name", "point", "description", "sigma_temperature", "nb_cells", "store_fields",
+        assert "point" in public.data, ref  # un rapport public appartient à un point réel
+        assert not {"seed", "name", "description", "sigma_temperature", "nb_cells", "store_fields",
                     "burn_in_max"} & set(public.data), ref
         text = json.dumps({k: str(v.value) for k, v in public.data.items()})
         assert "seed" not in text and str(twins) not in text
