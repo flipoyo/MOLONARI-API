@@ -7,6 +7,7 @@
     molonari-twin report <twin_xx>       écrit le rapport public (« Public Report/ ») d'un twin calculé et de son space
     molonari-twin questions [<twin_xx>]  liste les questions du catalogue (celles d'un twin, s'il est donné)
     molonari-twin ask <twin_xx> <question>   pose une question à un twin calculé (--params '{"z": 0.2}', JSON du corps du POST)
+    molonari-twin lab build <lab> --point <point>   construit processed_data/<point>/ (mesures nettoyées et manifeste) d'après lab.yaml
     molonari-twin serve --local          API HTTP sur 127.0.0.1 (extra `server`), calculs dans des workers
 
 `questions` et `ask` sont une couche mince sur TwinAPI, sans FastAPI : avec `--json`, ils écrivent le JSON de /v1
@@ -75,6 +76,11 @@ def main(argv: list[str]) -> int:
     report_parser.add_argument("twin", help="twin_xx folder or twin.yaml (the twin that carries the report key)")
     report_parser.add_argument("--output", default=None, help="folder to write (default: 'Public Report' in the twin folder)")
     add_question_commands(sub)
+    lab_parser = sub.add_parser("lab", help="virtual lab (lab.yaml)")
+    lab_build = lab_parser.add_subparsers(dest="lab_command", required=True).add_parser(
+        "build", help="clean a point of the lab and write processed_data/<point>/ (measurements.csv and manifest.json)")
+    lab_build.add_argument("lab", help="folder of the lab (the one that holds lab.yaml) or lab.yaml")
+    lab_build.add_argument("--point", required=True, help="point to build: a key of 'points' in lab.yaml")
     serve_parser = sub.add_parser("serve")
     serve_parser.add_argument("--local", action="store_true", help="listen on 127.0.0.1 (default, and the only mode until authentication exists)")
     serve_parser.add_argument("--host", default="127.0.0.1", help=argparse.SUPPRESS)
@@ -88,6 +94,7 @@ def main(argv: list[str]) -> int:
         serve_parser.error(tr("only a local address is allowed until authentication exists"))
 
     from .config import TwinConfigError, load_twin
+    from .lab import LabConfigError
     from .run import list_twins, run_twin, twin_status
 
     try:
@@ -111,6 +118,15 @@ def main(argv: list[str]) -> int:
                     question=skipped["question"], model=skipped["model"], reason=render(reason, tr)))
             print(tr("Public report written: {folder} ({entries} entries, {figures} figures, {skipped} skipped).").format(
                 folder=result.folder, entries=result.entries, figures=result.figures, skipped=len(result.skipped)))
+        elif args.command == "lab":
+            from .lab import build_point
+
+            built = build_point(args.lab, args.point)
+            for warning in built.warnings:
+                print(tr("Warning:"), render(warning, tr), file=sys.stderr)
+            manifest = built.manifest
+            print(tr("Processed data written: {folder} ({rows} rows, from {start} to {end}, fingerprint {digest}).").format(
+                folder=built.folder, rows=manifest["rows"], start=manifest["start"], end=manifest["end"], digest=manifest["cleaned_sha256"]))
         elif args.command == "run":
             shown = []
 
@@ -142,8 +158,8 @@ def main(argv: list[str]) -> int:
                     print(f"{path.name:12s} {status.config.mode:7s} {status.twin_id}  {state_label(status)}")
                 except TwinConfigError as exc:
                     print(f"{path.name:12s} {tr('invalid')}: {render(exc.issues[0], tr)}")
-    except TwinConfigError as exc:
-        print(tr("Invalid configuration:"), file=sys.stderr)
+    except (TwinConfigError, LabConfigError) as exc:
+        print(tr("Invalid laboratory file:") if isinstance(exc, LabConfigError) else tr("Invalid configuration:"), file=sys.stderr)
         for issue in exc.issues:
             print(f"  - {render(issue, tr)}", file=sys.stderr)
         return 1
