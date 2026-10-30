@@ -970,7 +970,7 @@ def test_energy_terms_add_up_and_the_implicit_rmse_is_the_rms_residual(direct):
     residual = simulated - measured
     n, sigma = residual.size, 0.1
     assert data["n_points"].value == n and data["reference"].value == n / 2
-    assert data["log_term"].value == pytest.approx(n * np.log(sigma**2))
+    assert data["log_term"].value == pytest.approx(n / 2 * np.log(sigma**2))
     assert data["residual_term"].value == pytest.approx(np.sum(residual**2) / (2 * sigma**2))
     assert data["log_term"].value + data["residual_term"].value == pytest.approx(data["energy"].value)
     assert data["implicit_rmse"].value == pytest.approx(np.sqrt(np.mean(residual**2)))

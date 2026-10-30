@@ -323,7 +323,7 @@ CATALOG: tuple[Question, ...] = (
     ),
     Question(
         "energy_breakdown", "BN-43", "diagnostics", N_("What is the energy made of?"),
-        "The terms of the energy (negative Gaussian log-likelihood) of the recorded fit: N·ln σ², the residual term "
+        "The terms of the energy (negative Gaussian log-likelihood) of the recorded fit: (N/2)·ln σ², the residual term "
         "Σr²/(2σ²), the implicit RMSE and the reference N/2, the value the residual term takes when σ is right.",
         ("D", "M"), p.SigmaParams, "results",
         lambda twin, a: energy_breakdown(twin.results, a.sigma),

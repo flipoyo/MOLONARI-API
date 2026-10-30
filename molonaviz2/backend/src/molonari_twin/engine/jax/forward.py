@@ -7,13 +7,9 @@ linear_system.H_stratified / T_stratified) :
   aquifère en bas (charge nulle, température du thermomètre le plus profond) ;
 - traitement des interfaces entre couches identique à pyheatmy.
 
-Deux particularités de pyheatmy sont reproduites volontairement pour que les
-résultats restent comparables (et signalées aux mainteneurs) :
-- la correction aux interfaces calcule K avec 10**(−k) (k étant déjà en m²), ce
-  qui revient presque à des conductivités égales des deux côtés ;
-- dans le cas monocouche, une « interface » fictive est corrigée à la cellule
-  nb_cells // 2.
-Leur effet sur les températures est de l'ordre de 1e-3 K.
+La référence est pyheatmy 0.9.7. Comme lui, le cas monocouche corrige une
+« interface » fictive à la cellule nb_cells // 2 ; les conductivités y étant égales
+des deux côtés, cette correction ne change rien.
 
 Tout ce qui ne dépend pas des paramètres physiques est précalculé dans
 `Geometry` ; `make_forward` renvoie une fonction pure des paramètres par couche,
@@ -163,7 +159,6 @@ def make_forward(geom: Geometry):
     alpha = ALPHA
     z = jnp.asarray(geom.z_solve)
     dt_all = jnp.asarray(geom.dt)
-    dt0 = float(geom.dt[0])
     h_riv = jnp.asarray(geom.head_river)
     t_riv = jnp.asarray(geom.t_river)
     t_aq = jnp.asarray(geom.t_aquifer)
@@ -184,8 +179,8 @@ def make_forward(geom: Geometry):
 
         k_list = RHO_W * G * k / MU
         ss_list = n / geom.height
-        # Conductivités par couche utilisées aux interfaces (convention pyheatmy, cf. docstring du module).
-        array_k = RHO_W * G * 10.0 ** (-k_layer) / MU
+        # Conductivités par couche utilisées aux interfaces.
+        array_k = RHO_W * G * k_layer / MU
         if single:
             array_k = jnp.concatenate([array_k, array_k])
 
@@ -225,30 +220,30 @@ def make_forward(geom: Geometry):
             diag_a = diag_a.at[0].set(ss_list[0] / dt + 4 * k_list[0] * alpha / dz2)
             diag_a = diag_a.at[-1].set(ss_list[-1] / dt + 4 * k_list[-1] * alpha / dz2)
             upper_a = (-k_list[:-1] * alpha / dz2).at[0].set(-4 * k_list[0] * alpha / (3 * dz2))
-            # Correction aux interfaces (pyheatmy : correct_numerical_schema, toujours avec all_dt[0]).
+            # Correction aux interfaces (pyheatmy : correct_numerical_schema).
             for idx, (i0, i1) in enumerate(interfaces):
                 k1, k2 = array_k[idx], array_k[idx + 1]
                 ss0 = ss_list[i0]
                 if i1 == 0:
-                    diag_b = diag_b.at[i0].set(ss0 / dt0 - (k1 + k2) * (1 - alpha) / dz2)
+                    diag_b = diag_b.at[i0].set(ss0 / dt - (k1 + k2) * (1 - alpha) / dz2)
                     lower_b = lower_b.at[i0 - 1].set(k1 * (1 - alpha) / dz2)
                     upper_b = upper_b.at[i0].set(k2 * (1 - alpha) / dz2)
-                    diag_a = diag_a.at[i0].set(ss0 / dt0 + (k1 + k2) * alpha / dz2)
+                    diag_a = diag_a.at[i0].set(ss0 / dt + (k1 + k2) * alpha / dz2)
                     lower_a = lower_a.at[i0 - 1].set(-k1 * alpha / dz2)
                     upper_a = upper_a.at[i0].set(-k2 * alpha / dz2)
                 else:
                     x = (interface_z[idx] - z_np[i0]) / (z_np[i0 + 1] - z_np[i0])
                     keq = 1 / (x / k1 + (1 - x) / k2)
-                    diag_b = diag_b.at[i0].set(ss0 / dt0 - (k1 + keq) * (1 - alpha) / dz2)
+                    diag_b = diag_b.at[i0].set(ss0 / dt - (k1 + keq) * (1 - alpha) / dz2)
                     lower_b = lower_b.at[i0 - 1].set(k1 * (1 - alpha) / dz2)
                     upper_b = upper_b.at[i0].set(keq * (1 - alpha) / dz2)
-                    diag_a = diag_a.at[i0].set(ss0 / dt0 + (k1 + keq) * alpha / dz2)
+                    diag_a = diag_a.at[i0].set(ss0 / dt + (k1 + keq) * alpha / dz2)
                     lower_a = lower_a.at[i0 - 1].set(-k1 * alpha / dz2)
                     upper_a = upper_a.at[i0].set(-keq * alpha / dz2)
-                    diag_b = diag_b.at[i0 + 1].set(ss0 / dt0 - (k2 + keq) * (1 - alpha) / dz2)
+                    diag_b = diag_b.at[i0 + 1].set(ss_list[i0 + 1] / dt - (k2 + keq) * (1 - alpha) / dz2)
                     lower_b = lower_b.at[i0].set(keq * (1 - alpha) / dz2)
                     upper_b = upper_b.at[i0 + 1].set(k2 * (1 - alpha) / dz2)
-                    diag_a = diag_a.at[i0 + 1].set(ss0 / dt0 + (k2 + keq) * alpha / dz2)
+                    diag_a = diag_a.at[i0 + 1].set(ss_list[i0 + 1] / dt + (k2 + keq) * alpha / dz2)
                     lower_a = lower_a.at[i0].set(-keq * alpha / dz2)
                     upper_a = upper_a.at[i0 + 1].set(-k2 * alpha / dz2)
             return lower_b, diag_b, upper_b, lower_a, diag_a, upper_a
@@ -355,7 +350,7 @@ def energy(temperature, geom: Geometry, sigma2: float):
     """Énergie (−log vraisemblance gaussienne), identique à pyheatmy.core.compute_energy
     avec une loi a priori constante sur σ²."""
     residual = temperature[geom.sensor_index] - geom.observed
-    return geom.observed.size * jnp.log(sigma2) + jnp.sum(residual**2) / (2 * sigma2)
+    return geom.observed.size / 2 * jnp.log(sigma2) + jnp.sum(residual**2) / (2 * sigma2)
 
 
 def run_forward(inputs: ColumnInputs, layers_physical, z_lows, nb_cells: int) -> ForwardResult:

@@ -16,6 +16,14 @@ Jusqu'à 0.6.0-alpha.1, le backend faisait partie du paquet molonaviz2 : son his
 
 ## [Non publié]
 
+### Moteur aligné sur pyheatmy 0.9.7
+
+- Le modèle direct JAX reprend les corrections de pyheatmy : aux interfaces, K est calculé avec la perméabilité en m² au lieu de 10^(−k) ; la cellule sous une interface utilise son propre coefficient d'emmagasinement ; le pas de temps est celui de l'instant courant, pas le premier. **Les températures des colonnes à plusieurs couches changent** (jusqu'à 0,81 K sur le cas à deux couches de `test_engine_forward`), et les twins déjà calculés ne sont plus comparables à ceux d'après.
+- L'énergie vaut `(N/2)·ln σ² + Σr²/(2σ²)` au lieu de `N·ln σ² + …`, dans le moteur et dans `energy_breakdown`. σ étant fixe dans DREAM, ce terme constant ne change pas l'échantillonnage, mais les valeurs affichées changent dès que σ² ≠ 1.
+- `API_VERSION = 1.0.0-alpha.8` : `log_term` et `energy` de `energy_breakdown` changent de valeur. Snapshot OpenAPI et `docs/API_V1.md` régénérés.
+- Tests : pyheatmy calculant désormais en double précision, la fixture `pyheatmy_float64` et `test_close_to_stock_pyheatmy`, devenu un doublon, sont retirés.
+- CI : MOLONARI-computo est figé par SHA (pyheatmy 0.9.7), pour qu'une évolution de pyheatmy ne casse plus la CI sans prévenir.
+
 ### P2c.3 : générateur de rapport public et `molonari-twin report`
 
 - `molonari_twin/report/` : `generate_report(twin)` écrit `Public Report/` dans le dossier du twin (`--output` pour un autre dossier). Le **space** (provisoire, jusqu'aux operating spaces, P2b.1) est celui que désigne la clé `report` du twin donné : `report.models.forward` (twin direct) et `report.models.inversion` (twin mcmc), dossiers frères ; sans `report.models`, le twin seul. Le générateur tourne au niveau **dev** : il ne lit ni `orx.yaml` ni la graine, et pose ses questions par `TwinAPI`.
