@@ -174,6 +174,8 @@ MESSAGES: dict[str, str] = {
     "E_REPORT_EMPTY": "Nothing can be published: the report would have no entry.",
     "E_REPORT_MODEL_MODE": "Twin \"{ref}\" is in {mode} mode, but the report expects a {role} twin ({expected} mode).",
     "W_NO_UNCERTAINTY": "Forward model: its parameters are fixed, so this result has no confidence interval.",
+    # niveaux d'accès aux questions (T11)
+    "E_ACCESS_ADMIN_ONLY": "\"{name}\" is reserved for the admin level: the user level only asks about water exchanges, heat and temperature.",
     # virtual lab (lab.yaml, lab build) et données traitées (processed_data)
     "E_LAB_BUILD_EMPTY": "No measurement is left for point \"{point}\" after the cleaning declared in {file}.",
     "E_LAB_CONFIG_INVALID": "{issues}",
