@@ -27,14 +27,14 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from .. import __version__
-from ..api import CATALOG, Question, TwinAPI
+from ..api import CATALOG, TwinAPI
 from ..contract import API_VERSION
+from ..contract.catalog import questions_out
 from ..contract.codec import NPZ_MEDIA_TYPE, answer_to_json, answer_to_npz
 from ..contract.models import (
     AnswerOut,
     ErrorOut,
     InfoOut,
-    QuestionOut,
     QuestionsOut,
     RunIn,
     TaskOut,
@@ -69,13 +69,6 @@ def http_status(code: str) -> int:
     if code in HTTP_STATUS:
         return HTTP_STATUS[code]
     return 422 if code.startswith("E_QUESTION_") else 400
-
-
-def question_out(question: Question) -> QuestionOut:
-    return QuestionOut(id=question.id, ref=question.ref, level=question.level, category=question.category,
-                       label_en=question.label, description=question.description, modes=list(question.modes),
-                       since=question.since, requires=question.requires,
-                       params_schema=question.params.model_json_schema())
 
 
 def questions_description() -> str:
@@ -139,7 +132,7 @@ def create_app(runner: TaskRunner, twins_folder: str | Path, events_poll_s: floa
     @app.get("/v1/questions", responses={404: {"model": ErrorOut}})
     def list_questions(twin: str | None = None) -> QuestionsOut:
         """The catalogue; with `twin`, only the questions that apply to its mode."""
-        return QuestionsOut(api_version=API_VERSION, questions=[question_out(q) for q in questions.questions(twin)])
+        return questions_out(questions.questions(twin))
 
     def reply(answer: Answer, request: Request) -> Response:
         if NPZ_MEDIA_TYPE in request.headers.get("accept", ""):
