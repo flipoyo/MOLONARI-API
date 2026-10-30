@@ -1,6 +1,8 @@
 """Virtual lab (`lab.yaml`) : le laboratoire, les points qu'il couvre, leur nettoyage et la version du code.
 
-Un virtual lab dit, une fois, comment les bruts d'un ou plusieurs points deviennent des mesures nettoyées.
+Un virtual lab dit, une fois, comment les bruts d'un ou plusieurs points deviennent des mesures nettoyées. `molonari-twin
+lab build <dossier du lab> --point <point>` le met en œuvre (`build_point`) et écrit `processed_data/<point>/`
+(`twin/processed.py`) ; un twin 2.0.0 le lit ensuite par `data: {processed: …}` sans refaire le nettoyage.
 
     schema: molonari-lab/1.0.0
     name: lab_point034
@@ -14,6 +16,9 @@ Un virtual lab dit, une fois, comment les bruts d'un ou plusieurs points devienn
 Mêmes règles que `twin.yaml` : une clé inconnue est refusée (une faute de frappe ne doit pas être ignorée en silence), les
 chemins sont relatifs à la racine des données (`config.data_root` : `MOLONARI_DATA`, sinon le `data/` de l'espace cgs qui
 contient le lab) et n'en sortent pas, et tous les problèmes sont rapportés ensemble (`LabConfigError`).
+
+Le build enchaîne `pipeline.load_point` et `pipeline.clean_point` : aucun calcul n'est dupliqué. Il ne met aucun horodatage
+dans le manifeste, si bien que deux builds des mêmes entrées avec le même code donnent les mêmes octets.
 """
 
 from __future__ import annotations
@@ -25,14 +30,19 @@ import yaml
 
 from .. import __version__
 from ..errors import Issue, UserError
+from ..io.dates import format_offset
 from ..processing.cleanup import CleanupSettings
+from . import pipeline
 from .config import (
     DATA_ROOT_ENV,
     _Checker,
     _data_folder,
     _processing,
     data_root,
+    file_digest,
+    frame_digest,
 )
+from .processed import PROCESSED_FOLDER, PROCESSED_SCHEMA, write_processed
 
 LAB_SCHEMA = "molonari-lab/1.0.0"
 LAB_NAME = "lab.yaml"
@@ -73,6 +83,18 @@ class LabSpec:
     @property
     def laboratory_folder(self) -> Path:
         return self.root / self.laboratory
+
+    @property
+    def processed_root(self) -> Path:
+        """Dossier des données traitées : `<racine des données>/processed_data`."""
+        return self.root / PROCESSED_FOLDER
+
+
+@dataclass
+class BuildResult:
+    folder: Path  # processed_data/<point>
+    manifest: dict
+    warnings: list[Issue]
 
 
 def lab_path(path: str | Path) -> Path:
@@ -141,3 +163,42 @@ def read_lab(path: str | Path, data_folder: str | Path | None = None) -> LabSpec
     if declared is not None and declared != __version__:
         warnings.append(Issue(None, "W_LAB_CODE_VERSION", file=path.name, declared=declared, current=__version__))
     return LabSpec(path, name, laboratory, declared, points, root, warnings)
+
+
+def build_point(path: str | Path, point: str, data_folder: str | Path | None = None) -> BuildResult:
+    """Construit `processed_data/<point>/` : mesures nettoyées (`measurements.csv`) et manifeste (`manifest.json`).
+
+    `path` : dossier du lab (ou son lab.yaml), `point` : une clé de `points`. Refuse un point absent de `lab.yaml`. Le
+    dossier est écrit en entier à côté puis il remplace l'ancien (`processed.write_processed`)."""
+    spec = read_lab(path, data_folder)
+    if point not in spec.points:
+        raise UserError("E_LAB_POINT_UNKNOWN", point=point, file=spec.path.name, known=", ".join(sorted(spec.points)))
+    wanted = spec.points[point]
+    loaded = pipeline.load_point(spec.root / wanted.folder, spec.laboratory_folder)
+    cleaned = pipeline.clean_point(loaded, wanted.processing).cleaned
+    if cleaned.empty:
+        raise UserError("E_LAB_BUILD_EMPTY", point=point, file=spec.path.name)
+
+    instruments = loaded.instruments
+    raw_files = (loaded.raw.files.info, loaded.raw.files.pressure, loaded.raw.files.temperature)
+    manifest = {
+        "schema": PROCESSED_SCHEMA,
+        "lab": spec.name,
+        "point": loaded.raw.name,
+        "code_version": __version__,  # celle qui construit ; celle que déclare lab.yaml n'en est qu'un contrôle (avertissement)
+        "raw_files": {file.name: file_digest(file) for file in raw_files if file is not None},
+        "lab_files": {name: file_digest(spec.laboratory_folder / name) for name in loaded.lab_files},
+        "depths": [float(d) for d in instruments.shaft.depths],
+        "offset": float(loaded.offset),
+        "sigma_pressure": float(instruments.sigma_pressure),
+        "sigma_temperature": float(instruments.sigma_temperature),
+        "utc_offset": format_offset(loaded.utc_offset) if loaded.utc_offset is not None else None,
+        "processing": wanted.processing.to_dict(),
+        "rows": len(cleaned),
+        "start": cleaned["date"].iloc[0].isoformat(),
+        "end": cleaned["date"].iloc[-1].isoformat(),
+        "cleaned_sha256": frame_digest(cleaned),
+    }
+    folder = spec.processed_root / point
+    write_processed(folder, manifest, cleaned)
+    return BuildResult(folder, manifest, [*spec.warnings, *loaded.raw.warnings])

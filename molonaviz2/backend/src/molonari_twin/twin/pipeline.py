@@ -101,6 +101,7 @@ class LoadedPoint:
     lab: Lab
     lab_issues: list[ImportIssue]
     instruments: Instruments
+    lab_files: tuple[str, ...] = ()  # fichiers du laboratoire utilisés (capteur de pression, tige, thermomètre), relatifs à son dossier
 
     @property
     def utc_offset(self) -> timedelta | None:
@@ -276,7 +277,10 @@ def load_point(
     raw = read_raw_point(point_folder)
     check_timezone(timezone, raw.utc_offset)
     instruments = resolve_instruments(raw, imported.lab, sigma_temperature, sigma_pressure)
-    return LoadedPoint(raw, imported.lab, imported.issues, instruments)
+    used = [("pressure_sensors", instruments.pressure_sensor.name), ("shafts", instruments.shaft.name)]
+    if instruments.thermometer is not None:
+        used.append(("thermometers", instruments.thermometer.name))
+    return LoadedPoint(raw, imported.lab, imported.issues, instruments, tuple(imported.files[key] for key in used))
 
 
 def clean_point(point: LoadedPoint, settings: CleanupSettings | None = None) -> CleanupResult:

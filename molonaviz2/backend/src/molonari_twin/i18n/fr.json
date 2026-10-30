@@ -257,6 +257,10 @@
  "Forward model: its parameters are fixed, so this result has no confidence interval.": "Modèle forward : ses paramètres sont fixés, ce résultat n'a donc pas d'intervalle de confiance.",
  "Public report written: {folder} ({entries} entries, {figures} figures, {skipped} skipped).": "Rapport public écrit : {folder} ({entries} entrées, {figures} figures, {skipped} sautées).",
  "Skipped: {question} ({model}): {reason}": "Sautée : {question} ({model}) : {reason}",
+ "No measurement is left for point \"{point}\" after the cleaning declared in {file}.": "Aucune mesure ne reste pour le point « {point} » après le nettoyage déclaré dans {file}.",
  "the data repository is unknown: set {env} or put the laboratory in a cgs workspace (molonari.cgs).": "le dépôt de données est inconnu : définissez {env} ou placez le laboratoire dans un espace de travail cgs (molonari.cgs).",
- "{file} was written for code {declared} but the code is {current}: the processed data are built with the current code.": "{file} a été écrit pour le code {declared}, mais le code est {current} : les données traitées sont construites avec le code actuel."
+ "Point \"{point}\" is not in {file} (points: {known}).": "Le point « {point} » n'est pas dans {file} (points : {known}).",
+ "{file} was written for code {declared} but the code is {current}: the processed data are built with the current code.": "{file} a été écrit pour le code {declared}, mais le code est {current} : les données traitées sont construites avec le code actuel.",
+ "Invalid laboratory file:": "Fichier de laboratoire invalide :",
+ "Processed data written: {folder} ({rows} rows, from {start} to {end}, fingerprint {digest}).": "Données traitées écrites : {folder} ({rows} lignes, du {start} au {end}, empreinte {digest})."
 }

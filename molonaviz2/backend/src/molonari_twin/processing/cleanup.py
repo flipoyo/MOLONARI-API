@@ -135,11 +135,14 @@ def clean(raw_temperature: pd.DataFrame, raw_pressure: pd.DataFrame, sensor: Pre
     return CleanupResult(measures, reason, unmatched_t, unmatched_p)
 
 
-def read_cleaned_csv(path) -> pd.DataFrame:
-    """Importe des mesures déjà nettoyées (export de cette application ou de Molonaviz)."""
+def read_cleaned_csv(path, exact: bool = False) -> pd.DataFrame:
+    """Importe des mesures déjà nettoyées (export de cette application ou de Molonaviz).
+
+    `exact` : analyseur de flottants sans perte (`processed_data`, écrit à 17 chiffres) ; l'analyseur rapide de pandas peut
+    se tromper d'un ulp, ce qui changerait l'empreinte des mesures."""
     from ..io.dates import parse_dates
 
-    frame = pd.read_csv(path)
+    frame = pd.read_csv(path, float_precision="round_trip" if exact else None)
     lower = {c.lower().strip(): c for c in frame.columns}
     aliases = {"date": "date", "tempbed": "temp_bed", "temp_bed": "temp_bed", "temp1": "t1", "t1": "t1", "temp2": "t2", "t2": "t2",
                "temp3": "t3", "t3": "t3", "temp4": "t4", "t4": "t4", "pressure": "pressure"}

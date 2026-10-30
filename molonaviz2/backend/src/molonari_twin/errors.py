@@ -175,8 +175,10 @@ MESSAGES: dict[str, str] = {
     "E_REPORT_MODEL_MODE": "Twin \"{ref}\" is in {mode} mode, but the report expects a {role} twin ({expected} mode).",
     "W_NO_UNCERTAINTY": "Forward model: its parameters are fixed, so this result has no confidence interval.",
     # virtual lab (lab.yaml, lab build) et données traitées (processed_data)
+    "E_LAB_BUILD_EMPTY": "No measurement is left for point \"{point}\" after the cleaning declared in {file}.",
     "E_LAB_CONFIG_INVALID": "{issues}",
     "E_LAB_DATA_ROOT": "the data repository is unknown: set {env} or put the laboratory in a cgs workspace (molonari.cgs).",
+    "E_LAB_POINT_UNKNOWN": "Point \"{point}\" is not in {file} (points: {known}).",
     "W_LAB_CODE_VERSION": "{file} was written for code {declared} but the code is {current}: the processed data are built with the current code.",
     # twin
     "E_NO_CLEANED_MEASURES": "No cleaned measurements yet: apply a cleaning first.",
