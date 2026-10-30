@@ -22,6 +22,40 @@ Les questions de données lisent les dossiers d'un point et d'un laboratoire de 
 n'écoute que sur 127.0.0.1 : elles refusent par une erreur codée ce qu'elles ne savent pas lire.
 Calculer un twin passe par `POST /v1/twins/{ref}/run`, puis par le suivi de la tâche (`/v1/tasks/…`).
 
+## Niveaux d'accès
+
+`molonari-twin serve --local --level {user,admin}` (`user` par défaut) et `molonari-twin questions|ask --level …`.
+Le **user** n'interroge que les échanges d'eau, la chaleur et la température : `water_flux`, `exchange_direction`,
+`exchanged_volume`, `heat_budget` et `temperature`, sur les twins direct et mcmc (`sensor_intervals` n'en fait pas partie :
+elle révèle les mesures). Tout le reste est réservé à l'**admin**, qui a l'API complète.
+
+Au niveau `user` :
+
+- `GET /v1/questions` ne liste que ces cinq questions ; toute autre question, `POST /v1/twins/{ref}/run`, `/v1/tasks/*` et
+  `POST /v1/questions/{id}` d'une question sans twin sont refusés en **403** (`E_ACCESS_ADMIN_ONLY`, avant toute autre
+  vérification). `GET /v1/info` reste accessible.
+- Une réponse est réduite à une liste blanche de grandeurs (ligne « Niveau » de chaque question) et à la provenance
+  `{question, ref, parameters}` : ni graine, ni chemin, ni `twin_id`, ni nom de point, ni échantillons. La réduction
+  s'applique aussi à l'archive npz. Les trois questions d'eau ont la projection du rapport public ; la chaleur et la
+  température ont une liste à elles, qui ne change rien au rapport (elles y restent refusées).
+- `temperature` exige toujours `z` ou `t` (`E_QUESTION_PARAMS`).
+
+**Ce n'est pas une sécurité** : sans authentification, le niveau oriente l'usage (un guide), il ne contrôle aucune identité.
+`create_app` (le serveur) reste à `admin` par défaut ; `serve --local` le lance à `user`.
+
+## En ligne de commande
+
+```bash
+molonari-twin questions [<twin>] [--level {user,admin}] [--json]
+molonari-twin ask <twin> <question> [--params '{"z": 0.2}'] [--level {user,admin}] [--json]
+```
+
+Une couche mince sur `TwinAPI`, sans FastAPI. `<twin>` est un dossier de twin ou un `twin.yaml`. Avec `--json`, la
+sortie est celle de l'API (`GET /v1/questions`, `POST /v1/twins/{ref}/questions/{id}`), et une erreur est écrite sur la
+sortie standard comme celle de l'API, avec le code de sortie 1 ; `--params` a le contenu du corps du POST. Sans `--json`,
+le texte donne le libellé, les valeurs, les unités et les avertissements (un long tableau est résumé : nombre, minimum,
+maximum).
+
 ## Réponse
 
 `{data: {nom: {value, unit, interval}}, provenance, warnings}`. `interval` vaut `[bas, haut]`, de la forme de
@@ -87,6 +121,7 @@ Layers, sensors, period, mode and main settings, read from the configuration (no
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige la configuration du twin.
 - Accès : rapport public (agrégats : rien de privé, réglages que les échantillons publics révèlent). Projection publique, champs publiés : `mode`, `start`, `end`, `layers`, `layer_bottoms`, `sensor_depths`, `offset`, `nb_chains`, `nb_iter`, `thin`, `site_label`, `monitoring_status`.
+- Niveau : admin seulement (le niveau `user` la refuse : 403 `E_ACCESS_ADMIN_ONLY`).
 - Requête : `POST /v1/twins/{ref}/questions/describe`
 
 Aucun paramètre : le corps de la requête est vide (ou `{}`).
@@ -103,6 +138,7 @@ The raw measurements of a point folder (CSV exports of the logger software), bet
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige aucun twin.
 - Accès : développeur seulement (jamais dans le rapport public).
+- Niveau : admin seulement (le niveau `user` la refuse : 403 `E_ACCESS_ADMIN_ONLY`).
 - Requête : `POST /v1/questions/raw_series`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -121,6 +157,7 @@ What a cleaning would do to a point, without saving anything: every date common 
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige aucun twin.
 - Accès : développeur seulement (jamais dans le rapport public).
+- Niveau : admin seulement (le niveau `user` la refuse : 403 `E_ACCESS_ADMIN_ONLY`).
 - Requête : `POST /v1/questions/processing_preview`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -144,6 +181,7 @@ Mean flux q at the riverbed (z = 0) over the period, in m/s, positive downwards 
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
 - Accès : rapport public (agrégats : rien de privé). Projection publique, champs publiés : `mean`, `median`, `p5`, `p95`, `points`, `start`, `end`, `level`, `model`, `uncertainty`, `mean_best`.
+- Niveau : `user` et `admin`. Le `user` reçoit : `mean`, `median`, `p5`, `p95`, `points`, `start`, `end`, `level`, `model`, `uncertainty`, `mean_best`.
 - Requête : `POST /v1/twins/{ref}/questions/water_flux`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -162,6 +200,7 @@ Share of the time in infiltration (q ≥ 0, the river feeds the aquifer) and in 
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
 - Accès : rapport public (agrégats : rien de privé). Projection publique, champs publiés : `infiltration_share`, `exfiltration_share`, `dominant`, `reversals`, `points`, `start`, `end`, `p_infiltration`.
+- Niveau : `user` et `admin`. Le `user` reçoit : `infiltration_share`, `exfiltration_share`, `dominant`, `reversals`, `points`, `start`, `end`, `p_infiltration`.
 - Requête : `POST /v1/twins/{ref}/questions/exchange_direction`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -179,6 +218,7 @@ Infiltrated, exfiltrated and net volumes over the period, integrated by trapezoi
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
 - Accès : rapport public (agrégats : rien de privé). Projection publique, champs publiés : `infiltration`, `exfiltration`, `net`.
+- Niveau : `user` et `admin`. Le `user` reçoit : `infiltration`, `exfiltration`, `net`.
 - Requête : `POST /v1/twins/{ref}/questions/exchanged_volume`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -199,6 +239,7 @@ Mean advective, conductive and total heat fluxes (W/m², positive downwards) at 
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
 - Accès : rapport public si ces éléments sont publics : `states`. Pas encore de projection publique : refusée dans un rapport (`E_REPORT_NO_PROJECTION`).
+- Niveau : `user` et `admin`. Le `user` reçoit : `advective`, `conductive`, `lateral`, `total`, `advective_share`, `conductive_share`, `lateral_share`, `dominant`, `depth`, `points`, `start`, `end`.
 - Requête : `POST /v1/twins/{ref}/questions/heat_budget`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -219,6 +260,7 @@ Simulated temperature in °C, linearly interpolated: one value (z and t), a prof
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
 - Accès : rapport public si ces éléments sont publics : `states`. Pas encore de projection publique : refusée dans un rapport (`E_REPORT_NO_PROJECTION`).
+- Niveau : `user` et `admin`. Le `user` reçoit : `temperature`, `depth`, `time`.
 - Requête : `POST /v1/twins/{ref}/questions/temperature`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -236,6 +278,7 @@ Per sensor: the measurement with its instrument interval (± z·σ), the simulat
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
 - Accès : rapport public si ces éléments sont publics : `raw_data`, `processed_data`, `states`. Pas encore de projection publique : refusée dans un rapport (`E_REPORT_NO_PROJECTION`).
+- Niveau : admin seulement (le niveau `user` la refuse : 403 `E_ACCESS_ADMIN_ONLY`).
 - Requête : `POST /v1/twins/{ref}/questions/sensor_intervals`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -256,6 +299,7 @@ Per sensor: RMSE, bias (simulated − measured), RMSE/σT, lag-1 autocorrelation
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
 - Accès : rapport public si ces éléments sont publics : `raw_data`, `processed_data`. Projection publique, champs publiés : `rmse`, `bias`, `rmse_total`, `sensor`, `level`, `model`, `uncertainty`, `median_rmse`, `median_rmse_total`.
+- Niveau : admin seulement (le niveau `user` la refuse : 403 `E_ACCESS_ADMIN_ONLY`).
 - Requête : `POST /v1/twins/{ref}/questions/fit_quality`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -274,6 +318,7 @@ A green, orange or red verdict, the worst of the criteria, each with its level a
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
 - Accès : rapport public (agrégats : rien de privé). Pas encore de projection publique : refusée dans un rapport (`E_REPORT_NO_PROJECTION`).
+- Niveau : admin seulement (le niveau `user` la refuse : 403 `E_ACCESS_ADMIN_ONLY`).
 - Requête : `POST /v1/twins/{ref}/questions/reliability`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -293,6 +338,7 @@ The convergence of the algorithm for the public report, without a verdict: large
 
 - Modes : mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
 - Accès : rapport public (agrégats : rien de privé). Projection publique, champs publiés : `rhat_max`, `ess_min`, `acceptance_mean`, `burn_in_converged`, `burn_in_iterations`, `chains`, `samples_per_chain`, `rhat_green`, `rhat_orange`, `ess_green`, `ess_orange`, `thresholds_validated`.
+- Niveau : admin seulement (le niveau `user` la refuse : 403 `E_ACCESS_ADMIN_ONLY`).
 - Requête : `POST /v1/twins/{ref}/questions/public_convergence`
 
 Aucun paramètre : le corps de la requête est vide (ou `{}`).
@@ -307,6 +353,7 @@ Versions, data fingerprint, platform and duration of the computation, the comman
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
 - Accès : rapport public (agrégats : rien de privé). Projection publique, champs publiés : `code_version`, `data_release`.
+- Niveau : admin seulement (le niveau `user` la refuse : 403 `E_ACCESS_ADMIN_ONLY`).
 - Requête : `POST /v1/twins/{ref}/questions/provenance`
 
 Aucun paramètre : le corps de la requête est vide (ou `{}`).
@@ -321,6 +368,7 @@ Per layer: permeability k (m²), hydraulic conductivity K (m/s, k·ρw·g/μ wit
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
 - Accès : rapport public si ces éléments sont publics : `posterior`, `forward_parameters`. Projection publique, champs publiés : `layers`, `level`, `k`, `k_median`, `k_identifiability`, `K`, `K_median`, `K_identifiability`, `n`, `n_median`, `n_identifiability`, `lambda_s`, `lambda_s_median`, `lambda_s_identifiability`, `rhos_cs`, `rhos_cs_median`, `rhos_cs_identifiability`.
+- Niveau : admin seulement (le niveau `user` la refuse : 403 `E_ACCESS_ADMIN_ONLY`).
 - Requête : `POST /v1/twins/{ref}/questions/soil_properties`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -339,6 +387,7 @@ The settings with their bounds, defaults and units, the values of `store_fields`
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige aucun twin.
 - Accès : développeur seulement (jamais dans le rapport public).
+- Niveau : admin seulement (le niveau `user` la refuse : 403 `E_ACCESS_ADMIN_ONLY`).
 - Requête : `POST /v1/questions/parameters_catalog`
 
 Aucun paramètre : le corps de la requête est vide (ou `{}`).
@@ -353,6 +402,7 @@ Whether the configuration of a twin folder is valid, with its problems (also giv
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige le dossier d'un twin, dont la configuration peut être invalide.
 - Accès : développeur seulement (jamais dans le rapport public).
+- Niveau : admin seulement (le niveau `user` la refuse : 403 `E_ACCESS_ADMIN_ONLY`).
 - Requête : `POST /v1/twins/{ref}/questions/check`
 
 Aucun paramètre : le corps de la requête est vide (ou `{}`).
@@ -369,6 +419,7 @@ Measured, simulated and residual (simulated − measured) temperatures per senso
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
 - Accès : développeur seulement (jamais dans le rapport public).
+- Niveau : admin seulement (le niveau `user` la refuse : 403 `E_ACCESS_ADMIN_ONLY`).
 - Requête : `POST /v1/twins/{ref}/questions/residuals`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -388,6 +439,7 @@ Parameters, energies, acceptance and burn-in resets of the chosen chains, with t
 
 - Modes : mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
 - Accès : rapport public si ces éléments sont publics : `posterior`, `inversion_settings_public`. Projection publique, champs publiés : `iteration`, `chain`, `samples.neg_log10_k`, `samples.porosity`, `samples.lambda_s`, `samples.rhos_cs`, `energy`, `acceptance`, `resets`, `count`.
+- Niveau : admin seulement (le niveau `user` la refuse : 403 `E_ACCESS_ADMIN_ONLY`).
 - Requête : `POST /v1/twins/{ref}/questions/chain_data`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -406,6 +458,7 @@ Chains, iterations per chain, burn-in, thin, total samples, fields per chain and
 
 - Modes : mcmc ; depuis l'API 1.0.0 ; exige la configuration du twin.
 - Accès : développeur seulement (jamais dans le rapport public).
+- Niveau : admin seulement (le niveau `user` la refuse : 403 `E_ACCESS_ADMIN_ONLY`).
 - Requête : `POST /v1/twins/{ref}/questions/sampling_layout`
 
 Aucun paramètre : le corps de la requête est vide (ou `{}`).
@@ -420,6 +473,7 @@ The posterior samples as an array (chain, iteration, layer, parameter) in the sp
 
 - Modes : mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
 - Accès : rapport public si ces éléments sont publics : `posterior`, `inversion_settings_public`. Projection publique, champs publiés : `samples`, `iteration`, `chain`, `layer`, `parameter`, `parameter_unit`, `space`.
+- Niveau : admin seulement (le niveau `user` la refuse : 403 `E_ACCESS_ADMIN_ONLY`).
 - Requête : `POST /v1/twins/{ref}/questions/posterior_samples`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -439,6 +493,7 @@ Temperature (°C), water flux (m/s) and advective and conductive heat fluxes (W/
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
 - Accès : rapport public si ces éléments sont publics : `states`. Pas encore de projection publique : refusée dans un rapport (`E_REPORT_NO_PROJECTION`).
+- Niveau : admin seulement (le niveau `user` la refuse : 403 `E_ACCESS_ADMIN_ONLY`).
 - Requête : `POST /v1/twins/{ref}/questions/fields`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -461,6 +516,7 @@ Per parameter and layer: R̂ (rank-normalized), bulk and tail ESS and MCSE of th
 
 - Modes : mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
 - Accès : développeur seulement (jamais dans le rapport public).
+- Niveau : admin seulement (le niveau `user` la refuse : 403 `E_ACCESS_ADMIN_ONLY`).
 - Requête : `POST /v1/twins/{ref}/questions/convergence`
 
 | Paramètre | Type | Défaut | Bornes | Description |
@@ -479,6 +535,7 @@ The terms of the energy (negative Gaussian log-likelihood) of the recorded fit: 
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
 - Accès : développeur seulement (jamais dans le rapport public).
+- Niveau : admin seulement (le niveau `user` la refuse : 403 `E_ACCESS_ADMIN_ONLY`).
 - Requête : `POST /v1/twins/{ref}/questions/energy_breakdown`
 
 | Paramètre | Type | Défaut | Bornes | Description |
