@@ -156,8 +156,8 @@ def test_the_monitoring_status_is_actif_or_inactif(tmp_path, data_repo):
 # site_label (P2.3d) ---------------------------------------------------------------------------------------------
 
 
-def test_the_site_label_does_not_give_the_point_or_the_twin_name(tmp_path, data_repo):
-    assert ("site_label", "E_TWIN_SITE_LABEL_DISTINCT") in refused(tmp_path / "a", RAW_MCMC + "site_label: Station Point034\n")
+def test_the_site_label_may_give_the_point_but_not_the_twin_name(tmp_path, data_repo):
+    assert load_twin(write_twin(tmp_path / "a", RAW_MCMC + "site_label: Station Point034\n")).site_label == "Station Point034"
     assert ("site_label", "E_TWIN_SITE_LABEL_DISTINCT") in refused(tmp_path / "b", RAW_MCMC + "site_label: twin_01\n")
     assert load_twin(write_twin(tmp_path / "c", RAW_MCMC + "site_label: Point0345 amont\n")).site_label == "Point0345 amont"
 
@@ -297,4 +297,5 @@ def test_the_public_description_gives_the_site_label_and_the_monitoring_but_not_
 
     public = public_answer("describe", describe(load_twin(write_twin(tmp_path, RAW_MCMC + PUBLIC))))
     assert public.data["site_label"].value == "Rivière du Bas-Rhin, site amont" and public.data["monitoring_status"].value == "actif"
-    assert not [name for name in public.data if name.startswith(("visibility.", "report_")) or name in ("name", "point", "description")]
+    assert public.data["point"].value == "Point034"  # un rapport public appartient à un point réel
+    assert not [name for name in public.data if name.startswith(("visibility.", "report_")) or name in ("name", "description")]

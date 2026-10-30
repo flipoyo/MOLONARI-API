@@ -278,7 +278,7 @@ def test_nothing_private_or_seed_related_is_written(computed_twins, reports):
     private = build_report(space_of(computed_twins, BOTH, posterior=False), TwinAPI(computed_twins))
     for report in (*reports.values(), private):
         everything = b"\n".join(report.files.values())
-        for forbidden in (config.point, config.description, "data_sha256", "data_file", "reproduce", "sigma_temperature",
+        for forbidden in (config.description, "data_sha256", "data_file", "reproduce", "sigma_temperature",
                           "store_fields", "burn_in_max", "orx", '"seed"'):
             assert forbidden.encode() not in everything, forbidden
         for name, content in report.files.items():
@@ -432,6 +432,19 @@ def test_space_is_resolved_from_the_report_key(tmp_path, data_repo):
     assert space.configs["inversion"].site_label == "Site A"
 
 
+def test_the_twins_of_a_report_describe_the_same_point(tmp_path, data_repo, monkeypatch):
+    twins = write_space(tmp_path)
+
+    def load_other_point(folder):
+        config = load_twin(folder)
+        return dataclasses.replace(config, point="Point035") if Path(folder).name == "twin_01" else config
+
+    monkeypatch.setattr("molonari_twin.report.generator.load_twin", load_other_point)
+    with pytest.raises(UserError) as error:
+        resolve_space(twins / "twin_02")
+    assert error.value.code == "E_REPORT_POINT_MISMATCH"
+
+
 def test_a_twin_without_report_key_uses_the_default_report_alone(tmp_path, data_repo):
     twins = write_space(tmp_path, report=False)
     space = resolve_space(twins / "twin_02")
@@ -476,8 +489,9 @@ def test_end_to_end_two_instances_without_the_seed(tmp_path, data_repo):
     assert (folder / "compare.json").is_file() and (folder / "inversion-public_convergence.json").is_file()
     site = answer_from_json((folder / "inversion-describe.json").read_bytes())
     assert site.data["site_label"].value == "Site A"
+    assert site.data["point"].value == "Point034" and index["point"] == "Point034"  # le rapport appartient à un point réel
     everything = b"\n".join(p.read_bytes() for p in folder.rglob("*.json")) + b"\n".join(p.read_bytes() for p in folder.rglob("*.svg"))
-    for forbidden in (b"4242", b"secret description", b"Point034", b"seed", b"orx", str(tmp_path).encode()):
+    for forbidden in (b"4242", b"secret description", b"seed", b"orx", str(tmp_path).encode()):
         assert forbidden not in everything, forbidden
     again = folder.parent / "again"
     generate_report(twins / "twin_02", again)

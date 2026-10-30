@@ -120,7 +120,7 @@ Les autres codes `E_…` répondent 400.
 Layers, sensors, period, mode and main settings, read from the configuration (no computation needed), with the publication keys: site label, monitoring status, visibility of each element and the report asked for (the default report when the twin has none: `report_declared` is then false).
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige la configuration du twin.
-- Accès : rapport public (agrégats : rien de privé, réglages que les échantillons publics révèlent). Projection publique, champs publiés : `mode`, `start`, `end`, `layers`, `layer_bottoms`, `sensor_depths`, `offset`, `nb_chains`, `nb_iter`, `thin`, `site_label`, `monitoring_status`.
+- Accès : rapport public (agrégats : rien de privé, réglages que les échantillons publics révèlent). Projection publique, champs publiés : `point`, `mode`, `start`, `end`, `layers`, `layer_bottoms`, `sensor_depths`, `offset`, `nb_chains`, `nb_iter`, `thin`, `site_label`, `monitoring_status`.
 - Niveau : admin seulement (le niveau `user` la refuse : 403 `E_ACCESS_ADMIN_ONLY`).
 - Requête : `POST /v1/twins/{ref}/questions/describe`
 

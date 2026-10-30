@@ -172,6 +172,7 @@ MESSAGES: dict[str, str] = {
     "E_REPORT_PRIVATE": "Question \"{question}\" exposes elements the developer has not made public: {elements}.",
     # rapport public : générateur (P2c.3)
     "E_REPORT_EMPTY": "Nothing can be published: the report would have no entry.",
+    "E_REPORT_POINT_MISMATCH": "The twins of a report must describe the same sampling point (found: {points}).",
     "E_REPORT_MODEL_MODE": "Twin \"{ref}\" is in {mode} mode, but the report expects a {role} twin ({expected} mode).",
     "W_NO_UNCERTAINTY": "Forward model: its parameters are fixed, so this result has no confidence interval.",
     # niveaux d'accès aux questions (T11)

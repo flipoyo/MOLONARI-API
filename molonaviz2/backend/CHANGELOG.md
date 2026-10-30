@@ -24,6 +24,12 @@ Jusqu'à 0.6.0-alpha.1, le backend faisait partie du paquet molonaviz2 : son his
 - Tests : pyheatmy calculant désormais en double précision, la fixture `pyheatmy_float64` et `test_close_to_stock_pyheatmy`, devenu un doublon, sont retirés.
 - CI : MOLONARI-computo est figé par SHA (pyheatmy 0.9.7), pour qu'une évolution de pyheatmy ne casse plus la CI sans prévenir.
 
+### Le rapport public porte le sampling point réel
+
+- `point` entre dans la projection publique de `describe` et dans l'index du rapport (`report.json`) : un rapport public appartient à un point réel.
+- `site_label` devient un libellé facultatif, qui peut reprendre le nom du point. Le nom du twin et sa description restent privés.
+- `E_REPORT_POINT_MISMATCH` : les twins d'un rapport doivent porter sur le même point.
+
 ### T11 : niveaux d'accès `user` et `admin`, commandes `questions` et `ask` ; T10 : test de `report --output`
 
 - `api/access.py` (`LeveledAPI`), une couche au-dessus de `TwinAPI` et du générateur de rapport, qui ne changent pas. Le **user** n'interroge que les échanges d'eau, la chaleur et la température (`water_flux`, `exchange_direction`, `exchanged_volume`, `heat_budget`, `temperature`, sur les twins direct et mcmc ; `sensor_intervals` en est exclue, elle révèle les mesures) ; tout le reste est réservé à l'**admin**. Sans authentification, le niveau oriente l'usage : ce n'est pas une sécurité, et aucun contrôle d'identité n'existe.
