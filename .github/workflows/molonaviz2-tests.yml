@@ -25,7 +25,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: flipoyo/MOLONARI-computo
-          ref: CGS-MOLO
+          ref: 7eef6e4  # pyheatmy d'avant la 0.9.7 : test_engine_forward compare le moteur à cette version
           path: pyheatmy
       - uses: actions/checkout@v4
         with:
@@ -64,7 +64,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: flipoyo/MOLONARI-computo
-          ref: CGS-MOLO
+          ref: 7eef6e4  # pyheatmy d'avant la 0.9.7 : test_engine_forward compare le moteur à cette version
           path: pyheatmy
       - uses: actions/checkout@v4
         with:
