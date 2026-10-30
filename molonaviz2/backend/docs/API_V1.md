@@ -46,6 +46,7 @@ et de `params`.
 
 | Code | Statut HTTP |
 |---|---|
+| `E_ACCESS_ADMIN_ONLY` | 403 |
 | `E_QUESTION_CHAINS` | 422 |
 | `E_QUESTION_LEVEL` | 422 |
 | `E_QUESTION_MODELS_INCOMPARABLE` | 422 |

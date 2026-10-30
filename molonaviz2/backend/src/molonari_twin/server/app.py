@@ -48,6 +48,7 @@ from ..twin.config import SCHEMA_WRITTEN
 from ..twin.results import RESULTS_FORMAT
 
 HTTP_STATUS = {
+    "E_ACCESS_ADMIN_ONLY": 403,
     "E_TASK_NOT_FOUND": 404,
     "E_TWIN_NOT_FOUND": 404,
     "E_QUESTION_UNKNOWN": 404,
@@ -64,7 +65,7 @@ ERRORS = {404: {"model": ErrorOut}, 409: {"model": ErrorOut}}
 
 
 def http_status(code: str) -> int:
-    """Statut HTTP d'une erreur attendue : 404 (inconnu), 409 (état du twin ou de la tâche), 422 (paramètres d'une
+    """Statut HTTP d'une erreur attendue : 403 (réservé au niveau admin), 404 (inconnu), 409 (état du twin ou de la tâche), 422 (paramètres d'une
     question, ou réponse impossible avec ces paramètres), 400 sinon."""
     if code in HTTP_STATUS:
         return HTTP_STATUS[code]

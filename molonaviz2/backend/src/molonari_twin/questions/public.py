@@ -73,9 +73,17 @@ def public_answer(question_id: str, answer: Answer, instance: str | None = None)
     l'instance du space, ajoutée à la provenance. E_REPORT_NO_PROJECTION si la question n'a pas de liste."""
     if question_id not in PUBLIC_DATA:
         raise UserError("E_REPORT_NO_PROJECTION", question=question_id)
-    data = {name: answer.data[name] for name in PUBLIC_DATA[question_id] if name in answer.data}
+    projected = project_answer(answer, PUBLIC_DATA[question_id], instance)
     if question_id == "provenance":
-        data.update(_environment(answer))
+        projected = replace(projected, data={**projected.data, **_environment(answer)})
+    return projected
+
+
+def project_answer(answer: Answer, names: tuple[str, ...], instance: str | None = None) -> Answer:
+    """`answer` réduite aux grandeurs `names` (celles qu'elle contient) et à la provenance publique
+    (`PUBLIC_PROVENANCE`, sans les paramètres privés) : la projection commune du rapport et du niveau `user` de
+    l'API (api/access.py), qui n'ont pas les mêmes listes."""
+    data = {name: answer.data[name] for name in names if name in answer.data}
     provenance = {key: answer.provenance[key] for key in PUBLIC_PROVENANCE if key in answer.provenance}
     if isinstance(provenance.get("parameters"), dict):
         provenance["parameters"] = {k: v for k, v in provenance["parameters"].items() if k not in PRIVATE_PARAMETERS}
