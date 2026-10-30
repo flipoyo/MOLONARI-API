@@ -2,7 +2,8 @@ name: molonaviz2-tests
 
 # Tests de l'espace molonaviz2/ (backend molonari-twin et frontend molonaviz2) dans la disposition de
 # l'espace cgs MOLONARI1D :
-#   Molonaviz/ (ce dépôt), pyheatmy/ (MOLONARI-computo, dépendance de test ../../pyheatmy)
+#   Molonaviz/ (ce dépôt), pyheatmy/ (MOLONARI-computo, dépendance de test ../../pyheatmy, figé par SHA :
+#   le moteur JAX doit le reproduire, donc on change ce SHA en même temps que le portage)
 #   et data/ (MOLONARI-data, mesures lues par les tests).
 # Job backend : seulement le paquet molonari-twin, sans paquets système Qt ; PySide6 ne doit pas être
 # installé. Il porte la suite rapide, la suite slow (calcul) et la ligne de commande.
@@ -25,7 +26,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: flipoyo/MOLONARI-computo
-          ref: 7eef6e4a2220ea7529fde25b5a434371033cd464  # pyheatmy d'avant la 0.9.7 : test_engine_forward compare le moteur à cette version
+          ref: 7ebcc57cc00d7def4e38fbb62db922ad28c03e28  # pyheatmy 0.9.7
           path: pyheatmy
       - uses: actions/checkout@v4
         with:
@@ -64,7 +65,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: flipoyo/MOLONARI-computo
-          ref: 7eef6e4a2220ea7529fde25b5a434371033cd464  # pyheatmy d'avant la 0.9.7 : test_engine_forward compare le moteur à cette version
+          ref: 7ebcc57cc00d7def4e38fbb62db922ad28c03e28  # pyheatmy 0.9.7
           path: pyheatmy
       - uses: actions/checkout@v4
         with:

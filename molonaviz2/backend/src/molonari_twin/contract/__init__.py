@@ -8,4 +8,4 @@ Le contrat ne contient aucune logique métier, et n'importe ni FastAPI, ni JAX, 
 phase 4 l'utilisera tel quel. Il reste avec le backend (PLAN_TWIN_v2, phase 6).
 """
 
-API_VERSION = "1.0.0-alpha.7"
+API_VERSION = "1.0.0-alpha.8"

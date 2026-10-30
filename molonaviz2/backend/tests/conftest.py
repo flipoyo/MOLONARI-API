@@ -45,46 +45,6 @@ def inputs():
     return synthetic_inputs()
 
 
-@pytest.fixture
-def pyheatmy_float64():
-    """pyheatmy avec ses calculs internes passés en float64.
-
-    pyheatmy calcule en float32 (solveur et tableaux de résultats). Pour vérifier
-    que le portage JAX est exact, on remplace temporairement ces éléments par des
-    équivalents float64 ; les écarts restants doivent être au niveau de l'arrondi.
-    """
-    import types
-
-    import pyheatmy.linear_system as ls
-    from pyheatmy import core
-
-    def solver(a, b, c, d):
-        n = len(d)
-        bc, dc = b.astype(float).copy(), d.astype(float).copy()
-        for i in range(1, n):
-            m = a[i - 1] / bc[i - 1]
-            bc[i] -= m * c[i - 1]
-            dc[i] -= m * dc[i - 1]
-        x = np.zeros(n)
-        x[-1] = dc[-1] / bc[-1]
-        for i in range(n - 2, -1, -1):
-            x[i] = (dc[i] - c[i] * x[i + 1]) / bc[i]
-        return x
-
-    def tri_product(a, b, c, d):
-        r = b * d
-        r[1:] += a * d[:-1]
-        r[:-1] += c * d[1:]
-        return r
-
-    shim = types.SimpleNamespace(**{k: getattr(np, k) for k in dir(np) if not k.startswith("__")})
-    shim.float32 = np.float64
-    saved = (ls.solver, ls.tri_product, ls.float32, ls.np, core.np)
-    ls.solver, ls.tri_product, ls.float32, ls.np, core.np = solver, tri_product, np.float64, shim, shim
-    yield
-    ls.solver, ls.tri_product, ls.float32, ls.np, core.np = saved
-
-
 # Dépôts git temporaires : identité et options neutres, indépendantes de la configuration git de la machine.
 GIT = ["git", "-c", "user.name=Test", "-c", "user.email=test@example.org", "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false",
        "-c", "core.hooksPath=/dev/null", "-c", "init.defaultBranch=main"]

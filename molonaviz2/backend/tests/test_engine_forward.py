@@ -26,7 +26,7 @@ def max_relative(a, b):
 
 
 @pytest.mark.parametrize("case", CASES)
-def test_matches_pyheatmy_exactly_in_float64(case, inputs, pyheatmy_float64):
+def test_matches_pyheatmy_exactly_in_float64(case, inputs):
     config = ForwardConfig(CASES[case], nb_cells=100)
     ours = api.run_forward(inputs, config)
     ref = reference.forward(inputs, config)
@@ -36,7 +36,7 @@ def test_matches_pyheatmy_exactly_in_float64(case, inputs, pyheatmy_float64):
         assert max_relative(getattr(ours, name), getattr(ref, name)) < 1e-9, name
 
 
-def test_variable_time_step_and_offset(pyheatmy_float64):
+def test_variable_time_step_and_offset():
     inputs = synthetic_inputs(nb_times=200, offset=0.05)
     jitter = np.zeros(200, "timedelta64[s]")
     jitter[50:] += np.timedelta64(120, "s")  # un pas de temps irrégulier
@@ -46,14 +46,6 @@ def test_variable_time_step_and_offset(pyheatmy_float64):
     ours, ref = api.run_forward(inputs, config), reference.forward(inputs, config)
     for name in FIELDS:
         assert max_relative(getattr(ours, name), getattr(ref, name)) < 1e-9, name
-
-
-def test_close_to_stock_pyheatmy(inputs):
-    """pyheatmy calcule en float32 : on attend un accord au centième de degré."""
-    config = ForwardConfig(CASES["two_layers_interface_off_grid"], nb_cells=100)
-    ours, ref = api.run_forward(inputs, config), reference.forward(inputs, config)
-    assert np.max(np.abs(ours.temperature - ref.temperature)) < 0.05
-    assert max_relative(ours.water_flux, ref.water_flux) < 1e-3
 
 
 def test_energy_matches_pyheatmy(inputs):
@@ -86,7 +78,7 @@ def test_invalid_layers_are_rejected_before_computing(inputs):
         api.run_forward(inputs, ForwardConfig([LayerSpec("a", 0.4, porosity=1.5)], nb_cells=50))
 
 
-def test_real_point034_from_files_to_model(pyheatmy_float64):
+def test_real_point034_from_files_to_model():
     """Chaîne complète sur des mesures réelles : import HOBO, nettoyage, modèle direct JAX = pyheatmy."""
     from conftest import FIXTURES
     from molonari_twin.engine.column import ColumnInputs

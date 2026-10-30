@@ -1,6 +1,6 @@
 """Décomposition de l'énergie d'un calcul (BN-43) : −log vraisemblance gaussienne.
 
-    énergie = N·ln σ² + Σ r² / (2σ²)
+    énergie = (N/2)·ln σ² + Σ r² / (2σ²)
 
 N est le nombre de mesures comparées (3 capteurs × dates), r le résidu (simulé − mesuré) et σ l'incertitude des
 thermomètres. Si σ est juste, le terme des résidus vaut en moyenne N/2 (repère `reference`) : `ratio` au-dessus de 1
@@ -27,7 +27,7 @@ def energy_breakdown(results: TwinResults, sigma: float | None = None) -> Answer
     residual = residual[~np.isnan(residual)]
     n = int(residual.size)
     squares = float(np.sum(residual**2))
-    log_term = n * float(np.log(sigma**2))
+    log_term = n / 2 * float(np.log(sigma**2))
     residual_term = squares / (2 * sigma**2)
     return Answer(
         data={

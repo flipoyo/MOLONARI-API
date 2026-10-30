@@ -2,7 +2,7 @@
 
 <!-- Fichier généré par tools/gen_api_doc.py à partir du catalogue (molonari_twin.api). Ne pas modifier à la main. -->
 
-Version de l'API : **1.0.0-alpha.7**. Schéma complet : `GET /openapi.json` ; catalogue avec les schémas de
+Version de l'API : **1.0.0-alpha.8**. Schéma complet : `GET /openapi.json` ; catalogue avec les schémas de
 paramètres : `GET /v1/questions` (`?twin=<ref>` : les questions de son mode).
 
 ## Poser une question
@@ -531,7 +531,7 @@ Sorties : `rhat`, `ess_bulk`, `ess_tail`, `mcse_mean`, `rhat_max`, `rhat_max_all
 
 **What is the energy made of?** — *De quoi l'énergie est-elle faite ?*
 
-The terms of the energy (negative Gaussian log-likelihood) of the recorded fit: N·ln σ², the residual term Σr²/(2σ²), the implicit RMSE and the reference N/2, the value the residual term takes when σ is right.
+The terms of the energy (negative Gaussian log-likelihood) of the recorded fit: (N/2)·ln σ², the residual term Σr²/(2σ²), the implicit RMSE and the reference N/2, the value the residual term takes when σ is right.
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
 - Accès : développeur seulement (jamais dans le rapport public).
