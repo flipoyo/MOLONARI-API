@@ -1,14 +1,18 @@
-"""Virtual lab (T5, T6) : `lab.yaml` et `molonari-twin lab build`."""
+"""Virtual lab (T5 à T7) : `lab.yaml`, `molonari-twin lab build`, et la lecture de `processed_data` par un twin 2.0.0.
+
+Le test central : un twin depuis le brut et le même depuis `processed_data` ont le même `twin_id` et le même résultat."""
 
 import json
 import shutil
 
+import numpy as np
 import pytest
 from conftest import FIXTURES
 from molonari_twin.processing.cleanup import read_cleaned_csv
-from molonari_twin.twin.config import frame_digest
+from molonari_twin.twin.config import TwinConfigError, frame_digest, load_twin
 from molonari_twin.twin.lab import LabConfigError, build_point, read_lab
 from molonari_twin.twin.processed import MANIFEST_NAME, MEASUREMENTS_NAME
+from molonari_twin.twin.run import run_twin
 
 LAB = """schema: molonari-lab/1.0.0
 name: lab_point034
@@ -21,6 +25,33 @@ points:
       start: 2016-06-27 13:00
       end: 2016-07-01 10:15
       methods: {{t1: iqr}}
+"""
+
+LAYERS = """layers:
+  - {name: couche 1, z_low: 0.4, neg_log10_k: 12, porosity: 0.15, lambda_s: 3.4, rhos_cs: 5000000}
+numerics: {nb_cells: 40}
+"""
+
+FROM_RAW = """schema: molonari-twin/2.0.0
+name: twin_01
+mode: direct
+data: {lab: Laboratory, point: SamplingPoints/Point034}
+processing:
+  start: 2016-06-27 13:00
+  end: 2016-07-01 10:15
+  methods: {t1: iqr}
+""" + LAYERS
+
+FROM_PROCESSED = """schema: molonari-twin/2.0.0
+name: twin_01
+mode: direct
+data: {processed: processed_data/Point034}
+""" + LAYERS
+
+MCMC = """mode: mcmc
+layers:
+  - {name: couche 1, z_low: 0.4}
+mcmc: {nb_chains: 7, nb_iter: 10, burn_in_max: 10, n_field_samples: 7}
 """
 
 
@@ -45,6 +76,13 @@ def lab(tmp_path, data_repo):
     folder = tmp_path / "virtual_lab" / "lab_point034"
     folder.mkdir(parents=True)
     (folder / "lab.yaml").write_text(LAB.format(version=current_version()), encoding="utf-8")
+    return folder
+
+
+def write_twin(tmp_path, text, name="twin_01", group="twins"):
+    folder = tmp_path / group / name
+    folder.mkdir(parents=True)
+    (folder / "twin.yaml").write_text(text, encoding="utf-8")
     return folder
 
 
@@ -275,3 +313,175 @@ def test_the_command_line_has_a_help_for_lab_build(capsys):
         main(["lab", "build", "--help"])
     assert stop.value.code == 0
     assert "--point" in capsys.readouterr().out
+
+
+# T7 : data.processed -------------------------------------------------------------------------------------------
+
+
+def test_a_twin_from_processed_data_has_the_same_twin_id_as_from_the_raw(lab, data_repo, tmp_path):
+    build_point(lab, "Point034")
+    raw = load_twin(write_twin(tmp_path, FROM_RAW, group="raw"))
+    processed = load_twin(write_twin(tmp_path, FROM_PROCESSED, group="processed"))
+    assert not raw.from_processed and processed.from_processed and processed.raw_data
+    assert processed.point == raw.point == "Point034"
+    assert processed.data_processed == "processed_data/Point034" and processed.processing is None
+    assert processed.depths == raw.depths and processed.offset == raw.offset
+    assert (processed.sigma_pressure, processed.sigma_temperature) == (raw.sigma_pressure, raw.sigma_temperature)
+    assert (processed.start, processed.end) == (raw.start, raw.end)
+    assert frame_digest(processed.load_measurements()) == frame_digest(raw.load_measurements())
+    assert processed.twin_id("v1") == raw.twin_id("v1")
+    assert processed.canonical("v1") == raw.canonical("v1")
+    a, b = raw.column_inputs(), processed.column_inputs()
+    for name in ("times", "head", "t_river", "t_sensors", "t_aquifer", "sensor_depths", "offset", "sigma_pressure", "sigma_temperature"):
+        assert np.array_equal(getattr(a, name), getattr(b, name)), name  # bit à bit, pas à une tolérance près
+
+
+def test_the_twin_id_is_the_same_in_mcmc_mode_and_with_sigma_overrides(lab, data_repo, tmp_path):
+    build_point(lab, "Point034")
+    sigmas = "sensors: {sigma_temperature: 0.05, sigma_pressure: 0.02}\n"
+    head_raw = FROM_RAW.split("layers:")[0].replace("mode: direct\n", "")
+    head_processed = FROM_PROCESSED.split("layers:")[0].replace("mode: direct\n", "")
+    assert load_twin(write_twin(tmp_path, FROM_PROCESSED + sigmas, group="p")).twin_id("v1") == load_twin(
+        write_twin(tmp_path, FROM_RAW + sigmas, group="r")).twin_id("v1")
+    assert load_twin(write_twin(tmp_path, FROM_PROCESSED + sigmas, group="p2")).twin_id("v1") != load_twin(
+        write_twin(tmp_path, FROM_PROCESSED, group="p3")).twin_id("v1")
+    ids = []
+    for group, head in (("pm", head_processed), ("rm", head_raw)):
+        folder = write_twin(tmp_path, head + MCMC, group=group)
+        (folder / "orx.yaml").write_text("mcmc:\n  seed: 42\n", encoding="utf-8")
+        ids.append(load_twin(folder).twin_id("v1"))
+    assert ids[0] == ids[1]
+
+
+def test_both_twins_give_the_same_result_in_direct_mode(lab, data_repo, tmp_path):
+    from molonari_twin.twin.results import load_results
+
+    build_point(lab, "Point034")
+    runs = {group: run_twin(write_twin(tmp_path / group, text)) for group, text in (("raw", FROM_RAW), ("processed", FROM_PROCESSED))}
+    assert runs["raw"].computed and runs["processed"].computed
+    assert runs["raw"].status.twin_id == runs["processed"].status.twin_id
+    raw, processed = (load_results(runs[g].status.results_dir) for g in ("raw", "processed"))
+    assert np.array_equal(raw.temperature, processed.temperature) and np.array_equal(raw.times, processed.times)
+    assert raw.flux.equals(processed.flux) and raw.residuals.equals(processed.residuals)
+    assert raw.metadata["rmse_celsius"] == processed.metadata["rmse_celsius"] and raw.metadata["config"] == processed.metadata["config"]
+    data = processed.metadata["data"]
+    manifest = json.loads((data_repo / "processed_data" / "Point034" / MANIFEST_NAME).read_text(encoding="utf-8"))
+    assert data["processed"] == "processed_data/Point034" and data["lab"] == "lab_point034"
+    assert data["code_version"] == current_version() and data["cleaned_sha256"] == manifest["cleaned_sha256"]
+    assert "point" not in data and raw.metadata["data"]["lab"] == "Laboratory"
+
+
+def test_processed_data_is_exclusive_with_lab_point_and_processing(lab, data_repo, tmp_path):
+    build_point(lab, "Point034")
+    text = FROM_PROCESSED.replace("data: {processed: processed_data/Point034}",
+                                  "data: {processed: processed_data/Point034, lab: Laboratory, point: SamplingPoints/Point034}")
+    with pytest.raises(TwinConfigError) as error:
+        load_twin(write_twin(tmp_path, text + "processing: {start: 2016-06-28}\n", group="a"))
+    assert codes(error) == [("data.lab", "E_TWIN_PROCESSED_EXCLUSIVE"), ("data.point", "E_TWIN_PROCESSED_EXCLUSIVE"),
+                            ("processing", "E_TWIN_PROCESSED_EXCLUSIVE")]
+    assert str(error.value.issues[0]) == "data.lab: cannot be combined with data.processed: the processed data are already cleaned."
+    with pytest.raises(TwinConfigError) as error:
+        load_twin(write_twin(tmp_path, FROM_PROCESSED + "processing: {methods: {t1: iqr}}\n", group="b"))
+    assert codes(error) == [("processing", "E_TWIN_PROCESSED_EXCLUSIVE")]
+
+
+def test_raw_twins_still_need_lab_and_point_and_1x_twins_do_not_know_processed(lab, data_repo, tmp_path):
+    with pytest.raises(TwinConfigError) as error:
+        load_twin(write_twin(tmp_path, FROM_RAW.replace("data: {lab: Laboratory, point: SamplingPoints/Point034}", "data: {}"), group="a"))
+    assert codes(error) == [("data.lab", "E_TWIN_REQUIRED"), ("data.point", "E_TWIN_REQUIRED")]
+    with pytest.raises(TwinConfigError) as error:
+        load_twin(write_twin(tmp_path, FROM_RAW.replace("point: SamplingPoints/Point034", "point: SamplingPoints/Point034, x: 1"), group="b"))
+    assert codes(error) == [("data.x", "E_TWIN_UNKNOWN_KEY")]
+    assert "allowed: lab, point, processed" in str(error.value.issues[0])
+    one = """schema: molonari-twin/1.1.0
+name: twin_01
+mode: direct
+data: {processed: processed_data/Point034}
+sensors: {depths: [0.1, 0.2, 0.3, 0.4]}
+""" + LAYERS
+    with pytest.raises(TwinConfigError) as error:
+        load_twin(write_twin(tmp_path, one, group="c"))
+    assert ("data.processed", "E_TWIN_UNKNOWN_KEY") in codes(error) and ("data.measurements", "E_TWIN_REQUIRED") in codes(error)
+
+
+def test_processed_data_must_exist_and_be_inside_the_data_repository(lab, data_repo, tmp_path):
+    with pytest.raises(TwinConfigError) as error:
+        load_twin(write_twin(tmp_path, FROM_PROCESSED, group="a"))  # pas encore construit
+    assert codes(error) == [("data.processed", "E_FOLDER_NOT_FOUND")]
+    with pytest.raises(TwinConfigError) as error:
+        load_twin(write_twin(tmp_path, FROM_PROCESSED.replace("processed_data/Point034", "../elsewhere"), group="b"))
+    assert codes(error) == [("data.processed", "E_TWIN_DATA_PATH")]
+    (data_repo / "processed_data" / "Point034").mkdir(parents=True)
+    with pytest.raises(TwinConfigError) as error:
+        load_twin(write_twin(tmp_path, FROM_PROCESSED, group="c"))  # dossier sans manifeste
+    assert codes(error) == [("data.processed", "E_FILE_NOT_FOUND")]
+
+
+def test_the_fingerprint_of_the_measurements_is_checked_against_the_manifest(lab, data_repo, tmp_path):
+    build_point(lab, "Point034")
+    folder = data_repo / "processed_data" / "Point034"
+    measurements = folder / MEASUREMENTS_NAME
+    original = measurements.read_text(encoding="utf-8")
+    lines = original.splitlines()
+    cells = lines[3].split(",")
+    cells[1] = repr(float(cells[1]) + 1e-12)  # une retouche minuscule
+    lines[3] = ",".join(cells)
+    measurements.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    with pytest.raises(TwinConfigError) as error:
+        load_twin(write_twin(tmp_path, FROM_PROCESSED, group="a"))
+    assert codes(error) == [("data.processed", "E_PROCESSED_DIGEST")]
+    measurements.write_text(original, encoding="utf-8")  # rétabli : accepté
+    assert load_twin(write_twin(tmp_path, FROM_PROCESSED, group="b")).from_processed
+    measurements.write_text("\n".join(original.splitlines()[:-1]) + "\n", encoding="utf-8")  # une ligne de moins
+    with pytest.raises(TwinConfigError) as error:
+        load_twin(write_twin(tmp_path, FROM_PROCESSED, group="c"))
+    assert codes(error) == [("data.processed", "E_PROCESSED_DIGEST")]
+
+
+def test_a_damaged_manifest_is_refused(lab, data_repo, tmp_path):
+    build_point(lab, "Point034")
+    path = data_repo / "processed_data" / "Point034" / MANIFEST_NAME
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+
+    def refused(changed, group):
+        path.write_text(json.dumps(changed), encoding="utf-8")
+        with pytest.raises(TwinConfigError) as error:
+            load_twin(write_twin(tmp_path, FROM_PROCESSED, group=group))
+        return error.value.issues
+
+    assert [i.code for i in refused({**manifest, "schema": "molonari-processed/9"}, "a")] == ["E_PROCESSED_SCHEMA"]
+    broken = {k: v for k, v in manifest.items() if k not in ("offset", "cleaned_sha256")}
+    issues = refused({**broken, "depths": [0.1, 0.2], "sigma_pressure": 0, "processing": {"start": "pas une date"}}, "b")
+    assert [i.code for i in issues] == ["E_PROCESSED_MANIFEST_KEY"]
+    assert issues[0].params["keys"] == "offset, sigma_pressure, depths, cleaned_sha256, processing"
+    path.write_text("[1, 2]", encoding="utf-8")
+    with pytest.raises(TwinConfigError) as error:
+        load_twin(write_twin(tmp_path, FROM_PROCESSED, group="c"))
+    assert codes(error) == [("data.processed", "E_PROCESSED_MANIFEST_UNREADABLE")]
+    path.write_text("{", encoding="utf-8")
+    with pytest.raises(TwinConfigError) as error:
+        load_twin(write_twin(tmp_path, FROM_PROCESSED, group="d"))
+    assert codes(error) == [("data.processed", "E_PROCESSED_MANIFEST_UNREADABLE")]
+    # un manifeste dont les profondeurs ne croissent pas est refusé comme celles d'un point
+    path.write_text(json.dumps({**manifest, "depths": [0.1, 0.3, 0.2, 0.4]}), encoding="utf-8")
+    with pytest.raises(TwinConfigError) as error:
+        load_twin(write_twin(tmp_path, FROM_PROCESSED, group="e"))
+    assert codes(error) == [("data.processed", "E_TWIN_SENSOR_DEPTHS")]
+
+
+def test_processed_data_needs_a_data_repository(lab, data_repo, tmp_path, monkeypatch):
+    build_point(lab, "Point034")
+    monkeypatch.delenv("MOLONARI_DATA")
+    with pytest.raises(TwinConfigError) as error:
+        load_twin(write_twin(tmp_path, FROM_PROCESSED))
+    assert codes(error) == [("data", "E_TWIN_DATA_ROOT")]
+    assert load_twin(tmp_path / "twins" / "twin_01", data_folder=data_repo).from_processed
+
+
+def test_processed_data_is_used_without_the_raw_files(lab, data_repo, tmp_path):
+    """Le point d'un `processed_data` : on peut retirer le brut, le twin se lit et se calcule quand même."""
+    build_point(lab, "Point034")
+    shutil.rmtree(data_repo / "SamplingPoints")
+    shutil.rmtree(data_repo / "Laboratory")
+    run = run_twin(write_twin(tmp_path, FROM_PROCESSED))
+    assert run.computed and run.status.config.point == "Point034"

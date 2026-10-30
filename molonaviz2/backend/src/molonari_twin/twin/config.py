@@ -19,6 +19,12 @@ Deux familles de schémas coexistent, lues par le même `load_twin` :
   site), `monitoring: {status}`, `visibility` (ce que le développeur accepte de publier) et `report` (ce que le rapport
   public contient). Aucune n'entre dans le `twin_id` : elles ne changent pas le résultat.
 
+  Variante : `data: {processed: processed_data/Point034}` (T7) lit les mesures nettoyées et le manifeste qu'a écrits
+  `molonari-twin lab build` (`twin/processed.py`, `twin/lab.py`) au lieu du brut. Exclusive avec `lab`, `point` et
+  `processing` (le nettoyage est déjà fait) ; profondeurs, décalage et σ viennent du manifeste (`sensors.sigma_*` les
+  remplace), l'empreinte des mesures est vérifiée contre celle du manifeste, et le `twin_id` est celui du même twin
+  depuis le brut.
+
 Règles :
 - `twin_id` = empreinte (SHA-256) de la config canonique. Pour un twin 1.x, elle contient l'empreinte du fichier de
   mesures et la version du code ; pour un twin 2.0.0, l'empreinte des mesures nettoyées (ce qui entre vraiment dans le
@@ -95,6 +101,7 @@ from ..errors import Issue, UserError
 from ..processing.cleanup import METHODS, VARIABLES, CleanupResult, CleanupSettings
 from . import pipeline
 from .orx import read_orx
+from .processed import Processed, read_processed
 
 # Schémas lus, avec leur version. molonaviz-twin/1 est l'ancien nom de 1.0.0.
 SCHEMA_2_0_0 = "molonari-twin/2.0.0"
@@ -125,7 +132,7 @@ MCMC_DEFAULTS_1_1 = {"thin": 1, "fields_per_chain": None, "store_fields": "senso
 TOP_KEYS_2 = {"schema", "name", "description", "mode", "data", "processing", "sensors", "layers", "numerics", "mcmc", "legacy_twin_id",
               "site_label", "monitoring", "visibility", "report"}
 REQUIRED_TOP_2 = ("schema", "name", "mode", "data", "layers")
-DATA_KEYS_2 = {"lab", "point"}
+DATA_KEYS_2 = {"lab", "point", "processed"}
 PROCESSING_KEYS = {"start", "end", "methods", "excluded"}
 SENSOR_KEYS_2 = {"sigma_temperature", "sigma_pressure"}  # remplacent les σ du laboratoire
 MCMC_KEYS_2 = MCMC_KEYS
@@ -233,7 +240,8 @@ class TwinConfig:
     data_root: Path | None = None  # racine du dépôt de données
     data_lab: str = ""  # dossier du laboratoire, relatif à data_root
     data_point: str = ""  # dossier du point, relatif à data_root
-    processing: CleanupSettings | None = None
+    processing: CleanupSettings | None = None  # None pour data.processed : le nettoyage est celui du manifeste
+    data_processed: str = ""  # data.processed : dossier des données traitées, relatif à data_root ; vide si le twin part du brut
     legacy_twin_id: str | None = None  # identifiant 1.x d'un twin migré (étiquette : il n'entre pas dans le twin_id)
     # Clés de publication (P2.3) : 2.0.0 seulement ; les twins 1.x ont les valeurs par défaut. Hors du twin_id.
     site_label: str = ""  # libellé public du site, distinct du nom du point (tension T7)
@@ -245,6 +253,7 @@ class TwinConfig:
     # Lecture du brut, une fois par objet (chargée par load_twin).
     _point: pipeline.LoadedPoint | None = field(default=None, init=False, repr=False, compare=False)
     _cleanup: CleanupResult | None = field(default=None, init=False, repr=False, compare=False)
+    _processed: Processed | None = field(default=None, init=False, repr=False, compare=False)  # data.processed, lu par load_twin
 
     @property
     def folder(self) -> Path:
@@ -252,8 +261,19 @@ class TwinConfig:
 
     @property
     def raw_data(self) -> bool:
-        """Vrai pour un twin 2.0.0, qui part du brut : `data: {lab, point}` et `processing`."""
+        """Vrai pour un twin 2.0.0 (schéma et forme canonique) : `data: {lab, point}` et `processing`, ou `data.processed`
+        (voir `from_processed`)."""
         return self.schema_version >= (2, 0, 0)
+
+    @property
+    def from_processed(self) -> bool:
+        """Vrai pour un twin 2.0.0 qui lit des données traitées (`data.processed`) au lieu de nettoyer le brut."""
+        return bool(self.data_processed)
+
+    @property
+    def processed_manifest(self) -> dict | None:
+        """Manifeste des données traitées de `data.processed`, ou None."""
+        return self._processed.manifest if self._processed is not None else None
 
     @property
     def column_depth(self) -> float:
@@ -276,13 +296,15 @@ class TwinConfig:
 
     # Données ---------------------------------------------------------------------------
     def cleanup(self) -> CleanupResult:
-        """Nettoyage du brut d'un twin 2.0.0 (une fois par objet)."""
-        assert self._point is not None and self.processing is not None
+        """Nettoyage du brut d'un twin 2.0.0 (une fois par objet). Sans objet pour `data.processed`, déjà nettoyé."""
+        assert self._point is not None and self.processing is not None, "pas de brut à nettoyer (data.processed)"
         if self._cleanup is None:
             self._cleanup = pipeline.clean_point(self._point, self.processing)
         return self._cleanup
 
     def load_measurements(self) -> pd.DataFrame:
+        if self._processed is not None:
+            return self._processed.cleaned.copy()
         if self.raw_data:
             return self.cleanup().cleaned
         from ..processing.cleanup import read_cleaned_csv
@@ -295,6 +317,8 @@ class TwinConfig:
         return frame.reset_index(drop=True)
 
     def column_inputs(self) -> ColumnInputs:
+        if self._processed is not None:
+            return ColumnInputs.from_cleaned(self.load_measurements(), self.depths, self.offset, self.sigma_pressure, self.sigma_temperature)
         if self.raw_data:
             return pipeline.column_inputs(self._point, self.cleanup())
         return ColumnInputs.from_cleaned(self.load_measurements(), self.depths, self.offset, self.sigma_pressure, self.sigma_temperature)
@@ -713,12 +737,29 @@ def load_twin(path: str | Path, check_data: bool = True, data_folder: str | Path
 
     measurements = start = end = None
     lab_name = point_name = ""
-    root = lab_dir = point_dir = None
+    root = lab_dir = point_dir = processed_dir = None
+    processed_name = ""
+    from_processed = False
     if v2:
-        data = check.mapping(doc.get("data", {}), "data", DATA_KEYS_2, ("lab", "point"), True)
+        data = check.mapping(doc.get("data", {}), "data", DATA_KEYS_2, (), True)
+        from_processed = "processed" in data
+        if from_processed:
+            # Données déjà nettoyées : ni le brut (lab, point) ni un second nettoyage (processing).
+            for key in ("lab", "point"):
+                if key in data:
+                    check.add(f"data.{key}", "E_TWIN_PROCESSED_EXCLUSIVE", other="data.processed")
+            if "processing" in doc:
+                check.add("processing", "E_TWIN_PROCESSED_EXCLUSIVE", other="data.processed")
+        elif isinstance(doc.get("data", {}), dict):
+            for key in ("lab", "point"):
+                if key not in data:
+                    check.add(f"data.{key}", "E_TWIN_REQUIRED")
         root = Path(data_folder).resolve() if data_folder is not None else data_root(path.parent)
-        if root is None and ("lab" in data or "point" in data):
+        if root is None and ("lab" in data or "point" in data or from_processed):
             check.add("data", "E_TWIN_DATA_ROOT", env=DATA_ROOT_ENV)
+        elif root is not None and from_processed:
+            processed_dir = _data_folder(check, root, data["processed"], "data.processed")
+            processed_name = Path(data["processed"]).as_posix() if processed_dir else ""
         elif root is not None:
             lab_dir = _data_folder(check, root, data["lab"], "data.lab") if "lab" in data else None
             point_dir = _data_folder(check, root, data["point"], "data.point") if "point" in data else None
@@ -734,7 +775,7 @@ def load_twin(path: str | Path, check_data: bool = True, data_folder: str | Path
         start, end = check.date(data.get("start"), "data.start"), check.date(data.get("end"), "data.end")
         if start and end and start >= end:
             check.add("data.end", "E_TWIN_END_BEFORE_START", start="data.start")
-    processing = _processing(check, doc.get("processing")) if v2 else None
+    processing = _processing(check, doc.get("processing")) if v2 and not from_processed else None
     if processing is not None:
         start, end = processing.start, processing.end
 
@@ -743,7 +784,24 @@ def load_twin(path: str | Path, check_data: bool = True, data_folder: str | Path
         sigma_t = check.number(sensors["sigma_temperature"], "sensors.sigma_temperature", positive=True) if "sigma_temperature" in sensors else None
         sigma_p = check.number(sensors["sigma_pressure"], "sensors.sigma_pressure", positive=True) if "sigma_pressure" in sensors else None
         # Profondeurs, décalage et σ viennent du laboratoire et du point (pipeline du brut).
-        depths, offset, loaded = None, None, None
+        depths, offset, loaded, processed = None, None, None, None
+        if processed_dir is not None and not check.issues:
+            try:
+                processed = read_processed(processed_dir)
+                found = frame_digest(processed.cleaned)
+                if found != processed.cleaned_sha256:
+                    raise UserError("E_PROCESSED_DIGEST", folder=processed_dir, found=found, expected=processed.cleaned_sha256)
+            except UserError as exc:
+                check.issues.append(Issue.from_error("data.processed", exc, prefixed=True))
+                processed = None
+        if processed is not None:
+            depths, offset = processed.depths, processed.offset
+            sigma_t = sigma_t if sigma_t is not None else processed.sigma_temperature
+            sigma_p = sigma_p if sigma_p is not None else processed.sigma_pressure
+            if len(depths) != 4 or depths[0] <= 0 or any(b <= a for a, b in pairwise(depths)):
+                check.add("data.processed", "E_TWIN_SENSOR_DEPTHS")
+                depths = None
+            start, end = processed.window
         if lab_dir is not None and point_dir is not None and not check.issues:
             try:
                 loaded = pipeline.load_point(point_dir, lab_dir, sigma_temperature=sigma_t, sigma_pressure=sigma_p)
@@ -893,7 +951,8 @@ def load_twin(path: str | Path, check_data: bool = True, data_folder: str | Path
     # Clés de publication (2.0.0). Le libellé du site ne doit contenir ni le nom du twin ni celui du point (privé).
     site_label, monitoring_status, visibility, report = "", None, dict(VISIBILITY_DEFAULTS), default_report()
     if v2:
-        point_label = loaded.raw.name if loaded is not None else Path(str(data.get("point", ""))).name
+        point_label = (loaded.raw.name if loaded is not None else processed.point if processed is not None
+                       else Path(str(data.get("point", ""))).name)
         site_label = _site_label(check, doc.get("site_label"), {"name": name, "point": point_label})
         monitoring_status = _monitoring(check, doc.get("monitoring"))
         visibility = _visibility(check, doc.get("visibility"))
@@ -905,15 +964,16 @@ def load_twin(path: str | Path, check_data: bool = True, data_folder: str | Path
             path=path, name=name, mode=mode, measurements=measurements, depths=depths, offset=offset,
             sigma_temperature=sigma_t, sigma_pressure=sigma_p, layers=layers, nb_cells=nb_cells, initial_condition=initial,
             start=start, end=end, mcmc=mcmc, seed=seed, description=str(doc.get("description", "")),
-            point=loaded.raw.name if v2 else str(doc.get("point", "")),
+            point=(processed.point if processed is not None else loaded.raw.name) if v2 else str(doc.get("point", "")),
             declared_code_version=str(declared_version) if declared_version is not None else None,
             schema_version=schema_version, data_root=root, data_lab=lab_name, data_point=point_name,
-            processing=processing, legacy_twin_id=legacy_twin_id,
+            data_processed=processed_name, processing=processing, legacy_twin_id=legacy_twin_id,
             site_label=site_label, monitoring_status=monitoring_status, visibility=visibility, report=report,
             orx_path=orx.path if orx is not None else None, reference_platform=orx.platform if orx is not None else None,
         )
         if v2:
             config._point = loaded
+            config._processed = processed
         if check_data:
             try:
                 frame = config.load_measurements()

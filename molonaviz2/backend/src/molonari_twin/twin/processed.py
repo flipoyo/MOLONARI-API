@@ -25,11 +25,15 @@ from __future__ import annotations
 
 import json
 import shutil
+from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
 
 from ..domain.models import CLEANED_COLUMNS
+from ..errors import UserError
+from ..processing.cleanup import read_cleaned_csv
 
 PROCESSED_SCHEMA = "molonari-processed/1.0.0"
 PROCESSED_FOLDER = "processed_data"  # dossier, à la racine des données, qui contient un sous-dossier par point
@@ -73,3 +77,108 @@ def write_processed(target: Path, manifest: dict, cleaned: pd.DataFrame) -> None
         raise
     if old.exists():
         shutil.rmtree(old)
+
+
+@dataclass(frozen=True)
+class Processed:
+    """Données traitées lues : le manifeste et les mesures nettoyées."""
+
+    folder: Path
+    manifest: dict
+    cleaned: pd.DataFrame
+
+    @property
+    def lab(self) -> str:
+        return self.manifest["lab"]
+
+    @property
+    def point(self) -> str:
+        return self.manifest["point"]
+
+    @property
+    def code_version(self) -> str:
+        return self.manifest["code_version"]
+
+    @property
+    def depths(self) -> tuple[float, ...]:
+        return tuple(float(d) for d in self.manifest["depths"])
+
+    @property
+    def offset(self) -> float:
+        return float(self.manifest["offset"])
+
+    @property
+    def sigma_pressure(self) -> float:
+        return float(self.manifest["sigma_pressure"])
+
+    @property
+    def sigma_temperature(self) -> float:
+        return float(self.manifest["sigma_temperature"])
+
+    @property
+    def cleaned_sha256(self) -> str:
+        return self.manifest["cleaned_sha256"]
+
+    @property
+    def processing(self) -> dict:
+        return self.manifest["processing"]
+
+    @property
+    def window(self) -> tuple[datetime | None, datetime | None]:
+        """Début et fin du nettoyage (`processing.start`, `processing.end`), None quand il n'y en avait pas."""
+        return tuple(datetime.fromisoformat(v) if v else None for v in (self.processing.get("start"), self.processing.get("end")))
+
+
+def _number(value) -> bool:
+    return isinstance(value, int | float) and not isinstance(value, bool)
+
+
+def _iso(value) -> bool:
+    """Une date ISO 8601, ou None (pas de borne)."""
+    if value is None:
+        return True
+    try:
+        datetime.fromisoformat(value)
+    except (ValueError, TypeError):
+        return False
+    return True
+
+
+def _check_manifest(manifest, path: Path) -> None:
+    """Le manifeste est écrit par `lab build` : une clé absente ou d'un autre type est refusée, jamais devinée."""
+    if not isinstance(manifest, dict):
+        raise UserError("E_PROCESSED_MANIFEST_UNREADABLE", path=path)
+    schema = manifest.get("schema")
+    if schema != PROCESSED_SCHEMA:
+        raise UserError("E_PROCESSED_SCHEMA", path=path, value=schema, expected=PROCESSED_SCHEMA)
+    texts = ("lab", "point", "code_version")
+    numbers = ("offset", "sigma_pressure", "sigma_temperature")
+    problems = [key for key in texts if not isinstance(manifest.get(key), str)]
+    problems += [key for key in numbers if not _number(manifest.get(key))]
+    problems += [key for key in ("sigma_pressure", "sigma_temperature") if _number(manifest.get(key)) and manifest[key] <= 0]
+    depths = manifest.get("depths")
+    if not (isinstance(depths, list) and len(depths) == 4 and all(_number(d) for d in depths)):
+        problems.append("depths")
+    digest = manifest.get("cleaned_sha256")
+    if not (isinstance(digest, str) and len(digest) == 64):
+        problems.append("cleaned_sha256")
+    processing = manifest.get("processing")
+    if not isinstance(processing, dict) or not all(_iso(processing.get(key)) for key in ("start", "end")):
+        problems.append("processing")
+    if problems:
+        raise UserError("E_PROCESSED_MANIFEST_KEY", path=path, keys=", ".join(dict.fromkeys(problems)))
+
+
+def read_processed(folder: Path) -> Processed:
+    """Lit un dossier `processed_data/<point>/`. Les mesures sont relues sans perte. L'empreinte n'est pas vérifiée ici."""
+    folder = Path(folder)
+    manifest_path, csv_path = folder / MANIFEST_NAME, folder / MEASUREMENTS_NAME
+    for path in (manifest_path, csv_path):
+        if not path.is_file():
+            raise UserError("E_FILE_NOT_FOUND", path=path)
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except ValueError:
+        raise UserError("E_PROCESSED_MANIFEST_UNREADABLE", path=manifest_path) from None
+    _check_manifest(manifest, manifest_path)
+    return Processed(folder, manifest, read_cleaned_csv(csv_path, exact=True))
