@@ -863,7 +863,7 @@ wheels = [
 
 [[package]]
 name = "molonari-twin"
-version = "0.8.0a1"
+version = "0.8.0a2"
 source = { editable = "backend" }
 dependencies = [
     { name = "arviz" },
@@ -1401,7 +1401,7 @@ wheels = [
 
 [[package]]
 name = "pyheatmy"
-version = "0.4.0"
+version = "0.9.7"
 source = { editable = "../../pyheatmy" }
 dependencies = [
     { name = "ipython" },

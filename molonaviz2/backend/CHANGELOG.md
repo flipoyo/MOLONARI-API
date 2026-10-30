@@ -16,6 +16,8 @@ Jusqu'à 0.6.0-alpha.1, le backend faisait partie du paquet molonaviz2 : son his
 
 ## [Non publié]
 
+## [0.8.0-alpha.2] - 2026-10-30
+
 ### Moteur aligné sur pyheatmy 0.9.7
 
 - Le modèle direct JAX reprend les corrections de pyheatmy : aux interfaces, K est calculé avec la perméabilité en m² au lieu de 10^(−k) ; la cellule sous une interface utilise son propre coefficient d'emmagasinement ; le pas de temps est celui de l'instant courant, pas le premier. **Les températures des colonnes à plusieurs couches changent** (jusqu'à 0,81 K sur le cas à deux couches de `test_engine_forward`), et les twins déjà calculés ne sont plus comparables à ceux d'après.
@@ -60,6 +62,12 @@ Jusqu'à 0.6.0-alpha.1, le backend faisait partie du paquet molonaviz2 : son his
 - Écriture atomique (`Public Report.partial/`, puis remplacement) : un échec laisse l'ancien rapport intact et aucun dossier partiel ; un fichier étranger est retiré à la régénération.
 - Projections publiques de HN-40 (RMSE, biais, RMSE totale ; ni σ ni RMSE/σ), HN-42, BN-32, BN-34 et de la comparaison (`questions/public.py`). `sigma` est retiré de la provenance publique. Les questions d'états ou de mesures (HN-20, HN-30, HN-33, BN-30) restent sans projection (T3).
 - Nouveaux codes : `E_REPORT_EMPTY`, `E_REPORT_MODEL_MODE`, `W_NO_UNCERTAINTY` (traduits). `API_VERSION` ne change pas (aucune route ni sortie de `/v1` nouvelle).
+
+### Identifiants de référence (0.8.0-alpha.2)
+
+- `twin_01` et `twin_02` : `4e2d65d9502fd07a` ; `twin_03` : `b02cef55d39f69d8` ; `twin_04` : `1b73626dcb5feff5`.
+- Ils changent parce que la version du code entre dans `engine_version()`. Le calcul change aussi pour les colonnes à plusieurs couches : voir « Moteur aligné sur pyheatmy 0.9.7 ».
+- Calculés avec la version publiée (`release_version()`, sans suffixe local).
 
 ## [0.8.0-alpha.1] - 2026-10-28
 
