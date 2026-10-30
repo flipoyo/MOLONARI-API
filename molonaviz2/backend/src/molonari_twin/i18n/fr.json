@@ -256,5 +256,7 @@
  "Twin \"{ref}\" is in {mode} mode, but the report expects a {role} twin ({expected} mode).": "Le twin « {ref} » est en mode {mode}, mais le rapport attend un twin {role} (mode {expected}).",
  "Forward model: its parameters are fixed, so this result has no confidence interval.": "Modèle forward : ses paramètres sont fixés, ce résultat n'a donc pas d'intervalle de confiance.",
  "Public report written: {folder} ({entries} entries, {figures} figures, {skipped} skipped).": "Rapport public écrit : {folder} ({entries} entrées, {figures} figures, {skipped} sautées).",
- "Skipped: {question} ({model}): {reason}": "Sautée : {question} ({model}) : {reason}"
+ "Skipped: {question} ({model}): {reason}": "Sautée : {question} ({model}) : {reason}",
+ "the data repository is unknown: set {env} or put the laboratory in a cgs workspace (molonari.cgs).": "le dépôt de données est inconnu : définissez {env} ou placez le laboratoire dans un espace de travail cgs (molonari.cgs).",
+ "{file} was written for code {declared} but the code is {current}: the processed data are built with the current code.": "{file} a été écrit pour le code {declared}, mais le code est {current} : les données traitées sont construites avec le code actuel."
 }

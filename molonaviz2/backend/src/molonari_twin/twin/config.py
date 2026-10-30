@@ -488,27 +488,28 @@ def _data_folder(check: _Checker, root: Path, value, where: str) -> Path | None:
     return folder
 
 
-def _processing(check: _Checker, raw) -> CleanupSettings:
-    """`processing: {start, end, methods, excluded}` d'un twin 2.0.0, qui devient les réglages de `clean`."""
-    section = check.mapping(raw if raw is not None else {}, "processing", PROCESSING_KEYS)
-    start, end = check.date(section.get("start"), "processing.start"), check.date(section.get("end"), "processing.end")
+def _processing(check: _Checker, raw, where: str = "processing") -> CleanupSettings:
+    """`processing: {start, end, methods, excluded}` d'un twin 2.0.0 (ou d'un point de `lab.yaml`, `where` donne alors
+    son chemin), qui devient les réglages de `clean`."""
+    section = check.mapping(raw if raw is not None else {}, where, PROCESSING_KEYS)
+    start, end = check.date(section.get("start"), f"{where}.start"), check.date(section.get("end"), f"{where}.end")
     if start and end and start >= end:
-        check.add("processing.end", "E_TWIN_END_BEFORE_START", start="processing.start")
+        check.add(f"{where}.end", "E_TWIN_END_BEFORE_START", start=f"{where}.start")
     methods = {variable: "none" for variable in VARIABLES}
-    declared = check.mapping(section.get("methods") if section.get("methods") is not None else {}, "processing.methods", set(VARIABLES))
+    declared = check.mapping(section.get("methods") if section.get("methods") is not None else {}, f"{where}.methods", set(VARIABLES))
     for variable in VARIABLES:
         if variable in declared:
             if declared[variable] in METHODS:
                 methods[variable] = declared[variable]
             else:
-                check.add(f"processing.methods.{variable}", "E_TWIN_METHOD", methods=", ".join(METHODS))
+                check.add(f"{where}.methods.{variable}", "E_TWIN_METHOD", methods=", ".join(METHODS))
     excluded = []
     raw_excluded = section.get("excluded")
     if raw_excluded is not None and not isinstance(raw_excluded, list):
-        check.add("processing.excluded", "E_TWIN_EXPECTED_LIST")
+        check.add(f"{where}.excluded", "E_TWIN_EXPECTED_LIST")
     else:
         for i, value in enumerate(raw_excluded or []):
-            date = check.date(value, f"processing.excluded[{i}]")
+            date = check.date(value, f"{where}.excluded[{i}]")
             if date is not None:
                 excluded.append(date)
     return CleanupSettings(start=start, end=end, methods=methods, excluded=sorted(set(excluded)))
