@@ -112,15 +112,17 @@ class DatabaseManager:
         query.prepare("""INSERT INTO RawMeasuresVolt (
                             Date,
                             RelayReceiveTime,
+                            ChirpstackReceiveTime,
                             Volt1,
                             Volt2,
                             Volt3,
                             Volt4,
                             SamplingPoint)
-            VALUES (:Date, :RelayReceiveTime, :Volt1, :Volt2, :Volt3, :Volt4, :SamplingPoint)
+            VALUES (:Date, :RelayReceiveTime, :ChirpstackReceiveTime, :Volt1, :Volt2, :Volt3, :Volt4, :SamplingPoint)
         """)
         query.bindValue(":Date", payload["timestamp"])
         query.bindValue(":RelayReceiveTime", payload["relay_receive_time"])
+        query.bindValue(":ChirpstackReceiveTime", payload["chirpstack_receive_time"])
         query.bindValue(":Volt1", payload["a2"])
         query.bindValue(":Volt2", payload["a3"])
         query.bindValue(":Volt3", payload["a4"])
@@ -172,11 +174,12 @@ class DatabaseManager:
         }
         query = QSqlQuery(self.con)
         query.prepare("""INSERT INTO RawMeasuresTemp (
-                            Date, RelayReceiveTime, Temp1, Temp2, Temp3, Temp4, SamplingPoint)
-            VALUES (:Date, :RelayReceiveTime, :Temp1, :Temp2, :Temp3, :Temp4, :SamplingPoint)
+                            Date, RelayReceiveTime, ChirpstackReceiveTime, Temp1, Temp2, Temp3, Temp4, SamplingPoint)
+            VALUES (:Date, :RelayReceiveTime, :ChirpstackReceiveTime, :Temp1, :Temp2, :Temp3, :Temp4, :SamplingPoint)
         """)
         query.bindValue(":Date", payload["timestamp"])
         query.bindValue(":RelayReceiveTime", payload["relay_receive_time"])
+        query.bindValue(":ChirpstackReceiveTime", payload["chirpstack_receive_time"])
         query.bindValue(":Temp1", temp_values["Temp1"])
         query.bindValue(":Temp2", temp_values["Temp2"])
         query.bindValue(":Temp3", temp_values["Temp3"])
@@ -190,6 +193,7 @@ class DatabaseManager:
         query.prepare("""INSERT INTO RawMeasuresPress (
                             Date,
                             RelayReceiveTime,
+                            Chirpstack_Receive_Time,
                             TempBed,
                             Voltage,
                             SamplingPoint)
@@ -197,6 +201,7 @@ class DatabaseManager:
         """)
         query.bindValue(":Date", payload["timestamp"])
         query.bindValue(":RelayReceiveTime", payload["relay_receive_time"])
+        query.bindValue(":ChirpstackReceiveTime", payload["chirpstack_receive_time"])
         query.bindValue(":Voltage", payload["a0"])
         query.bindValue(":TempBed", coordinator.calibrate_temperature(payload["a1"], beta, V_ref))
         query.bindValue(":SamplingPoint", sp_id)

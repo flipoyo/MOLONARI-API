@@ -49,6 +49,7 @@ def extract_fields_from_payload(payload: dict):
     relay_receive_timestamp = Sensor.relay_receive_time
     relay_id = payload.get("deviceInfo").get("devEui")
     relay_ts = payload.get("time")
+    chirpstack_receive_time = payload.get("rxInfo")[0].get("nsTime")
     gateway_id = payload.get("rxInfo")[0].get("gatewayId")
     gateway_ts = payload.get("rxInfo")[0].get("gwTime")
     fcnt = payload.get("fCnt")
@@ -57,6 +58,7 @@ def extract_fields_from_payload(payload: dict):
         "device_eui": device_eui,
         "timestamp": timestamp,
         "relay_receive_time": relay_receive_timestamp,
+        "chirpstack_receive_time": chirpstack_receive_time,
         "relay_id": relay_id,
         "relay_ts": relay_ts,
         "gateway_id": gateway_id,

@@ -18,6 +18,8 @@ def init_db(logger, db_path):
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         device_eui TEXT,
         timestamp TEXT,
+        relay_receive_time TEXT,
+        chirpstack_receive_time TEXT,
         relay_id TEXT,
         gateway_id TEXT,
         fcnt INTEGER,
@@ -41,13 +43,14 @@ def insert_record(logger, db, rec):
     query = QSqlQuery(db)
     query.prepare(f'''
         INSERT INTO RawMeasurements (
-            device_eui, timestamp, relay_receive_time, relay_id, gateway_id, fcnt, a0, a1, a2, a3, a4, a5
-        ) VALUES (:device_eui, :timestamp, :relay_receive_time, :relay_id, :gateway_id, :fcnt, :a0, :a1, :a2, :a3, :a4, :a5)
+            device_eui, timestamp, relay_receive_time, chirpstack_receive_time, relay_id, gateway_id, fcnt, a0, a1, a2, a3, a4, a5
+        ) VALUES (:device_eui, :timestamp, :relay_receive_time, :chirpstack_receive_time, :relay_id, :gateway_id, :fcnt, :a0, :a1, :a2, :a3, :a4, :a5)
     ''')
 
     query.bindValue(":device_eui", rec.get("device_eui"))
     query.bindValue(":timestamp", rec.get("timestamp"))
     query.bindValue(":relay_receive_time", rec.get("relay_receive_time"))
+    query.bindValue(":chirpstack_receive_time", rec.get("chirpstack_receive_time"))
     query.bindValue(":relay_id", rec.get("relay_id"))
     query.bindValue(":gateway_id", rec.get("gateway_id"))
     query.bindValue(":fcnt", rec.get("fcnt"))
