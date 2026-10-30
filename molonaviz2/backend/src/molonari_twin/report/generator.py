@@ -104,7 +104,7 @@ class ReportResult:
 
 def resolve_space(twin: str | Path) -> Space:
     """Le space du rapport du twin `twin` (dossier ou twin.yaml) : E_REPORT_MODEL_MODE si un twin désigné n'a pas le bon
-    mode, E_TWIN_NOT_FOUND s'il n'existe pas."""
+    mode, E_REPORT_POINT_MISMATCH si les twins ne portent pas sur le même point, E_TWIN_NOT_FOUND s'il n'existe pas."""
     folder = config_path(twin).parent
     config = load_twin(folder)
     spec = config.report
@@ -118,6 +118,9 @@ def resolve_space(twin: str | Path) -> Space:
         configs[role] = config if ref == folder.name else load_twin(api.twin_folder(ref))
         if configs[role].mode != MODE_OF_ROLE[role]:
             raise UserError("E_REPORT_MODEL_MODE", ref=ref, mode=configs[role].mode, role=role, expected=MODE_OF_ROLE[role])
+    points = sorted({c.point for c in configs.values()})
+    if len(points) > 1:  # un rapport public appartient à un seul sampling point
+        raise UserError("E_REPORT_POINT_MISMATCH", points=", ".join(points))
     return Space(folder.name, refs, configs, spec.entries, spec.declared)
 
 
@@ -266,6 +269,7 @@ def build_report(space: Space, api: TwinAPI, npz_threshold: int = NPZ_THRESHOLD)
 
     index = {
         "report_format": REPORT_FORMAT,
+        "point": next(iter(space.configs.values())).point,  # le sampling point du rapport, commun aux twins du space
         "space": {role: (_space_entry(space.refs[role], metadata[role]) if role in space.refs else None) for role in ROLES},
         "twin_semver": None,  # le SemVer composé du Twin attend P0.4
         "generated_at": max(str(m["created_at"]) for m in metadata.values()),  # date du calcul, jamais l'horloge : mêmes octets

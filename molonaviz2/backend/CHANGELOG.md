@@ -16,6 +16,12 @@ Jusqu'à 0.6.0-alpha.1, le backend faisait partie du paquet molonaviz2 : son his
 
 ## [Non publié]
 
+### Le rapport public porte le sampling point réel
+
+- `point` entre dans la projection publique de `describe` et dans l'index du rapport (`report.json`) : un rapport public appartient à un point réel.
+- `site_label` devient un libellé facultatif, qui peut reprendre le nom du point. Le nom du twin et sa description restent privés.
+- `E_REPORT_POINT_MISMATCH` : les twins d'un rapport doivent porter sur le même point.
+
 ### T11 : niveaux d'accès `user` et `admin`, commandes `questions` et `ask` ; T10 : test de `report --output`
 
 - `api/access.py` (`LeveledAPI`), une couche au-dessus de `TwinAPI` et du générateur de rapport, qui ne changent pas. Le **user** n'interroge que les échanges d'eau, la chaleur et la température (`water_flux`, `exchange_direction`, `exchanged_volume`, `heat_budget`, `temperature`, sur les twins direct et mcmc ; `sensor_intervals` en est exclue, elle révèle les mesures) ; tout le reste est réservé à l'**admin**. Sans authentification, le niveau oriente l'usage : ce n'est pas une sécurité, et aucun contrôle d'identité n'existe.

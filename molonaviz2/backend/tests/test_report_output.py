@@ -51,13 +51,13 @@ def test_report_output_to_public_reports_has_neither_the_seed_nor_an_absolute_pa
     seeds = (str(SEED).encode(), np.int64(SEED).tobytes(), np.int32(SEED).tobytes(), np.uint64(SEED).tobytes(), np.uint32(SEED).tobytes())
     absolute = (str(tmp_path).encode(), str(output).encode(), str(point).encode(), str(Path.home()).encode(), str(tmp_path.resolve()).encode(),
                 str(data_repo).encode(), b"/private/", b"/var/folders", b"/Users/", b"/home/")
-    words = (b"seed", b"orx", b"secret description", b"Point034")
+    words = (b"seed", b"orx", b"secret description")  # le nom du point est public : le rapport lui appartient
     for name, content in scanned.items():
         # les mots courts (3 à 4 octets) ne se cherchent pas dans l'archive compressée, où ils pourraient apparaître par hasard :
         # ses entrées décompressées, balayées à part, les couvrent
         for forbidden in (*seeds, *absolute, *([] if name.endswith(".npz") else words)):
             assert forbidden not in content, (name, forbidden)
-        assert str(tmp_path) not in name and "Point034" not in name
+        assert str(tmp_path) not in name
 
     # le npz se relit sans pickle, et aucun de ses tableaux n'est de type objet (donc aucun chemin caché dans un pickle)
     for name in npz:

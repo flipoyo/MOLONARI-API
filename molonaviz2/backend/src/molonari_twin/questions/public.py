@@ -5,8 +5,8 @@ sont **blanches** : un champ n'est publié que s'il est listé ici, et une quest
 (E_REPORT_NO_PROJECTION). Une réponse n'est jamais publiée entière par défaut.
 
 - HN-02 `describe` (SPEC_RAPPORT_PUBLIC, T4, T7) : le mode, la période, les couches, les profondeurs des capteurs et
-  les réglages que les échantillons publics révèlent (`nb_chains`, `nb_iter`, `thin`). Ni `name`, `point` ni
-  `description` (ils identifient le site, T7 : le site se désigne par `site_label`, public), ni `seed` (réservée à ORX, P2c.2g), ni les réglages privés.
+  les réglages que les échantillons publics révèlent (`nb_chains`, `nb_iter`, `thin`), et le sampling point (`point`) : un
+  rapport public appartient à un point réel. Ni `name` ni `description`, ni `seed` (réservée à ORX, P2c.2g), ni les réglages privés.
 - HN-43 `provenance` : SemVer composé du code, version de build des données (quand elle est enregistrée), versions
   de jax, jaxlib, numpy, plateforme, processeur et appareil de calcul. Ni remotes, ni chemins, ni `data_file`, ni
   `data_sha256`, ni `twin_id`, ni commande `reproduce`, ni commits.
@@ -30,8 +30,8 @@ from .answer import Answer, Quantity
 # Grandeurs publiées, par question. Une question absente d'ici n'est pas publiable.
 PUBLIC_DATA: dict[str, tuple[str, ...]] = {
     "describe": (
-        "mode", "start", "end", "layers", "layer_bottoms", "sensor_depths", "offset", "nb_chains", "nb_iter", "thin",
-        "site_label", "monitoring_status",  # P2.3 : le libellé public du site et l'état du suivi (carte d'identité)
+        "point", "mode", "start", "end", "layers", "layer_bottoms", "sensor_depths", "offset", "nb_chains", "nb_iter", "thin",
+        "site_label", "monitoring_status",  # P2.3 : le libellé public du site, facultatif, et l'état du suivi (carte d'identité)
     ),
     "provenance": ("code_version", "data_release"),
     "water_flux": ("mean", "median", "p5", "p95", "points", "start", "end", "level", "model", "uncertainty", "mean_best"),
