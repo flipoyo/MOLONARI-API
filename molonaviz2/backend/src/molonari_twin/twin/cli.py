@@ -13,7 +13,8 @@
 (`GET /v1/questions`, `POST /v1/twins/{ref}/questions/{question}`) ; une erreur écrit le JSON d'erreur de /v1 sur la
 sortie standard (code de sortie 1). `--level {user,admin}` (user par défaut) : le user n'interroge que les échanges
 d'eau, la chaleur et la température, et reçoit des réponses réduites à une liste blanche ; l'admin, tout le catalogue.
-Ce niveau oriente l'usage, ce n'est pas une sécurité (api/access.py). `serve --local --level` le donne à l'API HTTP.
+Ce niveau oriente l'usage, ce n'est pas une sécurité (api/access.py). `serve --local --level` le donne à l'API HTTP :
+au niveau user, lancer un twin (`POST …/run`) et suivre les tâches sont refusés (403).
 
 (aussi `python -m molonari_twin …`, et `molonaviz2 twin …` depuis l'application)
 
@@ -81,6 +82,7 @@ def main(argv: list[str]) -> int:
     serve_parser.add_argument("--twins-folder", default=".", help="folder that contains the twin_xx folders")
     serve_parser.add_argument("--tasks-db", default=None, help="task database (default: $XDG_CACHE_HOME/molonari-twin/tasks.sqlite)")
     serve_parser.add_argument("--max-workers", type=int, default=1, help="tasks computed at the same time")
+    serve_parser.add_argument("--level", choices=LEVELS, default="user", help="access level (default: user: water, heat and temperature only)")
     args = parser.parse_args(argv)
     if args.command == "serve" and args.host not in LOCAL_HOSTS:
         serve_parser.error(tr("only a local address is allowed until authentication exists"))
@@ -167,10 +169,11 @@ def serve(args) -> int:
     runner = LocalTaskRunner(db, max_workers=args.max_workers)
     print(tr("Local server: http://{host}:{port} (twins: {folder}, tasks: {db})").format(
         host=args.host, port=args.port, folder=folder, db=db))
+    print(tr("Access level: {level}").format(level=args.level), file=sys.stderr)
     try:
         # L'appareil de calcul est lu par un worker (qui importe JAX) : l'API, elle, ne charge pas le moteur.
         device = runner.submit("diag.device", {}, key=task_key("diag.device", {}))
-        uvicorn.run(create_app(runner, folder, device_task=device.id), host=args.host, port=args.port)
+        uvicorn.run(create_app(runner, folder, device_task=device.id, level=args.level), host=args.host, port=args.port)
     finally:
         runner.close()
     return 0

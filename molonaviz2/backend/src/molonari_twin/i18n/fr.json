@@ -263,5 +263,6 @@
  "Warnings:": "Avertissements :",
  "interval": "intervalle",
  "{count} values, from {low} to {high}": "{count} valeurs, de {low} à {high}",
- "{count} values": "{count} valeurs"
+ "{count} values": "{count} valeurs",
+ "Access level: {level}": "Niveau d'accès : {level}"
 }
