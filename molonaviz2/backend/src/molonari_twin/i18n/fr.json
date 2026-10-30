@@ -257,5 +257,11 @@
  "Forward model: its parameters are fixed, so this result has no confidence interval.": "Modèle forward : ses paramètres sont fixés, ce résultat n'a donc pas d'intervalle de confiance.",
  "Public report written: {folder} ({entries} entries, {figures} figures, {skipped} skipped).": "Rapport public écrit : {folder} ({entries} entrées, {figures} figures, {skipped} sautées).",
  "Skipped: {question} ({model}): {reason}": "Sautée : {question} ({model}) : {reason}",
- "\"{name}\" is reserved for the admin level: the user level only asks about water exchanges, heat and temperature.": "« {name} » est réservé au niveau admin : le niveau user n'interroge que les échanges d'eau, la chaleur et la température."
+ "\"{name}\" is reserved for the admin level: the user level only asks about water exchanges, heat and temperature.": "« {name} » est réservé au niveau admin : le niveau user n'interroge que les échanges d'eau, la chaleur et la température.",
+ "Questions of the {level} level:": "Questions du niveau {level} :",
+ "Parameters:": "Paramètres :",
+ "Warnings:": "Avertissements :",
+ "interval": "intervalle",
+ "{count} values, from {low} to {high}": "{count} valeurs, de {low} à {high}",
+ "{count} values": "{count} valeurs"
 }
