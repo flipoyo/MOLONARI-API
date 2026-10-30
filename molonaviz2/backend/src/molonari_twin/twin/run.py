@@ -218,8 +218,13 @@ def _metadata(config: TwinConfig, twin_id: str, code_version: str, device: str, 
 
 def _data_section(config: TwinConfig, measurements) -> dict:
     """Données du twin dans metadata.json. 1.x : le fichier de mesures et son empreinte. 2.0.0 : le laboratoire et le
-    point dans le dépôt de données, et l'empreinte des mesures nettoyées (celles qui entrent dans le calcul)."""
+    point dans le dépôt de données, et l'empreinte des mesures nettoyées (celles qui entrent dans le calcul). 2.0.0 avec
+    `data.processed` : le dossier des données traitées, le nom du lab et la version du code du manifeste, et la même empreinte."""
     section = {"rows": len(measurements), "start": measurements["date"].iloc[0].isoformat(), "end": measurements["date"].iloc[-1].isoformat()}
+    if config.from_processed:
+        manifest = config.processed_manifest
+        return {"processed": config.data_processed, "lab": manifest["lab"], "code_version": manifest["code_version"],
+                "cleaned_sha256": frame_digest(measurements), **section}
     if config.raw_data:
         return {"lab": config.data_lab, "point": config.data_point, "cleaned_sha256": frame_digest(measurements), **section}
     return {"file": config.measurements.name, "sha256": file_digest(config.measurements), **section}

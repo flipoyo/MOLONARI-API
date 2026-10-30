@@ -46,6 +46,7 @@ class ImportIssue:
 class LabImport:
     lab: Lab
     issues: list[ImportIssue] = field(default_factory=list)
+    files: dict[tuple[str, str], str] = field(default_factory=dict)  # (« thermometers », « pressure_sensors » ou « shafts », nom) → fichier relatif au laboratoire
 
 
 def read_text(path: Path) -> str:
@@ -175,6 +176,7 @@ def import_lab_directory(directory: Path, name: str | None = None) -> LabImport:
                 continue
             names.add(item.name)
             getattr(lab, attribute).append(item)
+            result.files[(attribute, item.name)] = relative
     known = {th.name for th in lab.thermometers}
     for sensor in [*lab.pressure_sensors, *lab.shafts]:
         if known and sensor.thermometer not in known:
