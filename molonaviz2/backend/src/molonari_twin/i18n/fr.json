@@ -193,6 +193,7 @@
  "expected a text.": "texte attendu.",
  "no seed (orx.yaml is absent or gives no mcmc.seed): the twin can be read but not computed, and its twin_id is unknown.": "pas de graine (orx.yaml est absent ou ne donne pas mcmc.seed) : le twin se lit mais ne se calcule pas, et son twin_id est inconnu.",
  "expected a twin_id of {length} hexadecimal characters.": "identifiant de twin attendu, de {length} caractères hexadécimaux.",
+ "must be a number of hours, zero or more.": "doit être un nombre d'heures, nul ou positif.",
  "must be one of {methods}.": "doit être l'une des méthodes : {methods}.",
  "expected true or false.": "vrai ou faux attendu.",
  "expected a text.": "texte attendu.",

@@ -4,7 +4,8 @@
    seules les dates présentes dans les deux fichiers sont gardées.
 2. La tension du capteur est convertie en charge différentielle :
    ΔH = (U − T_capteur·dU/dT − intercept) / (dU/dH).
-3. Une fenêtre de dates restreint la période étudiée.
+3. Une fenêtre de dates restreint la période étudiée ; `trim_hours` retire en plus ce nombre d'heures après la première
+   et avant la dernière date commune (mise en route et relevé du capteur).
 4. Pour chaque variable, une méthode de détection des valeurs aberrantes, calculée
    sur la fenêtre retenue : aucune, IQR (hors [Q1 − 1,5·IQR, Q3 + 1,5·IQR]) ou
    Z-score (|z| > 3). Une date est écartée dès qu'une variable y est aberrante.
@@ -37,6 +38,7 @@ class CleanupSettings:
     end: datetime | None = None
     methods: dict[str, str] = field(default_factory=lambda: {v: "none" for v in VARIABLES})
     excluded: list[datetime] = field(default_factory=list)
+    trim_hours: float = 0.0
 
     def to_dict(self) -> dict:
         return {
@@ -44,6 +46,7 @@ class CleanupSettings:
             "end": self.end.isoformat() if self.end else None,
             "methods": dict(self.methods),
             "excluded": [d.isoformat() for d in self.excluded],
+            "trim_hours": self.trim_hours,
         }
 
     @classmethod
@@ -56,6 +59,7 @@ class CleanupSettings:
             end=datetime.fromisoformat(data["end"]) if data.get("end") else None,
             methods={v: m if m in METHODS else "none" for v, m in methods.items()},
             excluded=[datetime.fromisoformat(d) for d in data.get("excluded", [])],
+            trim_hours=float(data.get("trim_hours", 0.0)),
         )
 
 
@@ -115,6 +119,10 @@ def clean(raw_temperature: pd.DataFrame, raw_pressure: pd.DataFrame, sensor: Pre
     def mark(mask: pd.Series, label: str) -> None:
         reason[(reason == "") & mask] = label
 
+    if settings.trim_hours:
+        trim = pd.Timedelta(hours=settings.trim_hours)
+        mark(measures["date"] < measures["date"].iloc[0] + trim, "outside_window")
+        mark(measures["date"] > measures["date"].iloc[-1] - trim, "outside_window")
     if settings.start is not None:
         mark(measures["date"] < pd.Timestamp(settings.start), "outside_window")
     if settings.end is not None:

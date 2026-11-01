@@ -206,6 +206,7 @@ MESSAGES: dict[str, str] = {
     "E_TWIN_KEY_MOVED": "moved to {new} since schema 2.0.0.",
     "E_TWIN_LEGACY_ID": "expected a twin_id of {length} hexadecimal characters.",
     "E_TWIN_METHOD": "must be one of {methods}.",
+    "E_TWIN_TRIM_HOURS": "must be a number of hours, zero or more.",
     "E_TWIN_DATE_UNREADABLE": "unreadable date \"{value}\".",
     "E_TWIN_DIRECT_KEYS": "direct mode needs {keys}.",
     "E_TWIN_EMPTY": "must not be empty.",

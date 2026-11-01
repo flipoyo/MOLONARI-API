@@ -17,6 +17,7 @@ Jusqu'à 0.6.0-alpha.1, le backend faisait partie du paquet molonaviz2 : son his
 ## [Non publié]
 
 - `molonari-twin run <twin> --sigma-temperature X` : lance un twin mcmc 2.0.0 avec un autre σ de température, dans le twin frère `<twin>_sigmaT<X>` (même recette, même graine). Le twin d'origine reste figé.
+- `processing.trim_hours` (`twin.yaml` 2.0.0, points de `lab.yaml`) et paramètre `trim_hours` de `processing_preview` : retire ce nombre d'heures après la première et avant la dernière date commune aux deux fichiers (mise en route et relevé du capteur), raison `outside_window`. 0 par défaut : les nettoyages existants ne changent pas. Nouveau code `E_TWIN_TRIM_HOURS`. `API_VERSION` ne change pas (schéma OpenAPI identique).
 
 ## [0.8.0-alpha.2] - 2026-10-30
 

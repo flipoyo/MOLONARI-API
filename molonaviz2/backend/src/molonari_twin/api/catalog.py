@@ -392,7 +392,7 @@ CATALOG: tuple[Question, ...] = (
         "`zscore:<variable>`; empty when it is kept), the count per reason, the dates found in only one file, and the "
         "uncertainties σ of the instruments (Sigma_Meas_P, Sigma_Meas_T). It is about no twin.",
         ("D", "M"), p.ProcessingPreviewParams, "none",
-        lambda twin, a: processing_preview(a.point_folder, a.lab_folder, a.start, a.end, a.methods, a.excluded),
+        lambda twin, a: processing_preview(a.point_folder, a.lab_folder, a.start, a.end, a.methods, a.excluded, a.trim_hours),
         outputs=(
             "time", "temperature", "river_temperature", "pressure", "kept", "reason", "reasons", "reason_counts",
             "kept_count", "total_count", "unmatched_temperature", "unmatched_pressure", "sigma_pressure",

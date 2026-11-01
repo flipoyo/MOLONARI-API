@@ -64,6 +64,15 @@ def test_date_window_and_manual_exclusion():
     assert result.counts() == {"outside_window": 10, "manual": 1}
 
 
+def test_trim_hours_removes_both_ends():
+    temperature, pressure = raw(50)  # pas de 15 min : 2 h = 8 dates de chaque côté, bornes incluses
+    result = clean(temperature, pressure, SENSOR, CleanupSettings(trim_hours=2))
+    dates = temperature["date"]
+    assert result.counts() == {"outside_window": 16}
+    assert result.cleaned["date"].iloc[0] == dates[8] and result.cleaned["date"].iloc[-1] == dates[41]
+    assert len(clean(temperature, pressure, SENSOR, CleanupSettings()).cleaned) == 50
+
+
 def test_outliers_are_computed_on_the_window_only():
     temperature, pressure = raw(100)
     temperature.loc[:9, "t1"] = 100.0  # période aberrante hors fenêtre : ne doit pas fausser les quartiles
@@ -74,8 +83,9 @@ def test_outliers_are_computed_on_the_window_only():
 
 
 def test_settings_round_trip():
-    settings = CleanupSettings(start=datetime(2020, 1, 1), methods={"t1": "iqr"}, excluded=[datetime(2020, 1, 2)])
+    settings = CleanupSettings(start=datetime(2020, 1, 1), methods={"t1": "iqr"}, excluded=[datetime(2020, 1, 2)], trim_hours=2)
     again = CleanupSettings.from_dict(settings.to_dict())
+    assert again.trim_hours == 2
     assert again.start == settings.start and again.excluded == settings.excluded
     assert again.methods["t1"] == "iqr" and again.methods["pressure"] == "none"
 
