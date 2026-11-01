@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import shutil
 import time
@@ -20,15 +21,19 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+import yaml
+
 from ..errors import Issue, UserError
 from .config import (
     TwinConfig,
+    TwinConfigError,
     config_path,
     file_digest,
     frame_digest,
     load_twin,
     without_seed,
 )
+from .orx import ORX_NAME
 from .provenance import provenance_warnings, strict_problems, twin_provenance
 from .registry import (
     RegistryEntry,
@@ -42,6 +47,8 @@ from .registry import (
 from .results import RESULTS_FORMAT, record_file_digests, write_results
 
 TWIN_PREFIX = "twin_"
+SIGMA_SUFFIX = "_sigmaT"  # twin_mcmc_sigmaT0.08 : twin_mcmc avec un autre σ de température
+SIGMA_OPTION = "--sigma-temperature"
 
 
 @dataclass
@@ -110,6 +117,46 @@ def _status_without_seed(config: TwinConfig, code_version: str, twins_folder: Pa
     if source is None:
         return TwinStatus(config, "", "new")
     return TwinStatus(config, named.twin_id, "computed" if source.name == config.name else "duplicate", source)
+
+
+def with_sigma_temperature(path: str | Path, sigma: float) -> Path:
+    """Dossier du twin mcmc `path` avec σ de température = `sigma` (°C), à lancer à sa place.
+
+    Une config est figée (E_TWIN_FROZEN) : le twin d'origine n'est pas touché, le σ modifié vit dans un dossier frère
+    `<twin>_sigmaT<sigma>`, créé au premier appel et repris ensuite. Il garde la recette et la graine (`orx.yaml`) : seuls le
+    σ et le nom changent, et le rapport le désigne comme modèle d'inversion. Avec le σ du twin, rend le twin lui-même."""
+    config = load_twin(path)
+    folder = config.folder
+    problems = []
+    if not sigma > 0 or not math.isfinite(sigma):
+        problems.append(Issue(SIGMA_OPTION, "E_TWIN_POSITIVE", prefixed=True))
+    if config.mode != "mcmc":
+        problems.append(Issue(SIGMA_OPTION, "E_TWIN_MCMC_ONLY", prefixed=True))
+    if not config.raw_data:
+        problems.append(Issue(SIGMA_OPTION, "E_TWIN_SIGMA_SCHEMA", prefixed=True))
+    if problems:
+        raise TwinConfigError(problems)
+    if sigma == config.sigma_temperature:
+        return folder
+    target = folder.with_name(f"{folder.name.split(SIGMA_SUFFIX)[0]}{SIGMA_SUFFIX}{sigma!r}")
+    if target.exists():
+        found = load_twin(target).sigma_temperature
+        if found != sigma:
+            raise TwinConfigError([Issue(SIGMA_OPTION, "E_TWIN_SIGMA_FOLDER", prefixed=True, folder=target, sigma=found)])
+        return target
+    recipe = yaml.safe_load(config.path.read_text(encoding="utf-8"))
+    recipe["name"] = target.name
+    recipe.pop("legacy_twin_id", None)  # l'identifiant 1.x est celui du twin d'origine
+    recipe["sensors"] = {**(recipe.get("sensors") or {}), "sigma_temperature": sigma}
+    models = (recipe.get("report") or {}).get("models") or {}
+    if models.get("inversion") == folder.name:
+        models["inversion"] = target.name
+    target.mkdir()
+    (target / config.path.name).write_text(yaml.safe_dump(recipe, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    for name in (ORX_NAME, "twin.cgs"):
+        if (folder / name).is_file():
+            shutil.copy2(folder / name, target / name)
+    return target
 
 
 def run_twin(path_or_config, on_progress: Callable | None = None, should_cancel: Callable[[], bool] | None = None,

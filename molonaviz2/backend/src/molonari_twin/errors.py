@@ -246,6 +246,8 @@ MESSAGES: dict[str, str] = {
     "E_TWIN_REQUIRED": "required.",
     "E_TWIN_SEED_ORX": "the seed is reserved for ORX since schema 2.0.0: write mcmc.seed in orx.yaml (orx layer), not in twin.yaml.",
     "E_TWIN_SCHEMA": "unsupported schema \"{value}\" (expected {expected}).",
+    "E_TWIN_SIGMA_FOLDER": "{folder} already exists with a temperature σ of {sigma:g} °C: rename it, or remove it if it was not run.",
+    "E_TWIN_SIGMA_SCHEMA": "needs a twin of schema 2.0.0.",
     "E_TWIN_SENSOR_DEPTHS": "expected 4 strictly increasing positive depths (m).",
     "E_TWIN_TOO_FEW_MEASUREMENTS": "fewer than 3 measurements in the selected period.",
     "E_TWIN_UNKNOWN_KEY": "unknown key (allowed: {keys}).",
