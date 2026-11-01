@@ -16,6 +16,8 @@ Jusqu'à 0.6.0-alpha.1, le backend faisait partie du paquet molonaviz2 : son his
 
 ## [Non publié]
 
+- `molonari-twin run <twin> --sigma-temperature X` : lance un twin mcmc 2.0.0 avec un autre σ de température, dans le twin frère `<twin>_sigmaT<X>` (même recette, même graine). Le twin d'origine reste figé.
+
 ## [0.8.0-alpha.2] - 2026-10-30
 
 ### Moteur aligné sur pyheatmy 0.9.7

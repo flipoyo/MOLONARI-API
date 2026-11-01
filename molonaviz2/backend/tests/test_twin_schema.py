@@ -8,8 +8,11 @@ import shutil
 
 import pytest
 from conftest import FIXTURES
+from molonari_twin.engine.api import engine_version
 from molonari_twin.twin.config import TwinConfigError, load_twin
-from molonari_twin.twin.run import run_twin
+from molonari_twin.twin.run import run_twin, twin_status, with_sigma_temperature
+
+EXAMPLES = FIXTURES.parents[2] / "examples" / "twins"
 
 RAW_MCMC = """schema: molonari-twin/2.0.0
 name: twin_01
@@ -351,3 +354,91 @@ def test_orx_runs_and_the_dev_reads_the_results_without_the_seed(tmp_path, data_
     with pytest.raises(UserError) as frozen:
         api.ask("twin_01", "provenance")
     assert frozen.value.code == "E_TWIN_FROZEN"
+
+
+# σ de température : twin.yaml et --sigma-temperature ---------------------------------------------
+
+
+def test_sigma_temperature_of_the_yaml_reaches_the_inversion(tmp_path, data_repo):
+    text = RAW_MCMC.replace("layers:", "sensors: {sigma_temperature: 0.08}\nlayers:")
+    config = load_twin(write_orx(write_twin(tmp_path, text)))
+    assert config.sigma_temperature == 0.08 and config.inversion_config().sigma_t == 0.08
+
+
+def test_option_derives_a_sibling_twin_and_leaves_the_twin_untouched(tmp_path, data_repo):
+    text = RAW_MCMC + "legacy_twin_id: 0123456789abcdef\nreport:\n  models: {forward: twin_direct, inversion: twin_01}\n  entries:\n  - {question: water_flux, parameters: {level: 0.9}}\n  - {question: fit_quality}\n"
+    folder = write_orx(write_twin(tmp_path, text))
+    before = (folder / "twin.yaml").read_bytes()
+
+    derived = with_sigma_temperature(folder, 0.08)
+
+    assert derived == folder.with_name("twin_01_sigmaT0.08") and (folder / "twin.yaml").read_bytes() == before
+    config, source = load_twin(derived), load_twin(folder)
+    assert config.name == derived.name and config.report.inversion == derived.name and config.report.forward == "twin_direct"
+    assert config.inversion_config().sigma_t == 0.08 and config.seed == source.seed and config.legacy_twin_id is None
+    assert config.twin_id("v") != source.twin_id("v")
+    assert with_sigma_temperature(folder, 0.08) == derived  # repris, pas recréé
+    assert with_sigma_temperature(derived, 0.2).name == "twin_01_sigmaT0.2"  # le suffixe ne s'empile pas
+    assert with_sigma_temperature(folder, source.sigma_temperature) == folder
+
+
+def test_option_keeps_the_identity_of_a_twin_written_by_hand(tmp_path, data_repo):
+    """Même recette et même σ, à la main ou par l'option : même twin_id (le nom n'y entre pas)."""
+    derived = with_sigma_temperature(seeded(tmp_path), 0.08)
+    text = RAW_MCMC.replace("layers:", "sensors: {sigma_temperature: 0.08}\nlayers:")
+    by_hand = write_orx(write_twin(tmp_path, text, "twin_02"))
+    assert load_twin(derived).twin_id("v") == load_twin(by_hand).twin_id("v")
+
+
+@pytest.mark.parametrize("sigma", [0.0, -0.1, float("nan"), float("inf")])
+def test_option_refuses_a_sigma_that_is_not_positive(tmp_path, data_repo, sigma):
+    folder = seeded(tmp_path)
+    with pytest.raises(TwinConfigError) as error:
+        with_sigma_temperature(folder, sigma)
+    assert codes(error) == [("--sigma-temperature", "E_TWIN_POSITIVE")]
+    assert [path.name for path in folder.parent.iterdir()] == ["twin_01"]
+
+
+def test_option_refuses_a_direct_twin(tmp_path, data_repo):
+    with pytest.raises(TwinConfigError) as error:
+        with_sigma_temperature(write_twin(tmp_path, RAW_DIRECT), 0.08)
+    assert codes(error) == [("--sigma-temperature", "E_TWIN_MCMC_ONLY")]
+
+
+def test_option_refuses_a_twin_before_schema_2(tmp_path):
+    folder = shutil.copytree(EXAMPLES / "twin_03", tmp_path / "twin_03")
+    with pytest.raises(TwinConfigError) as error:
+        with_sigma_temperature(folder, 0.08)
+    assert codes(error) == [("--sigma-temperature", "E_TWIN_SIGMA_SCHEMA")]
+
+
+def test_option_refuses_a_folder_with_another_sigma(tmp_path, data_repo):
+    folder = seeded(tmp_path)
+    derived = with_sigma_temperature(folder, 0.08)
+    edited = (derived / "twin.yaml").read_text(encoding="utf-8").replace("0.08", "0.09")
+    (derived / "twin.yaml").write_text(edited, encoding="utf-8")
+    with pytest.raises(TwinConfigError) as error:
+        with_sigma_temperature(folder, 0.08)
+    assert codes(error) == [("--sigma-temperature", "E_TWIN_SIGMA_FOLDER")]
+
+
+def test_run_with_the_option_after_the_twin_was_computed(tmp_path, data_repo, capsys):
+    """Le parcours du dev : un twin calculé est figé, l'option calcule le twin frère à côté."""
+    from molonari_twin.twin.cli import main
+
+    folder = seeded(tmp_path)
+    assert main(["run", str(folder)]) == 0
+    computed = load_twin(folder).twin_id(engine_version())
+
+    assert main(["run", str(folder), "--sigma-temperature", "0.08"]) == 0
+    assert "twin_01_sigmaT0.08" in capsys.readouterr().out
+    status = twin_status(folder.with_name("twin_01_sigmaT0.08"))
+    assert status.state == "computed" and status.twin_id != computed
+    assert json.loads((status.results_dir / "metadata.json").read_text(encoding="utf-8"))["instruments"]["sigma_temperature_C"] == 0.08
+    assert twin_status(folder).state == "computed" and twin_status(folder).twin_id == computed
+
+    # Le σ changé à la main dans twin.yaml, lui, reste refusé après le calcul.
+    edited = (folder / "twin.yaml").read_text(encoding="utf-8").replace("layers:", "sensors: {sigma_temperature: 0.08}\nlayers:")
+    (folder / "twin.yaml").write_text(edited, encoding="utf-8")
+    assert main(["run", str(folder)]) == 1
+    assert "twin_01" in capsys.readouterr().err

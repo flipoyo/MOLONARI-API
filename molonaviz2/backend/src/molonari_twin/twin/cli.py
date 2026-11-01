@@ -3,6 +3,7 @@
     molonari-twin validate <twin_xx>     étape 2 : valide la config
     molonari-twin id <twin_xx>           étape 3 : affiche le twin_id et l'état dans le registre
     molonari-twin run <twin_xx>          étapes 4-6 : exécute (ou signale un doublon) et range les résultats
+                                         (--sigma-temperature 0.08 : dans le twin frère <twin_xx>_sigmaT0.08, ce σ en °C)
     molonari-twin list <dossier twins>   liste les twins et leur état
     molonari-twin report <twin_xx>       écrit le rapport public (« Public Report/ ») d'un twin calculé et de son space
     molonari-twin questions [<twin_xx>]  liste les questions du catalogue (celles d'un twin, s'il est donné)
@@ -71,6 +72,8 @@ def main(argv: list[str]) -> int:
         sub.add_parser(command).add_argument("twin", help="twin_xx folder or twin.yaml")
     sub.choices["run"].add_argument("--strict", action="store_true",
                                     help="refuse an unpublished code version or modified or untagged repositories")
+    sub.choices["run"].add_argument("--sigma-temperature", type=float, default=None, metavar="SIGMA",
+                                    help="temperature uncertainty in °C (mcmc): run a sibling twin <twin>_sigmaT<SIGMA> with it; the twin itself stays frozen")
     sub.add_parser("list").add_argument("folder", help="twins folder")
     report_parser = sub.add_parser("report")
     report_parser.add_argument("twin", help="twin_xx folder or twin.yaml (the twin that carries the report key)")
@@ -95,7 +98,7 @@ def main(argv: list[str]) -> int:
 
     from .config import TwinConfigError, load_twin
     from .lab import LabConfigError
-    from .run import list_twins, run_twin, twin_status
+    from .run import list_twins, run_twin, twin_status, with_sigma_temperature
 
     try:
         if args.command == "serve":
@@ -135,7 +138,11 @@ def main(argv: list[str]) -> int:
                     shown.append(True)
                     print(f"  {p.phase} {p.iteration}/{p.total}    ", end="\r", flush=True)
 
-            run = run_twin(args.twin, on_progress=progress, strict=args.strict)
+            twin = args.twin
+            if args.sigma_temperature is not None:
+                twin = with_sigma_temperature(args.twin, args.sigma_temperature)
+                print(tr("Twin run with a temperature σ of {sigma:g} °C: {folder}").format(sigma=args.sigma_temperature, folder=twin))
+            run = run_twin(twin, on_progress=progress, strict=args.strict)
             if shown:
                 print()  # termine la ligne de progression
             for warning in run.warnings:

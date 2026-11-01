@@ -19,12 +19,15 @@ uv sync --package molonari-twin --no-dev   # backend seul : ni pyheatmy (référ
 uv run molonari-twin validate examples/twins/twin_01
 uv run molonari-twin id       examples/twins/twin_01
 uv run molonari-twin run      examples/twins/twin_01   # --strict : code publié et dépôts propres exigés
+uv run molonari-twin run      twin_mcmc --sigma-temperature 0.08   # σ de température en °C (mcmc, 2.0.0), dans le twin frère twin_mcmc_sigmaT0.08
 uv run molonari-twin list     examples/twins
 uv run molonari-twin report   examples/twins/twin_03   # écrit « Public Report/ » (rapport public du twin et de son space)
 uv run molonari-twin questions examples/twins/twin_03  # le catalogue (--json : celui de /v1) ; --level {user,admin}, user par défaut
 uv run molonari-twin ask      examples/twins/twin_03 water_flux --params '{"level": 0.8}'   # pose une question à un twin calculé
 python -m molonari_twin …                              # équivalent
 ```
+
+Le σ de température d'un twin mcmc se règle aussi dans `twin.yaml` (`sensors: {sigma_temperature: 0.08}`), tant que le twin n'a pas été calculé : ensuite sa config est figée (`E_TWIN_FROZEN`), et `--sigma-temperature` le laisse intact en créant le twin frère, avec la même recette et la même graine.
 
 Messages en français par défaut ; `MOLONARI_LANG=en` les affiche en anglais (l'ancien nom `MOLONAVIZ_LANG` est encore lu).
 
