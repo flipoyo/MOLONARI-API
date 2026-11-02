@@ -168,6 +168,7 @@ What a cleaning would do to a point, without saving anything: every date common 
 | `lab_folder` | texte | requis |  | Folder of the laboratory (temperature_sensors, pressure_sensors and shafts): it gives the calibration of the pressure sensor, the depths of the shaft and the sensor uncertainties. |
 | `methods` | object ou null | — |  | Outlier detection per variable (temp_bed, t1, t2, t3, t4, pressure): none, iqr (outside [Q1 − 1.5·IQR, Q3 + 1.5·IQR]) or zscore (z-score above 3 in absolute value), computed on the studied period. A variable not listed is not checked. A date is left out as soon as one variable is an outlier. |
 | `excluded` | list[date] | `[]` |  | Dates left out by hand (ISO 8601, no time zone), reason `manual`. |
+| `trim_hours` | nombre | `0.0` | ≥ 0 | Hours left out after the first and before the last date common to the two files (start-up and retrieval of the sensor), reason `outside_window`. Default: 0. |
 
 Sorties : `time`, `temperature`, `river_temperature`, `pressure`, `kept`, `reason`, `reasons`, `reason_counts`, `kept_count`, `total_count`, `unmatched_temperature`, `unmatched_pressure`, `sigma_pressure`, `sigma_temperature`.
 

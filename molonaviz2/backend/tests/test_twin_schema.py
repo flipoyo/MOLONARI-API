@@ -277,6 +277,10 @@ def test_processing_is_checked(tmp_path, data_repo):
     with pytest.raises(TwinConfigError) as error:
         load_twin(write_twin(tmp_path / "dates", text))
     assert ("processing.end", "E_TWIN_END_BEFORE_START") in codes(error)
+    text = RAW_DIRECT.replace("{t1: iqr}", "{t1: iqr}\n  trim_hours: -1")
+    with pytest.raises(TwinConfigError) as error:
+        load_twin(write_twin(tmp_path / "trim", text))
+    assert ("processing.trim_hours", "E_TWIN_TRIM_HOURS") in codes(error)
 
 
 def test_legacy_twin_id_is_a_label(tmp_path, data_repo):

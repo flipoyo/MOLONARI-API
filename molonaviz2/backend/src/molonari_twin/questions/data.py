@@ -63,14 +63,15 @@ def raw_series(point_folder: str | Path, start=None, end=None) -> Answer:
 
 
 def processing_preview(point_folder: str | Path, lab_folder: str | Path, start=None, end=None, methods=None,
-                       excluded=()) -> Answer:
+                       excluded=(), trim_hours=0.0) -> Answer:
     """Effet d'un nettoyage sur toutes les dates communes aux deux fichiers : mesures associées (températures,
     charge différentielle en m), raison d'exclusion de chaque date (`outside_window`, `manual`, `missing`,
     `iqr:<variable>`, `zscore:<variable>` ; vide si la date est gardée), décompte par raison et dates sans
     équivalent dans l'autre fichier. Ce sont les entrées du modèle, avec les σ des instruments."""
     point = load_point(Path(point_folder), Path(lab_folder))
     settings = CleanupSettings(
-        start=start, end=end, methods={**CleanupSettings().methods, **(methods or {})}, excluded=list(excluded)
+        start=start, end=end, methods={**CleanupSettings().methods, **(methods or {})}, excluded=list(excluded),
+        trim_hours=trim_hours,
     )
     result = clean_point(point, settings)
     measures, reason = result.measures, result.reason.to_numpy(dtype=str)
@@ -96,6 +97,7 @@ def processing_preview(point_folder: str | Path, lab_folder: str | Path, start=N
         "point_folder": str(point_folder), "lab_folder": str(lab_folder), **period_parameters(start, end),
         "methods": {v: settings.methods[v] for v in VARIABLES},
         "excluded": [str(np.datetime64(d, "s")) for d in settings.excluded],
+        "trim_hours": settings.trim_hours,
     }
     return Answer(data=data, provenance={"question": "processing_preview", "parameters": parameters},
                   warnings=list(point.raw.warnings))

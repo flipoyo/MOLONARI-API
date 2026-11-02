@@ -10,7 +10,7 @@ Deux familles de schémas coexistent, lues par le même `load_twin` :
   (`data.measurements`), la graine au niveau supérieur (`seed`, 0 par défaut), `code_version` facultatif.
   Ils sont lus sans changement, et leur `twin_id` ne bouge pas.
 - 2.0.0 (`molonari-twin/2.0.0`) : le brut. `data: {lab, point}` désigne le laboratoire et le point dans le dépôt de
-  données (chemins relatifs à sa racine), `processing: {start, end, methods, excluded}` le nettoyage. La graine du MCMC
+  données (chemins relatifs à sa racine), `processing: {start, end, methods, excluded, trim_hours}` le nettoyage. La graine du MCMC
   n'est plus dans `twin.yaml` (refusée, E_TWIN_SEED_ORX) mais dans `orx.yaml` (couche `orx`, `twin/orx.py`) : sans elle le
   twin reste lisible, mais `run_twin` le refuse (E_TWIN_REQUIRED, `orx.mcmc.seed`). Plus de `code_version` (les versions sont dans `twin.cgs`), plus de
   `data.measurements`, de `sensors.depths` ni de `sensors.offset` : profondeurs, décalage et σ viennent des fichiers du
@@ -133,7 +133,7 @@ TOP_KEYS_2 = {"schema", "name", "description", "mode", "data", "processing", "se
               "site_label", "monitoring", "visibility", "report"}
 REQUIRED_TOP_2 = ("schema", "name", "mode", "data", "layers")
 DATA_KEYS_2 = {"lab", "point", "processed"}
-PROCESSING_KEYS = {"start", "end", "methods", "excluded"}
+PROCESSING_KEYS = {"start", "end", "methods", "excluded", "trim_hours"}
 SENSOR_KEYS_2 = {"sigma_temperature", "sigma_pressure"}  # remplacent les σ du laboratoire
 MCMC_KEYS_2 = MCMC_KEYS
 # Clés des schémas 1.x retirées du 2.0.0, avec ce qui les remplace : ("moved", nouvelle clé), ("from_data", None),
@@ -513,7 +513,7 @@ def _data_folder(check: _Checker, root: Path, value, where: str) -> Path | None:
 
 
 def _processing(check: _Checker, raw, where: str = "processing") -> CleanupSettings:
-    """`processing: {start, end, methods, excluded}` d'un twin 2.0.0 (ou d'un point de `lab.yaml`, `where` donne alors
+    """`processing: {start, end, methods, excluded, trim_hours}` d'un twin 2.0.0 (ou d'un point de `lab.yaml`, `where` donne alors
     son chemin), qui devient les réglages de `clean`."""
     section = check.mapping(raw if raw is not None else {}, where, PROCESSING_KEYS)
     start, end = check.date(section.get("start"), f"{where}.start"), check.date(section.get("end"), f"{where}.end")
@@ -536,7 +536,13 @@ def _processing(check: _Checker, raw, where: str = "processing") -> CleanupSetti
             date = check.date(value, f"{where}.excluded[{i}]")
             if date is not None:
                 excluded.append(date)
-    return CleanupSettings(start=start, end=end, methods=methods, excluded=sorted(set(excluded)))
+    trim_hours = section.get("trim_hours")
+    if trim_hours is None:
+        trim_hours = 0.0
+    elif isinstance(trim_hours, bool) or not isinstance(trim_hours, (int, float)) or trim_hours < 0:
+        check.add(f"{where}.trim_hours", "E_TWIN_TRIM_HOURS")
+        trim_hours = 0.0
+    return CleanupSettings(start=start, end=end, methods=methods, excluded=sorted(set(excluded)), trim_hours=float(trim_hours))
 
 
 def _visibility(check: _Checker, raw) -> dict[str, bool]:

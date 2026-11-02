@@ -11,7 +11,7 @@ lab build <dossier du lab> --point <point>` le met en œuvre (`build_point`) et 
     points:
       Point034:
         folder: SamplingPoints/Point034
-        processing: {start: 2016-06-27 13:00, end: 2016-07-12 10:15}   # mêmes clés que `processing` d'un twin 2.0.0
+        processing: {start: 2016-06-27 13:00, end: 2016-07-12 10:15, trim_hours: 2}   # mêmes clés que `processing` d'un twin 2.0.0
 
 Mêmes règles que `twin.yaml` : une clé inconnue est refusée (une faute de frappe ne doit pas être ignorée en silence), les
 chemins sont relatifs à la racine des données (`config.data_root` : `MOLONARI_DATA`, sinon le `data/` de l'espace cgs qui
