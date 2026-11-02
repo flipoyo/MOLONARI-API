@@ -15,6 +15,7 @@ import sys
 import jax.numpy as jnp
 import numpy as np
 import pytest
+import yaml
 from conftest import FIXTURES, git_run
 from molonari_twin.domain.compute import LayerSpec
 from molonari_twin.errors import UserError
@@ -337,3 +338,75 @@ def test_command_line_strict_refuses_a_modified_twin(strict_setup):
     assert "Strict mode: the twin was not run." in completed.stderr
     assert "The twin repository has uncommitted changes." in completed.stderr
     assert nothing_written(strict_setup)
+
+
+# T3 : chain_state and continue -----------------------------------------------------------------
+
+
+@pytest.mark.slow
+def test_chain_state_is_saved_with_results(runs):
+    """chain_state.npz doit être écrit à chaque exécution MCMC."""
+    results = runs("thin3")
+    chain_state_file = results / "chain_state.npz"
+    assert chain_state_file.is_file(), "chain_state.npz not written"
+    with np.load(chain_state_file, allow_pickle=False) as data:
+        keys = set(data.files)
+        expected_keys = {"prng_key", "x", "e", "temperature", "water_flux", "pcr", "jumps", "counts",
+                        "burn_in_iterations", "burn_in_duration_s", "total_resets", "best_x", "best_e"}
+        assert expected_keys <= keys, f"Missing keys: {expected_keys - keys}"
+
+
+@pytest.mark.slow
+def test_continue_chain_gives_same_samples_and_energy_as_full_run(runs, tmp_path):
+    """N itérations + M en reprise doivent donner les mêmes samples/energy que N+M d'un coup,
+    si N est un multiple du thin."""
+    thin = 3
+    N_first = 9  # multiple de thin
+    M_continue = 3
+    N_plus_M = N_first + M_continue
+
+    # Exécution directe : N_plus_M itérations d'un coup
+    # Utiliser un twin distinct pour le calcul complet
+    folder_full = write_mcmc_twin(tmp_path / "full", seed_value=42, thin=thin,
+                                  name="twin_full")
+    # Modifier twin.yaml pour N_plus_M itérations
+    text_full = mcmc_text(thin).replace(f"nb_iter: {NB_ITER}", f"nb_iter: {N_plus_M}").replace("name: twin_01", "name: twin_full")
+    (folder_full / "twin.yaml").write_text(text_full, encoding="utf-8")
+    run_full = run_twin(folder_full)
+    results_full = run_full.status.results_dir
+
+    # Exécution en deux phases : N itérations puis M en reprise
+    folder_first = write_mcmc_twin(tmp_path / "first", seed_value=42, thin=thin,
+                                   name="twin_first")
+    # Modifier twin.yaml pour N_first itérations
+    text_first = mcmc_text(thin).replace(f"nb_iter: {NB_ITER}", f"nb_iter: {N_first}").replace("name: twin_01", "name: twin_first")
+    (folder_first / "twin.yaml").write_text(text_first, encoding="utf-8")
+    run_first = run_twin(folder_first)
+
+    # Vérifier que le chain_state est sauvegardé
+    chain_state_file = run_first.status.results_dir / "chain_state.npz"
+    assert chain_state_file.is_file(), "chain_state.npz not written after first run"
+
+    # Reprendre l'exécution
+    from molonari_twin.twin.run import continue_twin
+    run_continued = continue_twin(folder_first, M_continue)
+    results_continued = run_continued.status.results_dir
+
+    # Charger les résultats et comparer
+    full_data = load(results_full)
+    continued_data = load(results_continued)
+
+    # Les samples et energies de la reprise doivent être identiques aux itérations correspondantes
+    # du calcul complet, au bit près
+    n_kept_full = full_data["samples"].shape[0]
+    n_kept_continued = continued_data["samples"].shape[0]
+    expected_continued = M_continue // thin
+    assert n_kept_continued == expected_continued, f"Expected {expected_continued} samples, got {n_kept_continued}"
+
+    # Comparer les dernières itérations du full avec les itérations de continued
+    # Les itérations de la reprise commencent à N_first + 1
+    start_idx_in_full = N_first // thin
+    np.testing.assert_array_equal(continued_data["samples"], full_data["samples"][start_idx_in_full:],
+                                 err_msg="Samples do not match between continued and full run")
+    np.testing.assert_array_equal(continued_data["energy"], full_data["energy"][start_idx_in_full:],
+                                 err_msg="Energies do not match between continued and full run")

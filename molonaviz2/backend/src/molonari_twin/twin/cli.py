@@ -39,7 +39,7 @@ from ..errors import Issue, UserError
 from ..i18n import DEFAULT_LANGUAGE, LANGUAGES, render, translate
 
 LOCAL_HOSTS = ("127.0.0.1", "localhost", "::1")
-LEVELS = ("user", "admin")  # api.access.LEVELS, sans importer l'API pour les seuls choix de l'analyseur (tests/test_questions_cli.py les compare)
+LEVELS = ("user", "dev", "opx")  # api.access.LEVELS, sans importer l'API pour les seuls choix de l'analyseur (tests/test_questions_cli.py les compare)
 SHORT_ARRAY = 6  # un tableau plus long est résumé (taille, min, max)
 
 
@@ -74,6 +74,9 @@ def main(argv: list[str]) -> int:
                                     help="refuse an unpublished code version or modified or untagged repositories")
     sub.choices["run"].add_argument("--sigma-temperature", type=float, default=None, metavar="SIGMA",
                                     help="temperature uncertainty in °C (mcmc): run a sibling twin <twin>_sigmaT<SIGMA> with it; the twin itself stays frozen")
+    continue_parser = sub.add_parser("continue", help="continue a MCMC chain from its final state (dev, opx)")
+    continue_parser.add_argument("twin", help="twin_xx folder with computed results")
+    continue_parser.add_argument("--iterations", type=int, required=True, help="number of additional iterations")
     sub.add_parser("list").add_argument("folder", help="twins folder")
     report_parser = sub.add_parser("report")
     report_parser.add_argument("twin", help="twin_xx folder or twin.yaml (the twin that carries the report key)")
@@ -98,7 +101,7 @@ def main(argv: list[str]) -> int:
 
     from .config import TwinConfigError, load_twin
     from .lab import LabConfigError
-    from .run import list_twins, run_twin, twin_status, with_sigma_temperature
+    from .run import continue_twin, list_twins, run_twin, twin_status, with_sigma_temperature
 
     try:
         if args.command == "serve":
@@ -158,6 +161,32 @@ def main(argv: list[str]) -> int:
                     name=status.config.name, source=status.source.name, id=status.twin_id, folder=status.results_dir))
             if status.config.experimental:
                 print(tr("Note: mcmc mode is experimental."))
+        elif args.command == "continue":
+            from .run import continue_twin
+
+            shown = []
+
+            def progress(p):
+                if p.phase == "sampling":
+                    shown.append(True)
+                    print(f"  {p.phase} {p.iteration}/{p.total}    ", end="\r", flush=True)
+
+            path = Path(args.twin).resolve()
+            folder = path.parent if path.is_file() else path
+            status = twin_status(folder)
+
+            if status.config.mode != "mcmc":
+                raise UserError("E_CONTINUE_MCMC_ONLY", mode=status.config.mode)
+            if not status.has_results:
+                raise UserError("E_CONTINUE_NO_RESULTS", name=status.config.name)
+
+            run = continue_twin(folder, args.iterations, on_progress=progress)
+            if shown:
+                print()
+            for warning in run.warnings:
+                print(tr("Warning:"), render(warning, tr), file=sys.stderr)
+            print(tr("Twin continued: {name} + {iterations} iterations → {folder}").format(
+                name=status.config.name, iterations=args.iterations, folder=run.status.results_dir))
         else:
             for path in list_twins(args.folder):
                 try:

@@ -78,6 +78,8 @@ class InversionResult:
     field_water_flux: np.ndarray | None = None  # m·s⁻¹, float32, (S, C', T')
     # Ajout de P2c.1b : q au fond de la rivière (z = 0) de chaque champ conservé, quel que soit store_fields.
     field_riverbed_flux: np.ndarray | None = None  # m·s⁻¹, float64, (S, T')
+    # Ajout de T3 : état final pour la prolongation, dictionnaire sérialisable des composants du carry
+    chain_state: dict[str, np.ndarray] | None = None  # clé PRNG, positions, énergies, temp, flux, pcr, jumps, counts, itérations, burn_in_duration, réinitialisations, meilleur point
 
     def to_arrays(self) -> dict[str, np.ndarray]:
         arrays = self.best.to_arrays("best.")
@@ -130,4 +132,4 @@ class InversionResult:
 
 # Tableaux facultatifs d'InversionResult : le stockage n'écrit pas ceux qui valent None.
 OPTIONAL_ARRAYS = ("field_chain", "field_iteration", "resets", "sensor_temperature", "field_temperature", "field_water_flux",
-                   "field_riverbed_flux")
+                   "field_riverbed_flux", "chain_state")

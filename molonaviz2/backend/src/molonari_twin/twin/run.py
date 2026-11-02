@@ -295,3 +295,84 @@ def next_twin_folder(twins_folder: Path) -> Path:
     numbers = [int(p.name[len(TWIN_PREFIX):]) for p in Path(twins_folder).iterdir()
                if p.is_dir() and p.name.lower().startswith(TWIN_PREFIX) and p.name[len(TWIN_PREFIX):].isdigit()] if Path(twins_folder).is_dir() else []
     return Path(twins_folder) / f"{TWIN_PREFIX}{(max(numbers) + 1) if numbers else 1:02d}"
+
+
+def continue_twin(parent_folder: Path | str, nb_iter_continue: int,
+                  on_progress: Callable | None = None,
+                  should_cancel: Callable[[], bool] | None = None) -> TwinRun:
+    """Reprendre une chaîne MCMC depuis un état sauvegardé et créer un nouveau twin.
+
+    parent_folder : dossier du twin parent (contient twin.yaml et results/)
+    nb_iter_continue : nombre d'itérations supplémentaires
+    Retourne un TwinRun avec le nouveau twin et ses résultats.
+    """
+    from .. import __version__
+    from ..engine import api
+    import numpy as np
+
+    parent_folder = Path(parent_folder).resolve()
+    if not (parent_folder / "twin.yaml").is_file():
+        raise UserError("E_TWIN_FOLDER_NOT_FOUND", path=parent_folder)
+
+    # Charger la config du parent
+    config = load_twin(parent_folder / "twin.yaml")
+    parent_status = twin_status(parent_folder)
+    parent_twin_id = parent_status.twin_id
+    parent_results_dir = parent_status.results_dir
+
+    # Charger l'état du parent
+    chain_state_file = parent_results_dir / "chain_state.npz"
+    if not chain_state_file.is_file():
+        raise UserError("E_CONTINUE_NO_STATE", twin_id=parent_twin_id)
+
+    with np.load(chain_state_file, allow_pickle=False) as data:
+        chain_state = {key: np.asarray(data[key]) for key in data.files}
+
+    # Charger les entrées du moteur
+    inputs = config.column_inputs()
+
+    # Reprendre l'inversion
+    code_version = api.engine_version()
+    device = api.device()
+    started = time.perf_counter()
+    inversion = api.continue_inversion(
+        inputs, config.inversion_config(), chain_state, nb_iter_continue,
+        on_progress=on_progress, should_cancel=should_cancel
+    )
+    duration = time.perf_counter() - started
+    forward = inversion.best
+
+    # Générer le twin_id du nouveau twin : suffixe incluant itérations
+    new_twin_id = f"{parent_twin_id}_+{nb_iter_continue}"
+
+    # Créer un dossier temporaire pour le nouveau twin
+    twins_folder = config.folder.parent
+    target = results_dir(twins_folder, new_twin_id)
+    partial = target.with_name(target.name + ".partial")
+    if partial.exists():
+        shutil.rmtree(partial)
+
+    # Écrire les résultats
+    provenance = twin_provenance(config.folder, device)
+    metadata = _metadata(config, new_twin_id, code_version, device, duration, forward, inversion)
+    metadata["provenance"] = provenance
+    metadata["parent_twin_id"] = parent_twin_id
+    metadata["continued_iterations"] = nb_iter_continue
+    write_results(partial, forward, inversion, [layer.name for layer in config.layers], metadata)
+    record_file_digests(partial)
+    if target.exists():
+        shutil.rmtree(target)
+    os.replace(partial, target)
+
+    # Ajouter au registre
+    relative = target.relative_to(twins_root(twins_folder)).as_posix()
+    append_entry(twins_folder, RegistryEntry(
+        new_twin_id, f"{config.name}_+{nb_iter_continue}", config.mode, "computed",
+        _now(), f"{duration:.3f}", code_version, relative
+    ))
+
+    status = TwinStatus(config, new_twin_id, "computed", RegistryEntry(
+        new_twin_id, f"{config.name}_+{nb_iter_continue}", config.mode, "computed",
+        _now(), f"{duration:.3f}", code_version, relative
+    ))
+    return TwinRun(status, computed=True, duration_s=duration, warnings=provenance_warnings(provenance))
