@@ -348,8 +348,12 @@ class DreamSampler:
         chain_state : dictionnaire retourné par run() et sauvegardé dans chain_state.npz
         nb_iter_continue : nombre d'itérations supplémentaires
         """
-        cfg = self.config
-        n_chain = cfg.nb_chains
+        # Créer une config modifiée avec le nouveau nombre d'itérations
+        cfg_dict = self.config.to_dict()
+        cfg_dict["nb_iter"] = nb_iter_continue
+        cfg_continue = type(self.config).from_dict(cfg_dict)
+
+        n_chain = cfg_continue.nb_chains
         start = time.perf_counter()
 
         def report(phase, iteration, total, accepted, energies, rhat_max):
@@ -385,16 +389,16 @@ class DreamSampler:
             if es[i, j] < best_e:
                 best_e, best_x = float(es[i, j]), np.asarray(xs[i, j])
 
-        # Échantillonnage : reprise depuis l'itération suivante, sans burn-in
-        layout = sampling_layout(cfg)
-        sl_space = slice(None, None, cfg.space_step)
-        sl_time = slice(None, None, cfg.time_step)
+        # Échantillonnage : reprise avec le nouveau nombre d'itérations
+        layout = sampling_layout(cfg_continue)
+        sl_space = slice(None, None, cfg_continue.space_step)
+        sl_time = slice(None, None, cfg_continue.time_step)
         samples, energies, accepted = [], [], []
         field_temp, field_flux, sensor_temp, riverbed_flux = [], [], [], []
         done = burn_in  # continuer à partir de l'itération suivante
         for length, keep_field in layout.blocks():
             carry, (xs, es, acc) = self._block(length, False)(carry)
-            kept = (done + np.arange(1, length + 1)) % cfg.thin == 0
+            kept = (done + np.arange(1, length + 1)) % cfg_continue.thin == 0
             done += length
             samples.append(np.asarray(xs)[kept])
             energies.append(np.asarray(es)[kept])
@@ -404,7 +408,7 @@ class DreamSampler:
                 field_temp.append(np.asarray(carry[3][:, sl_space, sl_time], np.float32))
                 field_flux.append(np.asarray(carry[4][:, sl_space, sl_time], np.float32))
                 riverbed_flux.append(np.asarray(carry[4][:, 0, sl_time], np.float64))
-                if cfg.store_fields == "sensors":
+                if cfg_continue.store_fields == "sensors":
                     sensor_temp.append(np.asarray(carry[3][:, self.geom.sensor_index, sl_time], np.float64) - 273.15)
             report("sampling", done - burn_in, nb_iter_continue, float(np.mean(acc)), carry[2], float("nan"))
 
@@ -425,7 +429,7 @@ class DreamSampler:
         observed = self.geom.observed[:, sl_time]
         quantiles = []
         for q, temp_q, flux_q in zip(
-            cfg.quantiles, np.quantile(temps, cfg.quantiles, axis=0), np.quantile(fluxes, cfg.quantiles, axis=0)
+            cfg_continue.quantiles, np.quantile(temps, cfg_continue.quantiles, axis=0), np.quantile(fluxes, cfg_continue.quantiles, axis=0)
         ):
             per_sensor = np.sqrt(np.nansum((temp_q[sensor_rows] - observed) ** 2, axis=1) / observed.shape[1])
             total = np.sqrt(np.nansum(per_sensor**2) / len(per_sensor))
@@ -434,8 +438,8 @@ class DreamSampler:
         # Provenance : le champ m·N + j vient de la chaîne j, à l'itération calculée
         fields_per_chain = layout.fields_per_chain
         field_chain = np.tile(np.arange(n_chain), fields_per_chain)
-        field_iteration = np.repeat(layout.interval * cfg.thin * np.arange(1, fields_per_chain + 1), n_chain)
-        full = cfg.store_fields == "full"
+        field_iteration = np.repeat(layout.interval * cfg_continue.thin * np.arange(1, fields_per_chain + 1), n_chain)
+        full = cfg_continue.store_fields == "full"
 
         # État final pour une prolongation ultérieure
         # burn_in_duration_s : durée du burn-in original du parent (pour traçabilité)

@@ -162,8 +162,6 @@ def main(argv: list[str]) -> int:
             if status.config.experimental:
                 print(tr("Note: mcmc mode is experimental."))
         elif args.command == "continue":
-            from .run import continue_twin
-
             shown = []
 
             def progress(p):
