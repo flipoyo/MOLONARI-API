@@ -26,8 +26,10 @@ from .catalog import Question
 from .service import TwinAPI
 
 USER = "user"
-ADMIN = "admin"
-LEVELS = (USER, ADMIN)
+DEV = "dev"
+OPX = "opx"
+ADMIN = "admin"  # alias de opx
+LEVELS = (USER, DEV, OPX)
 
 # Les questions du niveau user, sur les twins direct et mcmc. `sensor_intervals` (HN-33) est exclue : elle révèle les mesures.
 WATER_QUESTIONS = ("water_flux", "exchange_direction", "exchanged_volume")
@@ -44,17 +46,21 @@ assert set(WATER_QUESTIONS) <= set(PUBLIC_DATA) and set(USER_QUESTIONS) == set(W
 
 
 class LeveledAPI:
-    """TwinAPI vue depuis un niveau d'accès. Au niveau `admin`, elle ne change rien."""
+    """TwinAPI vue depuis un niveau d'accès. Au niveau `admin`, elle ne change rien (alias de `opx`)."""
 
-    def __init__(self, api: TwinAPI, level: str = ADMIN):
+    def __init__(self, api: TwinAPI, level: str = OPX):
+        # admin est un alias de opx (rétro-compatibilité)
+        if level == ADMIN:
+            level = OPX
         if level not in LEVELS:
-            raise ValueError(f"unknown level {level!r} (expected one of {', '.join(LEVELS)})")
+            raise ValueError(f"unknown level {level!r} (expected one of {', '.join(LEVELS + (ADMIN,))})")
         self.api = api
         self.level = level
 
     @property
     def admin(self) -> bool:
-        return self.level == ADMIN
+        """Niveau complet : dev, opx, ou (ancien) admin."""
+        return self.level in (DEV, OPX)
 
     def question(self, question_id: str) -> Question:
         return self.api.question(question_id)
