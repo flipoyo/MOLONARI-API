@@ -274,6 +274,10 @@ MESSAGES: dict[str, str] = {
     "E_CONTINUE_NO_CONFIG": "Twin {twin_id} has no configuration saved: the results may be incomplete.",
     "E_CONTINUE_NO_RESULTS": "Twin \"{name}\" has no results yet: run it first.",
     "E_CONTINUE_MCMC_ONLY": "only allowed for MCMC twins (not {mode} mode).",
+    # reproduce
+    "E_REPRODUCE_NO_REFERENCE": "Twin \"{name}\" has no results to reproduce from: run it first.",
+    "E_REPRODUCE_RUN_FAILED": "Reproduction failed: {error}",
+    "E_REPRODUCE_NOT_RECOMPUTED": "Twin \"{name}\" was not recomputed: existing results returned.",
 }
 
 

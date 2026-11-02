@@ -6,6 +6,7 @@
                                          (--sigma-temperature 0.08 : dans le twin frère <twin_xx>_sigmaT0.08, ce σ en °C)
     molonari-twin list <dossier twins>   liste les twins et leur état
     molonari-twin report <twin_xx>       écrit le rapport public (« Public Report/ ») d'un twin calculé et de son space
+    molonari-twin reproduce <twin_xx>    relance et vérifie le déterminisme d'un twin calculé (opx)
     molonari-twin questions [<twin_xx>]  liste les questions du catalogue (celles d'un twin, s'il est donné)
     molonari-twin ask <twin_xx> <question>   pose une question à un twin calculé (--params '{"z": 0.2}', JSON du corps du POST)
     molonari-twin lab build <lab> --point <point>   construit processed_data/<point>/ (mesures nettoyées et manifeste) d'après lab.yaml
@@ -82,6 +83,9 @@ def main(argv: list[str]) -> int:
     report_parser = sub.add_parser("report")
     report_parser.add_argument("twin", help="twin_xx folder or twin.yaml (the twin that carries the report key)")
     report_parser.add_argument("--output", default=None, help="folder to write (default: 'Public Report' in the twin folder)")
+    reproduce_parser = sub.add_parser("reproduce", help="reproduce a twin and verify determinism (opx)")
+    reproduce_parser.add_argument("twin", help="twin_xx folder with computed results")
+    reproduce_parser.add_argument("--output", default=None, help="folder to write JSON and text reports (default: twin folder)")
     add_question_commands(sub)
     lab_parser = sub.add_parser("lab", help="virtual lab (lab.yaml)")
     lab_build = lab_parser.add_subparsers(dest="lab_command", required=True).add_parser(
@@ -102,6 +106,7 @@ def main(argv: list[str]) -> int:
 
     from .config import TwinConfigError, load_twin
     from .lab import LabConfigError
+    from .reproduce import reproduce
     from .run import (
         continue_twin,
         list_twins,
@@ -131,6 +136,20 @@ def main(argv: list[str]) -> int:
                     question=skipped["question"], model=skipped["model"], reason=render(reason, tr)))
             print(tr("Public report written: {folder} ({entries} entries, {figures} figures, {skipped} skipped).").format(
                 folder=result.folder, entries=result.entries, figures=result.figures, skipped=len(result.skipped)))
+        elif args.command == "reproduce":
+            report = reproduce(args.twin)
+            twin_folder = Path(args.twin).resolve()
+            if twin_folder.is_file():
+                twin_folder = twin_folder.parent
+            output_folder = Path(args.output).resolve() if args.output else twin_folder
+            output_folder.mkdir(parents=True, exist_ok=True)
+            json_path = output_folder / "reproduction_report.json"
+            text_path = output_folder / "reproduction_report.txt"
+            json_path.write_text(json.dumps(report.to_dict(), indent=2), encoding="utf-8")
+            text_path.write_text(report.to_text(), encoding="utf-8")
+            print(report.to_text())
+            print(tr("Reproduction report written: {json_file}, {text_file}").format(
+                json_file=json_path, text_file=text_path))
         elif args.command == "lab":
             from .lab import build_point
 
