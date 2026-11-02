@@ -15,7 +15,6 @@ import sys
 import jax.numpy as jnp
 import numpy as np
 import pytest
-import yaml
 from conftest import FIXTURES, git_run
 from molonari_twin.domain.compute import LayerSpec
 from molonari_twin.errors import UserError
@@ -181,10 +180,16 @@ def test_each_stored_field_comes_from_the_parameters_of_its_chain_and_iteration(
 
 
 def comparable_metadata(results):
-    """metadata.json sans ce qui dépend de l'instant et de la machine (date, durée, provenance)."""
+    """metadata.json sans ce qui dépend de l'instant et de la machine (date, durée, provenance).
+
+    L'empreinte de chain_state.npz est aussi exclue : burn_in_duration_s est un chrono
+    non déterministe (T3). La comparaison tableau par tableau est faite séparément."""
     metadata = json.loads((results / "metadata.json").read_text(encoding="utf-8"))
     for key in ("created_at", "duration_s", "provenance"):
         metadata.pop(key)
+    files = metadata.get("files")
+    if files and "chain_state.npz" in files:
+        files.pop("chain_state.npz")
     return metadata
 
 
@@ -196,8 +201,14 @@ def test_same_seed_gives_identical_results_through_the_pipeline(runs, tmp_path):
     names = sorted(p.name for p in first.iterdir())
     assert names == sorted(p.name for p in second.iterdir())
     for name in names:
-        if name != "metadata.json":
+        if name not in ("metadata.json", "chain_state.npz"):
             assert (first / name).read_bytes() == (second / name).read_bytes(), name  # au bit près, fichiers entiers
+    # chain_state.npz : comparer tableau par tableau (burn_in_duration_s est un chrono, non déterministe)
+    with np.load(first / "chain_state.npz") as a, np.load(second / "chain_state.npz") as b:
+        assert sorted(a.keys()) == sorted(b.keys())
+        for key in a:
+            if key != "burn_in_duration_s":
+                assert a[key].tobytes() == b[key].tobytes(), f"chain_state/{key}"
     posterior_a, posterior_b = load(first), load(second)
     for key in posterior_a:
         assert posterior_a[key].tobytes() == posterior_b[key].tobytes(), key

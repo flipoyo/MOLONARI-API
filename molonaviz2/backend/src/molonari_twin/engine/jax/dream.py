@@ -395,7 +395,7 @@ class DreamSampler:
         sl_time = slice(None, None, cfg_continue.time_step)
         samples, energies, accepted = [], [], []
         field_temp, field_flux, sensor_temp, riverbed_flux = [], [], [], []
-        done = burn_in  # continuer à partir de l'itération suivante
+        done = 0  # compte les itérations de la reprise, indépendamment du passé
         for length, keep_field in layout.blocks():
             carry, (xs, es, acc) = self._block(length, False)(carry)
             kept = (done + np.arange(1, length + 1)) % cfg_continue.thin == 0
@@ -471,7 +471,7 @@ class DreamSampler:
             quantiles=quantiles,
             field_depths=field_depths,
             field_times=field_times,
-            thin=cfg.thin,
+            thin=cfg_continue.thin,
             field_chain=field_chain,
             field_iteration=field_iteration,
             resets=resets,

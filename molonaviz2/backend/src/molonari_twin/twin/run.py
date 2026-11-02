@@ -306,9 +306,9 @@ def continue_twin(parent_folder: Path | str, nb_iter_continue: int,
     nb_iter_continue : nombre d'itérations supplémentaires
     Retourne un TwinRun avec le nouveau twin et ses résultats.
     """
-    from .. import __version__
-    from ..engine import api
     import numpy as np
+
+    from ..engine import api
 
     parent_folder = Path(parent_folder).resolve()
     if not (parent_folder / "twin.yaml").is_file():

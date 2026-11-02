@@ -132,4 +132,4 @@ class InversionResult:
 
 # Tableaux facultatifs d'InversionResult : le stockage n'écrit pas ceux qui valent None.
 OPTIONAL_ARRAYS = ("field_chain", "field_iteration", "resets", "sensor_temperature", "field_temperature", "field_water_flux",
-                   "field_riverbed_flux", "chain_state")
+                   "field_riverbed_flux")

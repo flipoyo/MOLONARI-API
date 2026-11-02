@@ -40,6 +40,7 @@ from ..i18n import DEFAULT_LANGUAGE, LANGUAGES, render, translate
 
 LOCAL_HOSTS = ("127.0.0.1", "localhost", "::1")
 LEVELS = ("user", "dev", "opx")  # api.access.LEVELS, sans importer l'API pour les seuls choix de l'analyseur (tests/test_questions_cli.py les compare)
+LEVELS_WITH_ALIAS = LEVELS + ("admin",)  # admin = alias for opx (backward compat)
 SHORT_ARRAY = 6  # un tableau plus long est résumé (taille, min, max)
 
 
@@ -94,14 +95,20 @@ def main(argv: list[str]) -> int:
     serve_parser.add_argument("--twins-folder", default=".", help="folder that contains the twin_xx folders")
     serve_parser.add_argument("--tasks-db", default=None, help="task database (default: $XDG_CACHE_HOME/molonari-twin/tasks.sqlite)")
     serve_parser.add_argument("--max-workers", type=int, default=1, help="tasks computed at the same time")
-    serve_parser.add_argument("--level", choices=LEVELS, default="user", help="access level (default: user: water, heat and temperature only)")
+    serve_parser.add_argument("--level", choices=LEVELS_WITH_ALIAS, default="user", help="access level (default: user: water, heat and temperature only)")
     args = parser.parse_args(argv)
     if args.command == "serve" and args.host not in LOCAL_HOSTS:
         serve_parser.error(tr("only a local address is allowed until authentication exists"))
 
     from .config import TwinConfigError, load_twin
     from .lab import LabConfigError
-    from .run import continue_twin, list_twins, run_twin, twin_status, with_sigma_temperature
+    from .run import (
+        continue_twin,
+        list_twins,
+        run_twin,
+        twin_status,
+        with_sigma_temperature,
+    )
 
     try:
         if args.command == "serve":
@@ -241,7 +248,7 @@ def add_question_commands(sub) -> None:
     ask_parser.add_argument("question", help="question identifier (water_flux) or reference (HN-10)")
     ask_parser.add_argument("--params", default=None, help="parameters of the question, as the JSON body of the POST request")
     for parser in (questions_parser, ask_parser):
-        parser.add_argument("--level", choices=LEVELS, default="user", help="access level (default: user)")
+        parser.add_argument("--level", choices=LEVELS_WITH_ALIAS, default="user", help="access level (default: user)")
         parser.add_argument("--json", action="store_true", help="write the JSON of the /v1 API (errors too, on the standard output)")
 
 
