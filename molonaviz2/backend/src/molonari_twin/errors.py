@@ -177,7 +177,6 @@ MESSAGES: dict[str, str] = {
     "W_NO_UNCERTAINTY": "Forward model: its parameters are fixed, so this result has no confidence interval.",
     # niveaux d'accès aux questions
     "E_ACCESS_USER_ONLY": "\"{name}\" requires the dev or opx level: the user level only asks about water exchanges, heat and temperature.",
-    "E_ACCESS_ADMIN_ONLY": "\"{name}\" requires the dev or opx level: the user level only asks about water exchanges, heat and temperature.",
     # virtual lab (lab.yaml, lab build) et données traitées (processed_data)
     "E_LAB_BUILD_EMPTY": "No measurement is left for point \"{point}\" after the cleaning declared in {file}.",
     "E_LAB_CONFIG_INVALID": "{issues}",
