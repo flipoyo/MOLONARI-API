@@ -357,7 +357,7 @@ def test_chain_state_is_saved_with_results(runs):
 
 
 @pytest.mark.slow
-def test_continue_chain_gives_same_samples_and_energy_as_full_run(runs, tmp_path):
+def test_continue_chain_gives_same_samples_and_energy_as_full_run(runs, tmp_path, data_repo):
     """N itérations + M en reprise doivent donner les mêmes samples/energy que N+M d'un coup,
     si N est un multiple du thin."""
     thin = 3
@@ -366,21 +366,14 @@ def test_continue_chain_gives_same_samples_and_energy_as_full_run(runs, tmp_path
     N_plus_M = N_first + M_continue
 
     # Exécution directe : N_plus_M itérations d'un coup
-    # Utiliser un twin distinct pour le calcul complet
-    folder_full = write_mcmc_twin(tmp_path / "full", seed_value=42, thin=thin,
-                                  name="twin_full")
-    # Modifier twin.yaml pour N_plus_M itérations
-    text_full = mcmc_text(thin).replace(f"nb_iter: {NB_ITER}", f"nb_iter: {N_plus_M}").replace("name: twin_01", "name: twin_full")
-    (folder_full / "twin.yaml").write_text(text_full, encoding="utf-8")
+    folder_full = write_twin(tmp_path / "full" / "twins" / "twin_full", TWIN.format(chains=NB_CHAINS, iterations=N_plus_M, thin=thin))
+    (folder_full / "orx.yaml").write_text(orx_text(42), encoding="utf-8")
     run_full = run_twin(folder_full)
     results_full = run_full.status.results_dir
 
     # Exécution en deux phases : N itérations puis M en reprise
-    folder_first = write_mcmc_twin(tmp_path / "first", seed_value=42, thin=thin,
-                                   name="twin_first")
-    # Modifier twin.yaml pour N_first itérations
-    text_first = mcmc_text(thin).replace(f"nb_iter: {NB_ITER}", f"nb_iter: {N_first}").replace("name: twin_01", "name: twin_first")
-    (folder_first / "twin.yaml").write_text(text_first, encoding="utf-8")
+    folder_first = write_twin(tmp_path / "first" / "twins" / "twin_first", TWIN.format(chains=NB_CHAINS, iterations=N_first, thin=thin))
+    (folder_first / "orx.yaml").write_text(orx_text(42), encoding="utf-8")
     run_first = run_twin(folder_first)
 
     # Vérifier que le chain_state est sauvegardé
@@ -398,13 +391,11 @@ def test_continue_chain_gives_same_samples_and_energy_as_full_run(runs, tmp_path
 
     # Les samples et energies de la reprise doivent être identiques aux itérations correspondantes
     # du calcul complet, au bit près
-    n_kept_full = full_data["samples"].shape[0]
-    n_kept_continued = continued_data["samples"].shape[0]
     expected_continued = M_continue // thin
+    n_kept_continued = continued_data["samples"].shape[0]
     assert n_kept_continued == expected_continued, f"Expected {expected_continued} samples, got {n_kept_continued}"
 
     # Comparer les dernières itérations du full avec les itérations de continued
-    # Les itérations de la reprise commencent à N_first + 1
     start_idx_in_full = N_first // thin
     np.testing.assert_array_equal(continued_data["samples"], full_data["samples"][start_idx_in_full:],
                                  err_msg="Samples do not match between continued and full run")
