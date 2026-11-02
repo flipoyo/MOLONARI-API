@@ -35,7 +35,7 @@ import numpy as np
 
 from ..api import TwinAPI, check_publishable
 from ..errors import Issue, UserError
-from ..questions import ELEMENTS, Answer, Quantity, Visibility, public_answer
+from ..questions import ELEMENTS, Answer, Visibility, public_answer
 from ..questions.chains import public_chains_npz
 from ..questions.visibility import ELEMENT_MODES
 from ..twin.config import ReportEntry, TwinConfig, config_path, load_twin, without_seed
@@ -274,7 +274,7 @@ def build_report(space: Space, api: TwinAPI, npz_threshold: int = NPZ_THRESHOLD)
 
     # chains.npz public (T2) : un sous-échantillon des chaînes, sans champ T ni q, ni graine
     chains_info = None
-    if "inversion" in space.refs:
+    if "inversion" in space.refs and visibility.posterior:
         from ..twin.run import twin_status
 
         inv_config = space.configs["inversion"]

@@ -369,5 +369,5 @@ def test_changing_publication_thin_does_not_change_the_twin_id(tmp_path, data_re
   publication_thin: """
     config1 = load_twin(write_twin(tmp_path / "t1", text_base + "10"))
     config2 = load_twin(write_twin(tmp_path / "t2", text_base + "20"))
-    # Les deux configs ne diffèrent que par publication_thin
-    assert config1.twin_id("test") == config2.twin_id("test")
+    # Les deux configs ne diffèrent que par publication_thin (canonical sans graine)
+    assert config1.canonical("test", with_seed=False) == config2.canonical("test", with_seed=False)

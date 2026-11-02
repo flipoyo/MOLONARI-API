@@ -715,7 +715,7 @@ def _report(check: _Checker, raw, mode, quantiles: tuple[float, ...] | None, mcm
     if not isinstance(publication_thin, int):
         check.add("report.publication_thin", "E_TWIN_EXPECTED_INTEGER")
     elif publication_thin < 1:
-        check.add("report.publication_thin", "E_VALUE_OUT_OF_RANGE", low=1, high=None)
+        check.add("report.publication_thin", "E_VALUE_OUT_OF_RANGE", low=1, high=float("inf"))
     elif mcmc is not None and publication_thin % mcmc.thin != 0:
         check.add("report.publication_thin", "E_TWIN_PUBLICATION_THIN_MULTIPLE", thin=mcmc.thin)
 
