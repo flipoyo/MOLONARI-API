@@ -193,11 +193,11 @@ class DatabaseManager:
         query.prepare("""INSERT INTO RawMeasuresPress (
                             Date,
                             RelayReceiveTime,
-                            Chirpstack_Receive_Time,
+                            ChirpstackReceiveTime,
                             TempBed,
                             Voltage,
                             SamplingPoint)
-            VALUES (:Date, :RelayReceiveTime, :TempBed, :Voltage, :SamplingPoint)
+            VALUES (:Date, :RelayReceiveTime, :ChirpstackReceiveTime, :TempBed, :Voltage, :SamplingPoint)
         """)
         query.bindValue(":Date", payload["timestamp"])
         query.bindValue(":RelayReceiveTime", payload["relay_receive_time"])
