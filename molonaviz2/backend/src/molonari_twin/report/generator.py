@@ -26,13 +26,17 @@ auquel il s'applique. Un rapport sans aucune entrée est refusé (E_REPORT_EMPTY
 from __future__ import annotations
 
 import dataclasses
+import io
 import json
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
+
 from ..api import TwinAPI, check_publishable
 from ..errors import Issue, UserError
-from ..questions import ELEMENTS, Answer, Visibility, public_answer
+from ..questions import ELEMENTS, Answer, Quantity, Visibility, public_answer
+from ..questions.chains import public_chains_npz
 from ..questions.visibility import ELEMENT_MODES
 from ..twin.config import ReportEntry, TwinConfig, config_path, load_twin, without_seed
 from .figures import FIGURES
@@ -73,6 +77,7 @@ class Space:
     configs: dict[str, TwinConfig]
     entries: tuple[ReportEntry, ...]
     declared: bool  # False : le twin n'a pas de clé `report`, c'est le rapport par défaut
+    publication_thin: int = 10  # facteur de sous-échantillonnage pour les chaînes publiques (T2)
 
 
 @dataclass(frozen=True)
@@ -121,7 +126,7 @@ def resolve_space(twin: str | Path) -> Space:
     points = sorted({c.point for c in configs.values()})
     if len(points) > 1:  # un rapport public appartient à un seul sampling point
         raise UserError("E_REPORT_POINT_MISMATCH", points=", ".join(points))
-    return Space(folder.name, refs, configs, spec.entries, spec.declared)
+    return Space(folder.name, refs, configs, spec.entries, spec.declared, spec.publication_thin)
 
 
 def effective_visibility(configs) -> Visibility:
@@ -267,6 +272,29 @@ def build_report(space: Space, api: TwinAPI, npz_threshold: int = NPZ_THRESHOLD)
     if not entries:
         raise UserError("E_REPORT_EMPTY")
 
+    # chains.npz public (T2) : un sous-échantillon des chaînes, sans champ T ni q, ni graine
+    chains_info = None
+    if "inversion" in space.refs:
+        from ..twin.run import twin_status
+
+        inv_config = space.configs["inversion"]
+        inv_status = twin_status(inv_config)
+        if inv_status.has_results and inv_config.mcmc is not None:
+            posterior_path = inv_status.results_dir / "posterior.npz"
+            posterior_sha = sha256(posterior_path.read_bytes()) if posterior_path.is_file() else None
+            results = api._results(inv_status.results_dir)
+            chains_dict = public_chains_npz(results, space.publication_thin, inv_config.mcmc.thin)
+            buf = io.BytesIO()
+            np.savez(buf, **chains_dict)
+            chains_bytes = buf.getvalue()
+            files["chains.npz"] = chains_bytes
+            chains_info = {
+                "file": "chains.npz",
+                "publication_thin": space.publication_thin,
+                "posterior_sha256": posterior_sha,
+                "sha256": sha256(chains_bytes),
+            }
+
     index = {
         "report_format": REPORT_FORMAT,
         "point": next(iter(space.configs.values())).point,  # le sampling point du rapport, commun aux twins du space
@@ -279,6 +307,7 @@ def build_report(space: Space, api: TwinAPI, npz_threshold: int = NPZ_THRESHOLD)
         "entries": entries,
         "skipped": skipped,
         "figures": figures,
+        "chains": chains_info,
         "signature": None,
         "license": None,
     }

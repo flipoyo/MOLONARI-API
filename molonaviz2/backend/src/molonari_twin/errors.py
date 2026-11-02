@@ -228,6 +228,7 @@ MESSAGES: dict[str, str] = {
     "E_TWIN_REPORT_QUANTILES": "must contain {quantiles}: the report asks for an interval at 90 % ({question}).",
     "E_TWIN_REPORT_QUESTION": "unknown question \"{question}\" (known: {known}).",
     "E_TWIN_REPORT_QUESTION_KIND": "\"{question}\" does not answer about a twin: a report only holds questions that read a configuration or results.",
+    "E_TWIN_PUBLICATION_THIN_MULTIPLE": "must be a multiple of the computation thin ({thin}).",
     "E_TWIN_SITE_LABEL_DISTINCT": "must not contain the {other} (the label is public, the {other} is not).",
     "E_TWIN_SITE_LABEL_FORMAT": "expected one line of at most {n} characters.",
     "E_TWIN_VISIBILITY_REVEALED": "the public samples reveal these settings: they stay public while posterior is public.",

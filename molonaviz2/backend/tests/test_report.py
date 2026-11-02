@@ -497,3 +497,88 @@ def test_end_to_end_two_instances_without_the_seed(tmp_path, data_repo):
     generate_report(twins / "twin_02", again)
     assert {p.relative_to(again).as_posix(): p.read_bytes() for p in again.rglob("*") if p.is_file()} == \
         {p.relative_to(folder).as_posix(): p.read_bytes() for p in folder.rglob("*") if p.is_file()}
+
+
+# chains.npz (T2) : sous-échantillon public des chaînes -------------------------------------------------------
+
+
+@pytest.mark.slow
+def test_chains_npz_is_generated_for_mcmc_twins(computed_twins):
+    """chains.npz contient les chaînes publiques avec publication_thin."""
+    from molonari_twin.contract.codec import answer_from_npz
+
+    api = TwinAPI(computed_twins)
+    # Générer le rapport pour twin_03 (mcmc) qui a un posterior.npz
+    space = space_of(computed_twins, {"inversion": "twin_03"})
+    report = build_report(space, api)
+
+    # Vérifier que chains.npz est présent
+    assert "chains.npz" in report.files
+    chains_content = report.files["chains.npz"]
+
+    # Vérifier qu'on peut le charger sans pickle
+    chains = answer_from_npz(chains_content)
+    assert "iteration" in chains.data
+    assert "chain" in chains.data
+    assert "energy" in chains.data
+    assert "acceptance" in chains.data
+    assert "resets" in chains.data
+    # Les paramètres doivent être présents
+    for param in ("neg_log10_k", "porosity", "lambda_s", "rhos_cs"):
+        assert any(f"samples.{param}" in k for k in chains.data.keys()), f"Missing {param}"
+
+
+@pytest.mark.slow
+def test_chains_npz_contains_no_forbidden_fields(computed_twins):
+    """chains.npz ne contient pas de seed, T, temperature ni flux complets."""
+    from molonari_twin.contract.codec import answer_from_npz
+
+    api = TwinAPI(computed_twins)
+    space = space_of(computed_twins, {"inversion": "twin_03"})
+    report = build_report(space, api)
+
+    chains_content = report.files["chains.npz"]
+    chains = answer_from_npz(chains_content)
+
+    # Vérifier l'absence de champs interdits
+    data_keys = set(chains.data.keys())
+    for forbidden in ("seed", "T", "temperature", "flux"):
+        assert not any(forbidden in k for k in data_keys), f"Forbidden field {forbidden} found"
+
+
+@pytest.mark.slow
+def test_chains_npz_respects_publication_thin(computed_twins):
+    """chains.npz est sous-échantillonné par publication_thin."""
+    from molonari_twin.contract.codec import answer_from_npz
+
+    api = TwinAPI(computed_twins)
+    # twin_03 a thin=1 par défaut, donc publication_thin=10 sélectionne 1 sur 10
+    space = space_of(computed_twins, {"inversion": "twin_03"})
+    report = build_report(space, api)
+
+    chains_content = report.files["chains.npz"]
+    chains = answer_from_npz(chains_content)
+
+    # Vérifier que les itérations sont espacées de publication_thin
+    iterations = chains.data["iteration"].value
+    if len(iterations) > 1:
+        diffs = np.diff(iterations)
+        # Tous les écarts doivent être du publication_thin (10 par défaut)
+        assert np.all(diffs == space.publication_thin), f"Iterations not spaced by {space.publication_thin}: {diffs}"
+
+
+@pytest.mark.slow
+def test_chains_npz_allows_no_pickle(computed_twins):
+    """chains.npz peut être chargé avec allow_pickle=False."""
+    import io
+
+    api = TwinAPI(computed_twins)
+    space = space_of(computed_twins, {"inversion": "twin_03"})
+    report = build_report(space, api)
+
+    chains_content = report.files["chains.npz"]
+    # Essayer de charger sans pickle
+    buffer = io.BytesIO(chains_content)
+    with np.load(buffer, allow_pickle=False) as data:
+        # Si ça ne lève pas, c'est bon
+        assert "meta" in data.files  # meta est présent dans le npz
