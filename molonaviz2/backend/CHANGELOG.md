@@ -16,6 +16,16 @@ Jusqu'à 0.6.0-alpha.1, le backend faisait partie du paquet molonaviz2 : son his
 
 ## [Non publié]
 
+### T1 : niveaux `user`, `dev`, `opx`
+
+- `LEVELS` passe de `(user, admin)` à `(user, dev, opx)`. `admin` reste un alias de `opx` pour la compatibilité (parseur et API).
+- `user` garde exactement les 5 questions eau, chaleur et température. `dev` et `opx` ont tout le catalogue, comme l'ancien `admin`.
+- Message 403 sans mention de `admin` : `E_ACCESS_USER_ONLY` à la place de `E_ACCESS_ADMIN_ONLY` (ancien code conservé comme alias).
+- `--level admin` reste accepté et se comporte comme `opx`, sans avertissement.
+- Contrat `/v1` et snapshot OpenAPI inchangés (aucune route ni modèle nouveau).
+
+### À venir
+
 - `molonari-twin run <twin> --sigma-temperature X` : lance un twin mcmc 2.0.0 avec un autre σ de température, dans le twin frère `<twin>_sigmaT<X>` (même recette, même graine). Le twin d'origine reste figé.
 - `processing.trim_hours` (`twin.yaml` 2.0.0, points de `lab.yaml`) et paramètre `trim_hours` de `processing_preview` : retire ce nombre d'heures après la première et avant la dernière date commune aux deux fichiers (mise en route et relevé du capteur), raison `outside_window`. 0 par défaut : les nettoyages existants ne changent pas. Nouveau code `E_TWIN_TRIM_HOURS`. `API_VERSION` ne change pas (schéma OpenAPI identique).
 

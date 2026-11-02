@@ -54,7 +54,7 @@ def post(client, ref, question, params=None, npz=False):
 
 
 def test_refusal_is_a_403():
-    assert http_status("E_ACCESS_ADMIN_ONLY") == 403
+    assert http_status("E_ACCESS_USER_ONLY") == 403
 
 
 # Même JSON que la ligne de commande, à chaque niveau ------------------------------------------------------------
@@ -102,10 +102,10 @@ def test_an_answer_is_the_json_of_the_command(fake, computed_twins, cli, level, 
 def test_only_the_five_questions_answer_at_the_user_level(user, admin, computed_twins, ref, question):
     config, twin_id = load_twin(computed_twins / ref), twin_status(computed_twins / ref).twin_id
     if question not in FIVE:
-        body = assert_error(post(user, ref, question, PARAMS.get(question)), 403, "E_ACCESS_ADMIN_ONLY")
+        body = assert_error(post(user, ref, question, PARAMS.get(question)), 403, "E_ACCESS_USER_ONLY")
         assert body["params"] == {"name": question}
-        assert_error(user.post(f"/v1/questions/{question}"), 403, "E_ACCESS_ADMIN_ONLY")  # question globale
-        assert_error(post(user, ref, question, PARAMS.get(question), npz=True), 403, "E_ACCESS_ADMIN_ONLY")
+        assert_error(user.post(f"/v1/questions/{question}"), 403, "E_ACCESS_USER_ONLY")  # question globale
+        assert_error(post(user, ref, question, PARAMS.get(question), npz=True), 403, "E_ACCESS_USER_ONLY")
         return
     response = post(user, ref, question, PARAMS.get(question))
     assert response.status_code == 200, response.text
@@ -131,17 +131,17 @@ def test_only_the_five_questions_answer_at_the_user_level(user, admin, computed_
 
 def test_global_questions_are_refused_at_the_user_level(user, admin):
     for question in ("parameters_catalog", "raw_series", "processing_preview"):
-        assert_error(user.post(f"/v1/questions/{question}"), 403, "E_ACCESS_ADMIN_ONLY")
+        assert_error(user.post(f"/v1/questions/{question}"), 403, "E_ACCESS_USER_ONLY")
     assert admin.post("/v1/questions/parameters_catalog").status_code == 200
     assert_error(user.post("/v1/questions/nothing"), 404, "E_QUESTION_UNKNOWN")
 
 
 def test_run_and_tasks_are_refused_at_the_user_level(user, fake):
-    assert_error(user.post("/v1/twins/twin_01/run"), 403, "E_ACCESS_ADMIN_ONLY")
-    assert_error(user.post("/v1/twins/twin_01/run", json={"strict": True}), 403, "E_ACCESS_ADMIN_ONLY")
+    assert_error(user.post("/v1/twins/twin_01/run"), 403, "E_ACCESS_USER_ONLY")
+    assert_error(user.post("/v1/twins/twin_01/run", json={"strict": True}), 403, "E_ACCESS_USER_ONLY")
     assert fake.submitted == [] and fake.records == {}
     for call in (user.get("/v1/tasks/t1"), user.get("/v1/tasks/t1/result"), user.get("/v1/tasks/t1/events"), user.delete("/v1/tasks/t1")):
-        body = assert_error(call, 403, "E_ACCESS_ADMIN_ONLY")
+        body = assert_error(call, 403, "E_ACCESS_USER_ONLY")
         assert body["params"] == {"name": "tasks"}
 
 

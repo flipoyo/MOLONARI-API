@@ -1,12 +1,12 @@
-"""Niveaux d'accès aux questions (T11) : `user` et `admin`.
+"""Niveaux d'accès aux questions : `user`, `dev`, `opx`.
 
     api = LeveledAPI(TwinAPI("twins"), "user")
     api.questions()                         # les 5 questions du niveau user
     api.ask("twin_03", "water_flux")        # réponse réduite à la liste blanche
-    api.ask("twin_03", "residuals")         # E_ACCESS_ADMIN_ONLY
+    api.ask("twin_03", "residuals")         # E_ACCESS_USER_ONLY
 
-Le USER n'interroge que les échanges d'eau, la chaleur et la température ; tout le reste est réservé à l'admin
-(`admin` : l'API complète, telle que la rend TwinAPI). La couche est au-dessus de TwinAPI et du générateur de rapport, qui
+Le USER n'interroge que les échanges d'eau, la chaleur et la température ; tout le reste est réservé à dev et opx
+(`dev`, `opx` : l'API complète, telle que la rend TwinAPI). La couche est au-dessus de TwinAPI et du générateur de rapport, qui
 ne changent pas. **Ce n'est pas une sécurité** : sans authentification, le niveau oriente l'usage (un guide pour la
 ligne de commande et pour `serve --local --level user`). Aucune identité n'est contrôlée.
 
@@ -15,6 +15,8 @@ Au niveau `user`, une réponse est réduite à une liste blanche de grandeurs et
 point, ni échantillons. Les trois questions d'eau ont la projection publique du rapport (`questions.public`). La chaleur
 et la température ont leur liste ici, **distincte** de `PUBLIC_DATA` : elles restent refusées dans le rapport public
 (états du twin, tension T3), dont le contenu ne change donc pas.
+
+`admin` reste un alias de `opx` pour la compatibilité.
 """
 
 from __future__ import annotations
@@ -26,8 +28,10 @@ from .catalog import Question
 from .service import TwinAPI
 
 USER = "user"
-ADMIN = "admin"
-LEVELS = (USER, ADMIN)
+DEV = "dev"
+OPX = "opx"
+ADMIN = "admin"  # alias for opx
+LEVELS = (USER, DEV, OPX)
 
 # Les questions du niveau user, sur les twins direct et mcmc. `sensor_intervals` (HN-33) est exclue : elle révèle les mesures.
 WATER_QUESTIONS = ("water_flux", "exchange_direction", "exchanged_volume")
@@ -44,17 +48,21 @@ assert set(WATER_QUESTIONS) <= set(PUBLIC_DATA) and set(USER_QUESTIONS) == set(W
 
 
 class LeveledAPI:
-    """TwinAPI vue depuis un niveau d'accès. Au niveau `admin`, elle ne change rien."""
+    """TwinAPI vue depuis un niveau d'accès. Aux niveaux `dev` et `opx`, elle ne change rien."""
 
-    def __init__(self, api: TwinAPI, level: str = ADMIN):
+    def __init__(self, api: TwinAPI, level: str = OPX):
+        # Normalize admin (alias) to opx for backward compatibility
+        if level == ADMIN:
+            level = OPX
         if level not in LEVELS:
-            raise ValueError(f"unknown level {level!r} (expected one of {', '.join(LEVELS)})")
+            raise ValueError(f"unknown level {level!r} (expected one of {', '.join(LEVELS)}, or 'admin' as alias for 'opx')")
         self.api = api
         self.level = level
 
     @property
-    def admin(self) -> bool:
-        return self.level == ADMIN
+    def restricted(self) -> bool:
+        """True if the level is user (restricted access); False for dev and opx."""
+        return self.level == USER
 
     def question(self, question_id: str) -> Question:
         return self.api.question(question_id)
@@ -62,12 +70,12 @@ class LeveledAPI:
     def questions(self, twin: str | None = None) -> list[Question]:
         """Le catalogue de ce niveau (pour un twin, les questions qui ont un sens pour son mode)."""
         listed = self.api.questions(twin)
-        return listed if self.admin else [q for q in listed if q.id in USER_QUESTIONS]
+        return listed if not self.restricted else [q for q in listed if q.id in USER_QUESTIONS]
 
     def require_admin(self, name: str) -> None:
-        """E_ACCESS_ADMIN_ONLY au niveau user : pour ce qui n'est pas une question (lancer un twin, suivre les tâches)."""
-        if not self.admin:
-            raise UserError("E_ACCESS_ADMIN_ONLY", name=name)
+        """E_ACCESS_USER_ONLY au niveau user : pour ce qui n'est pas une question (lancer un twin, suivre les tâches)."""
+        if self.restricted:
+            raise UserError("E_ACCESS_USER_ONLY", name=name)
 
     def ask(self, ref: str, question_id: str, params: dict | None = None) -> Answer:
         question = self.api.question(question_id)
@@ -80,13 +88,13 @@ class LeveledAPI:
         return self.restrict(question, self.api.ask_global(question_id, params))
 
     def allow(self, question: Question) -> None:
-        """E_ACCESS_ADMIN_ONLY si la question n'est pas du niveau user (avant tout autre contrôle : paramètres, twin)."""
-        if not self.admin and question.id not in USER_QUESTIONS:
-            raise UserError("E_ACCESS_ADMIN_ONLY", name=question.id)
+        """E_ACCESS_USER_ONLY si la question n'est pas du niveau user (avant tout autre contrôle : paramètres, twin)."""
+        if self.restricted and question.id not in USER_QUESTIONS:
+            raise UserError("E_ACCESS_USER_ONLY", name=question.id)
 
     def restrict(self, question: Question, answer: Answer) -> Answer:
-        """La réponse telle que ce niveau la reçoit : complète pour l'admin, sa liste blanche pour le user."""
-        if self.admin:
+        """La réponse telle que ce niveau la reçoit : complète pour dev et opx, sa liste blanche pour le user."""
+        if not self.restricted:
             return answer
         if question.id in WATER_QUESTIONS:
             return public_answer(question.id, answer)

@@ -9,10 +9,10 @@ Le serveur HTTP (server/) n'est qu'une couche au-dessus ; un notebook peut utili
 Rien ici ne charge JAX : les questions lisent des résultats, elles ne calculent pas de modèle.
 """
 
-from .access import ADMIN, LEVELS, USER, USER_QUESTIONS, LeveledAPI
-from .catalog import CATALOG, DEV, Question
+from .access import ADMIN, DEV, LEVELS, OPX, USER, USER_QUESTIONS, LeveledAPI
+from .catalog import CATALOG, Question
 from .publication import check_publishable, exposed_elements, publishable_answer
 from .service import TwinAPI
 
-__all__ = ["ADMIN", "CATALOG", "DEV", "LEVELS", "USER", "USER_QUESTIONS", "LeveledAPI", "Question", "TwinAPI", "check_publishable",
+__all__ = ["ADMIN", "CATALOG", "DEV", "LEVELS", "OPX", "USER", "USER_QUESTIONS", "LeveledAPI", "Question", "TwinAPI", "check_publishable",
            "exposed_elements", "publishable_answer"]

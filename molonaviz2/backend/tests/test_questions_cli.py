@@ -91,9 +91,23 @@ def test_the_user_level_refuses_the_other_questions_with_the_json_error_of_the_a
     assert code == 1 and err == ""
     body = json.loads(out)
     assert set(body) == {"code", "field", "params", "message_en"}
-    assert body["code"] == "E_ACCESS_ADMIN_ONLY" and body["params"] == {"name": "sensor_intervals"}
+    assert body["code"] == "E_ACCESS_USER_ONLY" and body["params"] == {"name": "sensor_intervals"}
     code, out, _ = run("ask", computed_twins / "twin_03", "sensor_intervals", "--level", "admin", "--json")
     assert code == 0 and "measured" in json.loads(out)["data"]
+
+
+def test_admin_alias_behaves_like_opx(run, computed_twins):
+    """admin is an alias for opx for backward compatibility."""
+    # admin and opx should give identical results for questions
+    code_admin, out_admin, _ = run("questions", computed_twins / "twin_03", "--level", "admin", "--json")
+    code_opx, out_opx, _ = run("questions", computed_twins / "twin_03", "--level", "opx", "--json")
+    assert code_admin == 0 and code_opx == 0
+    assert json.loads(out_admin) == json.loads(out_opx)
+    # admin and opx should give identical results for ask
+    code_admin, out_admin, _ = run("ask", computed_twins / "twin_03", "residuals", "--level", "admin", "--json")
+    code_opx, out_opx, _ = run("ask", computed_twins / "twin_03", "residuals", "--level", "opx", "--json")
+    assert code_admin == 0 and code_opx == 0
+    assert json.loads(out_admin) == json.loads(out_opx)
 
 
 def test_the_user_answer_has_neither_seed_nor_path_nor_twin(run, computed_twins):

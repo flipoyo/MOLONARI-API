@@ -32,7 +32,7 @@ def admin(computed_twins):
 def refused(call, name):
     with pytest.raises(UserError) as error:
         call()
-    assert error.value.code == "E_ACCESS_ADMIN_ONLY" and error.value.params == {"name": name}
+    assert error.value.code == "E_ACCESS_USER_ONLY" and error.value.params == {"name": name}
 
 
 def test_the_user_level_lists_exactly_five_questions(user, admin):

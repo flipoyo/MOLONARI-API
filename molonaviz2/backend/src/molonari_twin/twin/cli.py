@@ -13,8 +13,9 @@
 
 `questions` et `ask` sont une couche mince sur TwinAPI, sans FastAPI : avec `--json`, ils écrivent le JSON de /v1
 (`GET /v1/questions`, `POST /v1/twins/{ref}/questions/{question}`) ; une erreur écrit le JSON d'erreur de /v1 sur la
-sortie standard (code de sortie 1). `--level {user,admin}` (user par défaut) : le user n'interroge que les échanges
-d'eau, la chaleur et la température, et reçoit des réponses réduites à une liste blanche ; l'admin, tout le catalogue.
+sortie standard (code de sortie 1). `--level {user,dev,opx}` (user par défaut) : le user n'interroge que les échanges
+d'eau, la chaleur et la température, et reçoit des réponses réduites à une liste blanche ; dev et opx, tout le catalogue.
+`admin` reste un alias de `opx` pour la compatibilité.
 Ce niveau oriente l'usage, ce n'est pas une sécurité (api/access.py). `serve --local --level` le donne à l'API HTTP :
 au niveau user, lancer un twin (`POST …/run`) et suivre les tâches sont refusés (403).
 
@@ -39,7 +40,8 @@ from ..errors import Issue, UserError
 from ..i18n import DEFAULT_LANGUAGE, LANGUAGES, render, translate
 
 LOCAL_HOSTS = ("127.0.0.1", "localhost", "::1")
-LEVELS = ("user", "admin")  # api.access.LEVELS, sans importer l'API pour les seuls choix de l'analyseur (tests/test_questions_cli.py les compare)
+LEVELS = ("user", "dev", "opx")  # api.access.LEVELS, sans importer l'API pour les seuls choix de l'analyseur (tests/test_questions_cli.py les compare)
+LEVELS_WITH_ALIAS = LEVELS + ("admin",)  # alias for backward compatibility
 SHORT_ARRAY = 6  # un tableau plus long est résumé (taille, min, max)
 
 
@@ -91,7 +93,7 @@ def main(argv: list[str]) -> int:
     serve_parser.add_argument("--twins-folder", default=".", help="folder that contains the twin_xx folders")
     serve_parser.add_argument("--tasks-db", default=None, help="task database (default: $XDG_CACHE_HOME/molonari-twin/tasks.sqlite)")
     serve_parser.add_argument("--max-workers", type=int, default=1, help="tasks computed at the same time")
-    serve_parser.add_argument("--level", choices=LEVELS, default="user", help="access level (default: user: water, heat and temperature only)")
+    serve_parser.add_argument("--level", choices=LEVELS_WITH_ALIAS, default="user", help="access level: user (water, heat, temperature only), dev, opx, or admin (alias for opx)")
     args = parser.parse_args(argv)
     if args.command == "serve" and args.host not in LOCAL_HOSTS:
         serve_parser.error(tr("only a local address is allowed until authentication exists"))
@@ -214,7 +216,7 @@ def add_question_commands(sub) -> None:
     ask_parser.add_argument("question", help="question identifier (water_flux) or reference (HN-10)")
     ask_parser.add_argument("--params", default=None, help="parameters of the question, as the JSON body of the POST request")
     for parser in (questions_parser, ask_parser):
-        parser.add_argument("--level", choices=LEVELS, default="user", help="access level (default: user)")
+        parser.add_argument("--level", choices=LEVELS_WITH_ALIAS, default="user", help="access level: user, dev, opx, or admin (alias for opx); default: user")
         parser.add_argument("--json", action="store_true", help="write the JSON of the /v1 API (errors too, on the standard output)")
 
 
