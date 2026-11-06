@@ -184,7 +184,6 @@ def test_check_reports_the_state_of_each_twin(api):
 
 def test_check_of_a_duplicate_names_its_source(twins, tmp_path):
     shutil.copytree(twins, tmp_path / "twins")
-    shutil.copytree(twins.parent / "results", tmp_path / "results")
     shutil.copytree(tmp_path / "twins" / "twin_01", tmp_path / "twins" / "twin_10")
     yaml = tmp_path / "twins" / "twin_10" / "twin.yaml"
     yaml.write_text(yaml.read_text(encoding="utf-8").replace("name: twin_01", "name: twin_10"), encoding="utf-8")
@@ -195,7 +194,6 @@ def test_check_of_a_duplicate_names_its_source(twins, tmp_path):
 
 def test_check_of_a_twin_modified_after_its_run(twins, tmp_path):
     shutil.copytree(twins, tmp_path / "twins")
-    shutil.copytree(twins.parent / "results", tmp_path / "results")
     yaml = tmp_path / "twins" / "twin_01" / "twin.yaml"
     yaml.write_text(yaml.read_text(encoding="utf-8").replace("nb_cells: 100", "nb_cells: 90"), encoding="utf-8")
     assert TwinAPI(tmp_path / "twins").ask("twin_01", "check").data["state"].value == "modified"
@@ -237,7 +235,6 @@ def test_twin_without_results(api):
 def test_twin_modified_after_its_run_is_frozen(tmp_path, twins):
     folder = tmp_path / "twins"
     shutil.copytree(twins, folder)
-    shutil.copytree(twins.parent / "results", tmp_path / "results")
     yaml = folder / "twin_01" / "twin.yaml"
     yaml.write_text(yaml.read_text(encoding="utf-8").replace("nb_cells: 100", "nb_cells: 90"), encoding="utf-8")
     assert "nb_cells: 90" in yaml.read_text(encoding="utf-8")

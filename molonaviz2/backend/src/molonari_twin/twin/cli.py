@@ -3,7 +3,7 @@
     molonari-twin validate <twin_xx>     étape 2 : valide la config
     molonari-twin id <twin_xx>           étape 3 : affiche le twin_id et l'état dans le registre
     molonari-twin run <twin_xx>          étapes 4-6 : exécute (ou signale un doublon) et range les résultats
-                                         (--sigma-temperature 0.08 : dans le twin frère <twin_xx>_sigmaT0.08, ce σ en °C)
+                                         (--sigma-temperature 0.08 : un twin de dev <twin_xx>_sigmaT0.08, créé dans --space (dossier courant), avec la graine --seed du dev)
     molonari-twin list <dossier twins>   liste les twins et leur état
     molonari-twin report <twin_xx>       écrit le rapport public (« Public Report/ ») d'un twin calculé et de son space
     molonari-twin reproduce <twin_xx>    relance et vérifie le déterminisme d'un twin calculé (opx)
@@ -80,7 +80,11 @@ def main(argv: list[str]) -> int:
     sub.choices["run"].add_argument("--strict", action="store_true",
                                     help="refuse an unpublished code version or modified or untagged repositories")
     sub.choices["run"].add_argument("--sigma-temperature", type=float, default=None, metavar="SIGMA",
-                                    help="temperature uncertainty in °C (mcmc): run a sibling twin <twin>_sigmaT<SIGMA> with it; the twin itself stays frozen")
+                                    help="temperature uncertainty in °C (mcmc): run a dev twin <twin>_sigmaT<SIGMA> with it, created in --space; the twin itself stays frozen")
+    sub.choices["run"].add_argument("--space", default=None, metavar="FOLDER",
+                                    help="with --sigma-temperature: where to create the dev twin (default: the current folder; never the repository of the point)")
+    sub.choices["run"].add_argument("--seed", type=int, default=None, metavar="SEED",
+                                    help="with --sigma-temperature: your own seed, written in the orx.yaml of the dev twin (the reference seed is never copied)")
     continue_parser = sub.add_parser("continue", help="continue a MCMC chain from its final state (dev, opx)")
     continue_parser.add_argument("twin", help="twin_xx folder with computed results")
     continue_parser.add_argument("--iterations", type=int, required=True, help="number of additional iterations")
@@ -115,6 +119,8 @@ def main(argv: list[str]) -> int:
     serve_parser.add_argument("--max-workers", type=int, default=1, help="tasks computed at the same time")
     serve_parser.add_argument("--level", choices=LEVELS_WITH_ALIAS, default="user", help="access level: user (water, heat, temperature only), dev, opx, or admin (alias for opx)")
     args = parser.parse_args(argv)
+    if args.command == "run" and args.sigma_temperature is None and (args.space is not None or args.seed is not None):
+        parser.error(tr("--space and --seed need --sigma-temperature."))
     if args.command == "serve" and args.host not in LOCAL_HOSTS:
         serve_parser.error(tr("only a local address is allowed until authentication exists"))
 
@@ -187,7 +193,7 @@ def main(argv: list[str]) -> int:
 
             twin = args.twin
             if args.sigma_temperature is not None:
-                twin = with_sigma_temperature(args.twin, args.sigma_temperature)
+                twin = with_sigma_temperature(args.twin, args.sigma_temperature, space=args.space, seed=args.seed)
                 print(tr("Twin run with a temperature σ of {sigma:g} °C: {folder}").format(sigma=args.sigma_temperature, folder=twin))
             run = run_twin(twin, on_progress=progress, strict=args.strict)
             if shown:

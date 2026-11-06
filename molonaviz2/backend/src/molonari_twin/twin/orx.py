@@ -1,7 +1,10 @@
-"""Couche `orx` d'un twin 2.0.0 : le fichier `orx.yaml`, à côté de `twin.yaml` (P0.7d, P2.2c).
+"""Couche `orx` d'un twin 2.0.0 : la graine de référence, dans `<point>/orx/<twin>.yaml` (T7), ou `orx.yaml` à côté de
+`twin.yaml` (P0.7d, P2.2c).
 
-La graine du MCMC n'est plus dans la recette (`twin.yaml`, couche `dev`) : elle est dans `orx.yaml`, couche `orx`,
-que seul le niveau ORX monte (PLAN_TWIN_v3 §1ter). Ce n'est pas un secret vis-à-vis du dev, qui peut la retrouver par
+La graine du MCMC n'est plus dans la recette (`twin.yaml`, couche `dev`) : elle est dans la couche `orx`, que seul le niveau
+OPX monte. Dans la disposition `<point>/twins/<twin>/`, le dépôt parent du point la garde dans `<point>/orx/<twin>.yaml`,
+hors du sous-dépôt du twin. Le repli sur `orx.yaml` à côté de `twin.yaml` sert aux twins de dev (dont ceux de
+`run --sigma-temperature`, qui portent la graine du dev) et à l'ancienne disposition. Ce n'est pas un secret vis-à-vis du dev, qui peut la retrouver par
 force brute (accepté, T12) : retirer le fichier de sa couche oriente l'usage (le dev travaille sur le cache), il ne
 protège rien. Sans ce fichier, le twin reste lisible ; il ne peut simplement pas être calculé (`run_twin`).
 
@@ -29,6 +32,8 @@ from ..errors import Issue
 from .provenance import LIBRARIES
 
 ORX_NAME = "orx.yaml"
+ORX_FOLDER = "orx"  # <point>/orx/<twin>.yaml
+TWINS_FOLDER = "twins"
 ORX_SCHEMA = "molonari-orx/1.0.0"
 ORX_KEYS = {"schema", "mcmc", "platform"}
 ORX_MCMC_KEYS = {"seed"}
@@ -42,8 +47,22 @@ class OrxLayer:
     platform: dict[str, str] | None  # plateforme de référence, telle qu'elle est écrite
 
 
+def point_orx_path(twin_folder: str | Path) -> Path | None:
+    """`<point>/orx/<twin>.yaml` pour un twin rangé dans `<point>/twins/<twin>/`, sinon None (twin hors d'un point)."""
+    folder = Path(twin_folder).resolve()
+    if folder.parent.name != TWINS_FOLDER:
+        return None
+    return folder.parent.parent / ORX_FOLDER / f"{folder.name}.yaml"
+
+
 def orx_path(twin_folder: str | Path) -> Path:
-    return Path(twin_folder) / ORX_NAME
+    """Le fichier de la graine de référence d'un twin : `<point>/orx/<twin>.yaml` s'il existe, sinon `orx.yaml` à côté de
+    `twin.yaml`. Si aucun n'existe, le premier emplacement de la disposition du twin (où ORX l'écrirait)."""
+    beside = Path(twin_folder) / ORX_NAME
+    at_point = point_orx_path(twin_folder)
+    if at_point is not None and (at_point.is_file() or not beside.is_file()):
+        return at_point
+    return beside
 
 
 def read_orx(twin_folder: str | Path) -> tuple[OrxLayer | None, list[Issue]]:

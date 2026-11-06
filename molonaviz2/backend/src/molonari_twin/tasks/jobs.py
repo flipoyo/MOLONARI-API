@@ -75,12 +75,18 @@ def run_twin_job(params: dict, context: JobContext) -> dict:
 
 
 def cleanup_twin_job(params: dict) -> None:
-    """Supprime les résultats partiels (`results/*.partial`) laissés par un calcul interrompu."""
-    from ..twin.registry import results_folder
+    """Supprime les résultats partiels (`results/*.partial`) laissés par un calcul interrompu, dans le dossier du twin et à
+    l'ancien emplacement partagé du point."""
+    from ..twin.registry import legacy_root, results_folder
 
-    folder = results_folder(Path(params["path"]).parent)
-    for partial in folder.glob("*.partial"):
-        shutil.rmtree(partial, ignore_errors=True)
+    path = Path(params["path"])
+    twin_folder = path.parent if path.is_file() else path
+    folders = [results_folder(twin_folder)]
+    if twin_folder.resolve().parent.name == "twins":  # l'ancien dossier partagé n'existe que dans la disposition d'un point
+        folders.append(results_folder(legacy_root(twin_folder.resolve())))
+    for folder in folders:
+        for partial in folder.glob("*.partial"):
+            shutil.rmtree(partial, ignore_errors=True)
 
 
 # diag.sleep --------------------------------------------------------------------------------------

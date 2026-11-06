@@ -165,7 +165,7 @@ def test_missing_chains_or_settings_are_structured_errors(tmp_path):
     assert error_of(tmp_path / "absent").code == "E_FOLDER_NOT_FOUND"
 
 
-@pytest.mark.parametrize("where", ["public_reports", "results/abc", "public_reports/sub"])
+@pytest.mark.parametrize("where", ["public_reports", "results/abc", "public_reports/sub", "twins/twin_direct/results/abc"])
 def test_the_state_is_never_written_in_public_reports_or_results(tmp_path, where):
     point = hand_point(tmp_path)
     before = tree(point)
@@ -224,7 +224,8 @@ def point(tmp_path_factory, data_repo):
     for name, text in (("twin_direct", DIRECT), ("twin_mcmc", MCMC)):
         (root / "twins" / name).mkdir(parents=True)
         (root / "twins" / name / "twin.yaml").write_text(text, encoding="utf-8")
-    (root / "twins" / "twin_mcmc" / "orx.yaml").write_text("mcmc:\n  seed: 42\n", encoding="utf-8")
+    (root / "orx").mkdir()  # la graine de référence est dans <point>/orx/<twin>.yaml (T7)
+    (root / "orx" / "twin_mcmc.yaml").write_text("mcmc:\n  seed: 42\n", encoding="utf-8")
     run_twin(root / "twins" / "twin_direct")
     run_twin(root / "twins" / "twin_mcmc")
     generate_report(root / "twins" / "twin_mcmc", root / "public_reports")
@@ -232,7 +233,7 @@ def point(tmp_path_factory, data_repo):
 
 
 def posterior_of(point):
-    (folder,) = (point / "results").glob("*/posterior.npz")
+    (folder,) = (point / "twins" / "twin_mcmc" / "results").glob("*/posterior.npz")
     with np.load(folder, allow_pickle=False) as data:
         return {k: data[k] for k in data.files}, folder.parent
 
@@ -246,6 +247,20 @@ def simulated(state):
     """Températures simulées (3, T) aux capteurs d'un état généré, relues de residuals.csv."""
     residuals = load_results(state).residuals
     return np.stack([residuals[f"t{i}_simulated"].to_numpy() for i in (1, 2, 3)])
+
+
+@pytest.mark.slow
+def test_a_computed_point_has_every_file_of_the_chain_in_its_place(point):
+    """T1 à T7 ensemble : l'état de la chaîne (T3) dans les résultats du twin mcmc, `chains.npz` (T2) dans le rapport public,
+    `generation.yaml` (T4) dans le twin direct, résultats et registre dans le dossier de chaque twin (T7)."""
+    (results,) = (point / "twins" / "twin_mcmc" / "results").iterdir()
+    assert {"posterior.npz", "chain_state.npz", "metadata.json"} <= {p.name for p in results.iterdir()}
+    assert (point / "public_reports" / "chains.npz").is_file()
+    assert (point / "twins" / "twin_direct" / GENERATION_FILE).is_file()
+    for twin in ("twin_direct", "twin_mcmc"):
+        assert (point / "twins" / twin / "registry.csv").is_file() and (point / "twins" / twin / "results").is_dir()
+    assert not (point / "results").exists() and not (point / "twins" / "registry.csv").exists()
+    assert not (point / "twins" / "twin_mcmc" / "orx.yaml").exists() and (point / "orx" / "twin_mcmc.yaml").is_file()
 
 
 @pytest.mark.slow

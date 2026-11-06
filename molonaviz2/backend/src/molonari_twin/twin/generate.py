@@ -218,7 +218,8 @@ def locate(point: str | Path) -> tuple[Path, Path, Path]:
 def check_output(output: Path, point: Path) -> None:
     """E_GENERATE_OUTPUT_FORBIDDEN dans `public_reports/` ou `results/` du point ; E_GENERATE_OUTPUT_EXISTS sur un dossier
     qui n'est pas un état généré (un état généré se réécrit)."""
-    for forbidden in (point / PUBLIC_REPORTS, point / RESULTS_FOLDER):
+    forbidden_folders = [point / PUBLIC_REPORTS, point / RESULTS_FOLDER, *[t / RESULTS_FOLDER for t in sorted((point / TWINS).glob("*")) if t.is_dir()]]
+    for forbidden in forbidden_folders:
         if output == forbidden.resolve() or forbidden.resolve() in output.parents:
             raise UserError("E_GENERATE_OUTPUT_FORBIDDEN", path=str(output), folder=forbidden.name)
     if output.exists() and not (output.is_dir() and is_state(output)):

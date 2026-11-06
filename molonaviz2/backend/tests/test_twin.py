@@ -224,12 +224,12 @@ def test_full_lifecycle(twins, point034, monkeypatch):
     run = run_twin(folder)
     assert run.computed and run.status.state == "computed"
     results = run.status.results_dir
-    assert results.parent == twins.parent / "results" and results.name == run.status.twin_id
+    assert results.parent == folder / "results" and results.name == run.status.twin_id  # dans le dossier du twin (T7)
     assert {p.name for p in results.iterdir()} == {"temperature.csv", "water_flux.csv", "residuals.csv", "metadata.json", *FIELD_FILES}
     meta = json.loads((results / "metadata.json").read_text())
     assert meta["twin_id"] == run.status.twin_id and meta["mode"] == "direct" and not meta["experimental"]
     assert meta["data"]["rows"] == 400 and len(meta["data"]["sha256"]) == 64
-    entries = read_registry(twins)
+    entries = read_registry(folder)
     assert [(e.name, e.status) for e in entries] == [("twin_01", "computed")]
 
     # Relance : aucun recalcul, résultat existant.
@@ -245,8 +245,8 @@ def test_full_lifecycle(twins, point034, monkeypatch):
     edit(copy, "name: twin_01", "name: twin_02")
     duplicate = run_twin(copy)
     assert not duplicate.computed and duplicate.status.state == "duplicate" and duplicate.status.source.name == "twin_01"
-    assert duplicate.status.results_dir == results
-    assert [(e.name, e.status, e.duplicate_of) for e in read_registry(twins)][-1] == ("twin_02", "duplicate", "twin_01")
+    assert duplicate.status.results_dir == copy / "results" / run.status.twin_id  # la copie du dossier emporte résultats et registre
+    assert [(e.name, e.status, e.duplicate_of) for e in read_registry(copy)][-1] == ("twin_02", "duplicate", "twin_01")
 
     # Config figée : modifier twin_01 après exécution est refusé.
     edit(folder, "porosity: 0.15", "porosity: 0.2")
@@ -314,7 +314,7 @@ def test_mcmc_twin_is_marked_experimental(twins, point034):
     assert load_twin(folder).name == "twin_01"  # régression : le nom était écrasé par la boucle des lois a priori
     run = run_twin(folder)
     results = load_results(run.status.results_dir)
-    assert results.metadata["name"] == "twin_01" and read_registry(twins)[0].name == "twin_01"
+    assert results.metadata["name"] == "twin_01" and read_registry(folder)[0].name == "twin_01"
     assert results.metadata["experimental"] is True
     assert {"burn_in_iterations", "acceptance_mean", "rhat", "best_parameters"} <= set(results.metadata["mcmc"])
     assert (run.status.results_dir / "posterior_summary.csv").is_file()
@@ -503,7 +503,7 @@ def test_strict_run_is_refused_with_every_reason(twins, point034):
     assert completed.returncode == 1
     assert "Strict mode: the twin was not run." in completed.stderr
     assert "The provenance of the twin cannot be read (no git repository)." in completed.stderr
-    assert not (twins.parent / "results").exists() and not (twins / "registry.csv").exists()
+    assert not (folder / "results").exists() and not (folder / "registry.csv").exists()
 
 
 def test_strict_run_accepts_a_published_code_and_a_clean_tagged_twin(tmp_path, twins, point034, monkeypatch):
@@ -553,7 +553,7 @@ def test_command_line(twins, point034):
     assert identity.returncode == 0 and identity.stdout.split()[0] == load_twin(folder).twin_id(__import__("molonari_twin.engine.api", fromlist=["x"]).engine_version())
     assert cli("run", str(folder)).returncode == 0
     assert cli("run", str(folder)).returncode == 0  # doublon : succès, sans recalcul
-    assert [e.status for e in read_registry(twins)] == ["computed"]
+    assert [e.status for e in read_registry(folder)] == ["computed"]
     edit(folder, "porosity: 0.15", "porosity: 0.3")
     assert cli("run", str(folder)).returncode == 1  # config figée
     assert cli("validate", str(twins / "absent")).returncode == 1
