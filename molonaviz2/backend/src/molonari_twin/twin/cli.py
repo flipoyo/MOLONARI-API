@@ -6,6 +6,7 @@
                                          (--sigma-temperature 0.08 : un twin de dev <twin_xx>_sigmaT0.08, créé dans --space (dossier courant), avec la graine --seed du dev)
     molonari-twin list <dossier twins>   liste les twins et leur état
     molonari-twin report <twin_xx>       écrit le rapport public (« Public Report/ ») d'un twin calculé et de son space
+                                         (--forward <twin direct> : rapport local d'un dev, par exemple pour un twin de σ ; jamais dans public_reports/)
     molonari-twin reproduce <twin_xx>    relance et vérifie le déterminisme d'un twin calculé (opx)
     molonari-twin questions [<twin_xx>]  liste les questions du catalogue (celles d'un twin, s'il est donné)
     molonari-twin ask <twin_xx> <question>   pose une question à un twin calculé (--params '{"z": 0.2}', JSON du corps du POST)
@@ -91,6 +92,8 @@ def main(argv: list[str]) -> int:
     report_parser = sub.add_parser("report")
     report_parser.add_argument("twin", help="twin_xx folder or twin.yaml (the twin that carries the report key)")
     report_parser.add_argument("--output", default=None, help="folder to write (default: 'Public Report' in the twin folder)")
+    report_parser.add_argument("--forward", default=None, metavar="FOLDER",
+                               help="direct twin of the space (dev): a local report of this twin against it, for example a twin from --sigma-temperature; never written in public_reports/")
     reproduce_parser = sub.add_parser("reproduce", help="reproduce a twin and verify determinism (opx)")
     reproduce_parser.add_argument("twin", help="twin_xx folder with computed results")
     reproduce_parser.add_argument("--output", default=None, help="folder to write JSON and text reports (default: twin folder)")
@@ -153,7 +156,7 @@ def main(argv: list[str]) -> int:
         elif args.command == "report":
             from ..report import generate_report
 
-            result = generate_report(args.twin, args.output)
+            result = generate_report(args.twin, args.output, forward=args.forward)
             for skipped, reason in zip(result.skipped, result.reasons, strict=True):
                 print(tr("Skipped: {question} ({model}): {reason}").format(
                     question=skipped["question"], model=skipped["model"], reason=render(reason, tr)))
