@@ -7,7 +7,6 @@ avec le fichier en cause, le rapport est JSON et texte, sans graine.
 import json
 
 import pytest
-
 from molonari_twin.errors import UserError
 from molonari_twin.twin.reproduce import reproduce
 from molonari_twin.twin.run import twin_status
