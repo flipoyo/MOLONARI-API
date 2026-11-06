@@ -16,6 +16,10 @@ Jusqu'à 0.6.0-alpha.1, le backend faisait partie du paquet molonaviz2 : son his
 
 ## [Non publié]
 
+## [0.9.0-alpha.1] - 2026-11-06
+
+Niveaux d'accès `user`, `dev` et `opx`, reprise et reproduction des calculs, usage du user et disposition du TWIN. En bref : `--level {user,dev,opx}` (`admin` alias d'`opx`) ; `chains.npz` public ; `chain_state.npz` et `continue` ; `reproduce` ; `generate` ; `reports` ; disposition du TWIN (graine dans `orx/`, `results/` par twin) ; `report --forward`. `API_VERSION` reste à 1.0.0-alpha.8 : le schéma OpenAPI est identique à celui de 0.8.0-alpha.2.
+
 ### T1 : niveaux `user`, `dev`, `opx`
 
 - `LEVELS` passe de `(user, admin)` à `(user, dev, opx)`. `admin` reste un alias de `opx` pour la compatibilité (parseur et API).
@@ -68,6 +72,12 @@ Jusqu'à 0.6.0-alpha.1, le backend faisait partie du paquet molonaviz2 : son his
 - `molonari-twin reproduce <twin>` : relance le calcul sans cache, compare tous les fichiers produits (SHA-256) a la reference, ecrit un compte rendu JSON et texte sans la graine. Inclut `chain_state.npz` (T3), avec comparaison tableau par tableau (hors `burn_in_duration_s`). Reserve a `opx`.
 - `molonari-twin run <twin> --sigma-temperature X` : lance un twin mcmc 2.0.0 avec un autre σ de température, dans le twin frère `<twin>_sigmaT<X>` (même recette, même graine ; remplacé par un twin de dev au lot T7, voir plus haut). Le twin d'origine reste figé.
 - `processing.trim_hours` (`twin.yaml` 2.0.0, points de `lab.yaml`) et paramètre `trim_hours` de `processing_preview` : retire ce nombre d'heures après la première et avant la dernière date commune aux deux fichiers (mise en route et relevé du capteur), raison `outside_window`. 0 par défaut : les nettoyages existants ne changent pas. Nouveau code `E_TWIN_TRIM_HOURS`. `API_VERSION` ne change pas (schéma OpenAPI identique).
+
+### Identifiants de référence (0.9.0-alpha.1)
+
+- `twin_01` et `twin_02` : `ac16987e8d975fdb` ; `twin_03` : `216138919d58cc9c` ; `twin_04` : `be8e07a28ed92b39`.
+- Ils changent parce que la version du code entre dans `engine_version()`, pas parce que le calcul change. Le `processed_sha256` de Point034 reste `513b1b93…`, et ses flux, RMSE et convergence sont identiques depuis 0.8.0-alpha.2.
+- Calculés avec la version publiée (`release_version()`, sans suffixe local).
 
 ## [0.8.0-alpha.2] - 2026-10-30
 

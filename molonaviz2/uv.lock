@@ -863,7 +863,7 @@ wheels = [
 
 [[package]]
 name = "molonari-twin"
-version = "0.8.0a2"
+version = "0.9.0a1"
 source = { editable = "backend" }
 dependencies = [
     { name = "arviz" },
