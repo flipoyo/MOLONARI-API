@@ -16,6 +16,10 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions : [S
 
 L'application change de nom : molonaviz2 devient **MOLONARI Desk**, l'application de bureau scientifique de MOLONARI. Le backend `molonari-twin` ne change pas, ni les calculs, ni les `twin_id` (seule la version du backend y entre).
 
+### Ajouté
+- Notice d'utilisation (`docs/NOTICE_UTILISATEUR.md`), pour l'utilisateur de l'application, et notice scientifique (`docs/NOTICE_SCIENTIFIQUE.md`), pour l'hydrogéologue : modèle physique, inversion DREAM, conventions de signe, diagnostics de fiabilité et limites.
+- La table des paramètres de la notice scientifique est générée depuis `molonari_desk.notice` par `tools/gen_notice_tables.py` ; `tests/test_notice_doc.py` vérifie qu'elle est à jour et que les liens des notices existent.
+
 ### Modifié (rupture)
 - Paquet `molonari_desk`, distribution et commande `molonari-desk` (`uv run molonari-desk`, `molonari-desk twin …`, `python -m molonari_desk`). La commande `molonaviz2` n'existe plus.
 - Dossier de l'espace uv : `molonari_desk/` (au lieu de `molonaviz2/`), dans le dépôt MOLONARI-API.
