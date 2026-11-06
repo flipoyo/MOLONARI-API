@@ -6,6 +6,7 @@
                                          (--sigma-temperature 0.08 : dans le twin frère <twin_xx>_sigmaT0.08, ce σ en °C)
     molonari-twin list <dossier twins>   liste les twins et leur état
     molonari-twin report <twin_xx>       écrit le rapport public (« Public Report/ ») d'un twin calculé et de son space
+    molonari-twin reproduce <twin_xx>    relance et vérifie le déterminisme d'un twin calculé (opx)
     molonari-twin questions [<twin_xx>]  liste les questions du catalogue (celles d'un twin, s'il est donné)
     molonari-twin ask <twin_xx> <question>   pose une question à un twin calculé (--params '{"z": 0.2}', JSON du corps du POST)
                                          ou à un état généré (<état> au lieu de <twin_xx> : eau, chaleur, température)
@@ -80,10 +81,16 @@ def main(argv: list[str]) -> int:
                                     help="refuse an unpublished code version or modified or untagged repositories")
     sub.choices["run"].add_argument("--sigma-temperature", type=float, default=None, metavar="SIGMA",
                                     help="temperature uncertainty in °C (mcmc): run a sibling twin <twin>_sigmaT<SIGMA> with it; the twin itself stays frozen")
+    continue_parser = sub.add_parser("continue", help="continue a MCMC chain from its final state (dev, opx)")
+    continue_parser.add_argument("twin", help="twin_xx folder with computed results")
+    continue_parser.add_argument("--iterations", type=int, required=True, help="number of additional iterations")
     sub.add_parser("list").add_argument("folder", help="twins folder")
     report_parser = sub.add_parser("report")
     report_parser.add_argument("twin", help="twin_xx folder or twin.yaml (the twin that carries the report key)")
     report_parser.add_argument("--output", default=None, help="folder to write (default: 'Public Report' in the twin folder)")
+    reproduce_parser = sub.add_parser("reproduce", help="reproduce a twin and verify determinism (opx)")
+    reproduce_parser.add_argument("twin", help="twin_xx folder with computed results")
+    reproduce_parser.add_argument("--output", default=None, help="folder to write JSON and text reports (default: twin folder)")
     add_question_commands(sub)
     generate_parser = sub.add_parser("generate", help="generate a state with the direct model, from a published sample of a sampling point")
     generate_parser.add_argument("point", help="sampling point folder (holds public_reports/chains.npz and twins/<direct twin>/generation.yaml)")
@@ -113,7 +120,14 @@ def main(argv: list[str]) -> int:
 
     from .config import TwinConfigError, load_twin
     from .lab import LabConfigError
-    from .run import list_twins, run_twin, twin_status, with_sigma_temperature
+    from .reproduce import reproduce
+    from .run import (
+        continue_twin,
+        list_twins,
+        run_twin,
+        twin_status,
+        with_sigma_temperature,
+    )
 
     try:
         if args.command == "serve":
@@ -140,6 +154,20 @@ def main(argv: list[str]) -> int:
                     question=skipped["question"], model=skipped["model"], reason=render(reason, tr)))
             print(tr("Public report written: {folder} ({entries} entries, {figures} figures, {skipped} skipped).").format(
                 folder=result.folder, entries=result.entries, figures=result.figures, skipped=len(result.skipped)))
+        elif args.command == "reproduce":
+            report = reproduce(args.twin)
+            twin_folder = Path(args.twin).resolve()
+            if twin_folder.is_file():
+                twin_folder = twin_folder.parent
+            output_folder = Path(args.output).resolve() if args.output else twin_folder
+            output_folder.mkdir(parents=True, exist_ok=True)
+            json_path = output_folder / "reproduction_report.json"
+            text_path = output_folder / "reproduction_report.txt"
+            json_path.write_text(json.dumps(report.to_dict(), indent=2), encoding="utf-8")
+            text_path.write_text(report.to_text(), encoding="utf-8")
+            print(report.to_text())
+            print(tr("Reproduction report written: {json_file}, {text_file}").format(
+                json_file=json_path, text_file=text_path))
         elif args.command == "lab":
             from .lab import build_point
 
@@ -177,6 +205,30 @@ def main(argv: list[str]) -> int:
                     name=status.config.name, source=status.source.name, id=status.twin_id, folder=status.results_dir))
             if status.config.experimental:
                 print(tr("Note: mcmc mode is experimental."))
+        elif args.command == "continue":
+            shown = []
+
+            def progress(p):
+                if p.phase == "sampling":
+                    shown.append(True)
+                    print(f"  {p.phase} {p.iteration}/{p.total}    ", end="\r", flush=True)
+
+            path = Path(args.twin).resolve()
+            folder = path.parent if path.is_file() else path
+            status = twin_status(folder)
+
+            if status.config.mode != "mcmc":
+                raise UserError("E_CONTINUE_MCMC_ONLY", mode=status.config.mode)
+            if not status.has_results:
+                raise UserError("E_CONTINUE_NO_RESULTS", name=status.config.name)
+
+            run = continue_twin(folder, args.iterations, on_progress=progress)
+            if shown:
+                print()
+            for warning in run.warnings:
+                print(tr("Warning:"), render(warning, tr), file=sys.stderr)
+            print(tr("Twin continued: {name} + {iterations} iterations → {folder}").format(
+                name=status.config.name, iterations=args.iterations, folder=run.status.results_dir))
         else:
             for path in list_twins(args.folder):
                 try:

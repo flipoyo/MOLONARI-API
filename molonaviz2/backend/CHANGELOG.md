@@ -53,6 +53,7 @@ Jusqu'à 0.6.0-alpha.1, le backend faisait partie du paquet molonaviz2 : son his
 
 ### À venir
 
+- `molonari-twin reproduce <twin>` : relance le calcul sans cache, compare tous les fichiers produits (SHA-256) a la reference, ecrit un compte rendu JSON et texte sans la graine. Inclut `chain_state.npz` (T3), avec comparaison tableau par tableau (hors `burn_in_duration_s`). Reserve a `opx`.
 - `molonari-twin run <twin> --sigma-temperature X` : lance un twin mcmc 2.0.0 avec un autre σ de température, dans le twin frère `<twin>_sigmaT<X>` (même recette, même graine). Le twin d'origine reste figé.
 - `processing.trim_hours` (`twin.yaml` 2.0.0, points de `lab.yaml`) et paramètre `trim_hours` de `processing_preview` : retire ce nombre d'heures après la première et avant la dernière date commune aux deux fichiers (mise en route et relevé du capteur), raison `outside_window`. 0 par défaut : les nettoyages existants ne changent pas. Nouveau code `E_TWIN_TRIM_HOURS`. `API_VERSION` ne change pas (schéma OpenAPI identique).
 
