@@ -318,7 +318,7 @@ def test_mcmc_twin_is_marked_experimental(twins, point034):
     assert results.metadata["experimental"] is True
     assert {"burn_in_iterations", "acceptance_mean", "rhat", "best_parameters"} <= set(results.metadata["mcmc"])
     assert (run.status.results_dir / "posterior_summary.csv").is_file()
-    assert {p.name for p in run.status.results_dir.glob("*.npz")} == {"quantiles.npz", "posterior.npz", "fields_temperature.npz", "fields_riverbed_flux.npz"}
+    assert {p.name for p in run.status.results_dir.glob("*.npz")} == {"quantiles.npz", "posterior.npz", "fields_temperature.npz", "fields_riverbed_flux.npz", "chain_state.npz"}
     assert results.results_format == "2.0.0" and "W_FIELD_UNAVAILABLE" not in [w.code for w in results.warnings]
     assert results.posterior["samples"].shape == (10, 7, 1, 4) and set(results.fields) == {"temperature"}
     assert results.fields["temperature"]["values"].shape[1] == 3  # aux 3 capteurs (store_fields par défaut)
@@ -377,7 +377,7 @@ def test_mcmc_arrays_2_0_0(tmp_path, point034, store_fields, files):
     inversion = api.run_inversion(config.column_inputs(), config.inversion_config())
     folder = tmp_path / "results"
     write_results(folder, inversion.best, inversion, ["couche 1"], {})
-    assert {p.name for p in folder.glob("*.npz")} == {"quantiles.npz", "posterior.npz", *files}
+    assert {p.name for p in folder.glob("*.npz")} == {"quantiles.npz", "posterior.npz", "chain_state.npz", *files}
 
     quantiles = load_npz(folder / "quantiles.npz")
     np.testing.assert_array_equal(quantiles["quantile"], [0.05, 0.5, 0.95])

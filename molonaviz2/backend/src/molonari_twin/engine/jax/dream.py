@@ -294,6 +294,25 @@ class DreamSampler:
         field_chain = np.tile(np.arange(n_chain), fields_per_chain)
         field_iteration = np.repeat(layout.interval * cfg.thin * np.arange(1, fields_per_chain + 1), n_chain)
         full = cfg.store_fields == "full"
+
+        # État final pour la prolongation (T3) : extraire les composants du carry, sans la graine
+        # carry = (key, x, e, temp, flux, pcr, jumps, counts)
+        final_chain_state = {
+            "prng_key": np.asarray(carry[0]),  # clé PRNG courante
+            "x": np.asarray(carry[1]),  # positions, (N, L, 4)
+            "e": np.asarray(carry[2]),  # énergies, (N,)
+            "temperature": np.asarray(carry[3]),  # températures, (N, C, T)
+            "water_flux": np.asarray(carry[4]),  # flux, (N, C, T)
+            "pcr": np.asarray(carry[5]),  # probabilités crossover, (L, n_cr)
+            "jumps": np.asarray(carry[6]),  # compteurs crossover jumps, (L, n_cr)
+            "counts": np.asarray(carry[7]),  # compteurs crossover counts, (L, n_cr)
+            "burn_in_iterations": np.array(burn_in, dtype=np.int64),  # itérations de burn-in faites
+            "burn_in_duration_s": np.array(time.perf_counter() - start, dtype=np.float64),  # durée du burn-in
+            "total_resets": resets.copy(),  # réinitialisations par chaîne, (N,)
+            "best_x": best_x.copy(),  # meilleur point, (L, 4)
+            "best_e": np.array(best_e, dtype=np.float64),  # meilleure énergie
+        }
+
         return InversionResult(
             best=best,
             best_parameters=best_x,
@@ -314,6 +333,153 @@ class DreamSampler:
             field_temperature=(temps - 273.15).astype(np.float32) if full else None,
             field_water_flux=fluxes if full else None,
             field_riverbed_flux=np.concatenate(riverbed_flux),
+            chain_state=final_chain_state,
+        )
+
+    def continue_from_state(
+        self,
+        chain_state: dict,
+        nb_iter_continue: int,
+        on_progress: Callable[[Progress], None] | None = None,
+        should_cancel: Callable[[], bool] | None = None,
+    ) -> InversionResult:
+        """Reprendre une chaîne depuis un état final sauvegardé, sans burn-in.
+
+        chain_state : dictionnaire retourné par run() et sauvegardé dans chain_state.npz
+        nb_iter_continue : nombre d'itérations supplémentaires
+        """
+        # Créer une config modifiée avec le nouveau nombre d'itérations
+        cfg_dict = self.config.to_dict()
+        cfg_dict["nb_iter"] = nb_iter_continue
+        cfg_continue = type(self.config).from_dict(cfg_dict)
+
+        n_chain = cfg_continue.nb_chains
+        start = time.perf_counter()
+
+        def report(phase, iteration, total, accepted, energies, rhat_max):
+            if should_cancel is not None and should_cancel():
+                raise Cancelled
+            if on_progress is not None:
+                on_progress(Progress(phase, iteration, total, time.perf_counter() - start, accepted, np.asarray(energies), rhat_max))
+
+        report("compile", 0, 1, float("nan"), np.full(n_chain, np.nan), float("nan"))
+
+        # Reconstruire le carry à partir du chain_state
+        carry = (
+            jnp.asarray(chain_state["prng_key"]),
+            jnp.asarray(chain_state["x"]),
+            jnp.asarray(chain_state["e"]),
+            jnp.asarray(chain_state["temperature"]),
+            jnp.asarray(chain_state["water_flux"]),
+            jnp.asarray(chain_state["pcr"]),
+            jnp.asarray(chain_state["jumps"]),
+            jnp.asarray(chain_state["counts"]),
+        )
+
+        best_x = np.asarray(chain_state["best_x"])
+        best_e = float(chain_state["best_e"])
+        burn_in = int(chain_state["burn_in_iterations"])
+        resets = np.asarray(chain_state["total_resets"])
+
+        def track_best(xs, es):
+            nonlocal best_x, best_e
+            es = np.asarray(es)
+            flat = int(np.argmin(es))
+            i, j = np.unravel_index(flat, es.shape)
+            if es[i, j] < best_e:
+                best_e, best_x = float(es[i, j]), np.asarray(xs[i, j])
+
+        # Échantillonnage : reprise avec le nouveau nombre d'itérations
+        layout = sampling_layout(cfg_continue)
+        sl_space = slice(None, None, cfg_continue.space_step)
+        sl_time = slice(None, None, cfg_continue.time_step)
+        samples, energies, accepted = [], [], []
+        field_temp, field_flux, sensor_temp, riverbed_flux = [], [], [], []
+        done = 0  # compte les itérations de la reprise, indépendamment du passé
+        for length, keep_field in layout.blocks():
+            carry, (xs, es, acc) = self._block(length, False)(carry)
+            kept = (done + np.arange(1, length + 1)) % cfg_continue.thin == 0
+            done += length
+            samples.append(np.asarray(xs)[kept])
+            energies.append(np.asarray(es)[kept])
+            accepted.append(np.asarray(acc)[kept])
+            track_best(xs, es)
+            if keep_field:
+                field_temp.append(np.asarray(carry[3][:, sl_space, sl_time], np.float32))
+                field_flux.append(np.asarray(carry[4][:, sl_space, sl_time], np.float32))
+                riverbed_flux.append(np.asarray(carry[4][:, 0, sl_time], np.float64))
+                if cfg_continue.store_fields == "sensors":
+                    sensor_temp.append(np.asarray(carry[3][:, self.geom.sensor_index, sl_time], np.float64) - 273.15)
+            report("sampling", done - burn_in, nb_iter_continue, float(np.mean(acc)), carry[2], float("nan"))
+
+        report("finalize", 0, 1, float("nan"), carry[2], float("nan"))
+        samples_arr = np.concatenate(samples)  # (I, N, L, 4)
+        energies_arr = np.concatenate(energies)
+        accepted_arr = np.concatenate(accepted)
+        final_rhat = split_rhat(np.moveaxis(samples_arr, 1, 0))
+
+        best_fields = jax.jit(self._forward)(to_physical(jnp.asarray(best_x)))
+        best = to_forward_result(best_fields, self.geom, self.inputs)
+
+        temps = np.concatenate(field_temp)  # (S, C', T') en K
+        fluxes = np.concatenate(field_flux)
+        field_depths = self.geom.z_solve[sl_space]
+        field_times = self.inputs.times[sl_time]
+        sensor_rows = np.array([np.argmin(np.abs(field_depths - d)) for d in best.sensor_depths])
+        observed = self.geom.observed[:, sl_time]
+        quantiles = []
+        for q, temp_q, flux_q in zip(
+            cfg_continue.quantiles, np.quantile(temps, cfg_continue.quantiles, axis=0), np.quantile(fluxes, cfg_continue.quantiles, axis=0)
+        ):
+            per_sensor = np.sqrt(np.nansum((temp_q[sensor_rows] - observed) ** 2, axis=1) / observed.shape[1])
+            total = np.sqrt(np.nansum(per_sensor**2) / len(per_sensor))
+            quantiles.append(QuantileResult(float(q), temp_q - 273.15, flux_q, np.append(per_sensor, total)))
+
+        # Provenance : le champ m·N + j vient de la chaîne j, à l'itération calculée
+        fields_per_chain = layout.fields_per_chain
+        field_chain = np.tile(np.arange(n_chain), fields_per_chain)
+        field_iteration = np.repeat(layout.interval * cfg_continue.thin * np.arange(1, fields_per_chain + 1), n_chain)
+        full = cfg_continue.store_fields == "full"
+
+        # État final pour une prolongation ultérieure
+        # burn_in_duration_s : durée du burn-in original du parent (pour traçabilité)
+        final_chain_state = {
+            "prng_key": np.asarray(carry[0]),
+            "x": np.asarray(carry[1]),
+            "e": np.asarray(carry[2]),
+            "temperature": np.asarray(carry[3]),
+            "water_flux": np.asarray(carry[4]),
+            "pcr": np.asarray(carry[5]),
+            "jumps": np.asarray(carry[6]),
+            "counts": np.asarray(carry[7]),
+            "burn_in_iterations": np.array(burn_in, dtype=np.int64),
+            "burn_in_duration_s": np.array(float(np.asarray(chain_state["burn_in_duration_s"])), dtype=np.float64),
+            "total_resets": resets.copy(),
+            "best_x": best_x.copy(),
+            "best_e": np.array(best_e, dtype=np.float64),
+        }
+
+        return InversionResult(
+            best=best,
+            best_parameters=best_x,
+            samples=samples_arr,
+            energies=energies_arr,
+            acceptance=accepted_arr.mean(axis=0),
+            burn_in_iterations=burn_in,
+            burn_in_converged=True,  # pas de burn-in en reprise
+            rhat=final_rhat,
+            quantiles=quantiles,
+            field_depths=field_depths,
+            field_times=field_times,
+            thin=cfg_continue.thin,
+            field_chain=field_chain,
+            field_iteration=field_iteration,
+            resets=resets,
+            sensor_temperature=np.concatenate(sensor_temp) if sensor_temp else None,
+            field_temperature=(temps - 273.15).astype(np.float32) if full else None,
+            field_water_flux=fluxes if full else None,
+            field_riverbed_flux=np.concatenate(riverbed_flux),
+            chain_state=final_chain_state,
         )
 
 
