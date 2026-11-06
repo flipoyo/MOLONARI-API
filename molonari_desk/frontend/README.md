@@ -4,6 +4,8 @@ Application de bureau PySide6 pour l'inversion bayésienne des mesures MOLONARI 
 
 Installation, utilisation pas à pas et twins : [README de l'espace](../README.md).
 
+Notices : [utilisation](../docs/NOTICE_UTILISATEUR.md) et [scientifique](../docs/NOTICE_SCIENTIFIQUE.md). La table des paramètres de la notice scientifique est générée depuis `molonari_desk.notice` par `python tools/gen_notice_tables.py` (depuis `molonari_desk/`), et vérifiée par `tests/test_notice_doc.py`.
+
 ## Lancer
 
 Depuis `molonari_desk/` (l'espace uv) :

@@ -13,6 +13,8 @@ Ce dossier est un espace [uv](https://docs.astral.sh/uv/) à deux paquets, avec 
 
 Tout fonctionne en local, dans un seul processus : l'application appelle le backend directement, sans serveur.
 
+Notices : [utilisation](docs/NOTICE_UTILISATEUR.md) (prise en main de l'application) et [scientifique](docs/NOTICE_SCIENTIFIQUE.md) (modèle physique, inversion, fiabilité des résultats, pour l'hydrogéologue).
+
 ## Installation
 
 Prérequis : [uv](https://docs.astral.sh/uv/), Python 3.12 ou 3.13, et [ComplexGitSync](https://github.com/flipoyo/ComplexGitSync) (`cgitsync`).
