@@ -24,6 +24,14 @@ Jusqu'à 0.6.0-alpha.1, le backend faisait partie du paquet molonaviz2 : son his
 - `--level admin` reste accepté et se comporte comme `opx`, sans avertissement.
 - Contrat `/v1` et snapshot OpenAPI inchangés (aucune route ni modèle nouveau).
 
+### T2 : sous-échantillon public des chaînes
+
+- Nouvelle clé `report.publication_thin` (multiple du `thin` de calcul, hors `canonical()`, donc hors `twin_id`). Valeur par défaut : 10.
+- `report` écrit `chains.npz` dans le rapport public : paramètres, énergies, acceptation, réinitialisations, itération d'origine par chaîne.
+- Pas de champs T ni q, pas de graine, pas d'état final. `np.load(..., allow_pickle=False)` réussit.
+- L'index du rapport cite le SHA-256 du `posterior.npz` complet et `publication_thin`.
+- Erreur structurée si `publication_thin` n'est pas un multiple du `thin`.
+
 ### À venir
 
 - `molonari-twin reproduce <twin>` : relance le calcul sans cache, compare tous les fichiers produits (SHA-256) a la reference, ecrit un compte rendu JSON et texte sans la graine. Inclut `chain_state.npz` (T3), avec comparaison tableau par tableau (hors `burn_in_duration_s`). Reserve a `opx`.

@@ -291,7 +291,10 @@ def test_nothing_private_or_seed_related_is_written(computed_twins, reports):
 
 
 def listed(index):
-    return {"report.json", *(e["file"] for e in index["entries"]), *(f["file"] for f in index["figures"])}
+    files = {"report.json", *(e["file"] for e in index["entries"]), *(f["file"] for f in index["figures"])}
+    if index.get("chains") is not None:
+        files.add(index["chains"]["file"])
+    return files
 
 
 def on_disk(folder: Path):
@@ -497,3 +500,113 @@ def test_end_to_end_two_instances_without_the_seed(tmp_path, data_repo):
     generate_report(twins / "twin_02", again)
     assert {p.relative_to(again).as_posix(): p.read_bytes() for p in again.rglob("*") if p.is_file()} == \
         {p.relative_to(folder).as_posix(): p.read_bytes() for p in folder.rglob("*") if p.is_file()}
+
+
+# chains.npz (T2) : sous-échantillon public des chaînes -------------------------------------------------------
+
+
+def _load_chains(report):
+    """Charge chains.npz du rapport en dict de ndarrays, sans pickle."""
+    import io
+    buf = io.BytesIO(report.files["chains.npz"])
+    with np.load(buf, allow_pickle=False) as data:
+        return {k: data[k] for k in data.files}
+
+
+@pytest.mark.slow
+def test_chains_npz_is_generated_and_loadable_without_pickle(computed_twins):
+    """chains.npz est dans le rapport, chargeable sans pickle, et contient les bonnes clés."""
+    api = TwinAPI(computed_twins)
+    space = space_of(computed_twins, INVERSION)
+    report = build_report(space, api)
+    assert "chains.npz" in report.files
+    chains = _load_chains(report)
+    expected = {"iteration", "chain", "energy", "acceptance", "resets",
+                "samples.neg_log10_k", "samples.porosity", "samples.lambda_s", "samples.rhos_cs"}
+    assert expected <= set(chains.keys())
+
+
+@pytest.mark.slow
+def test_chains_npz_no_leak(computed_twins):
+    """Aucune clé ne contient seed, T, temperature ni flux ; aucun chemin de la machine n'apparaît."""
+    api = TwinAPI(computed_twins)
+    report = build_report(space_of(computed_twins, INVERSION), api)
+    chains = _load_chains(report)
+    for forbidden in ("seed", "temperature", "flux"):
+        assert not any(forbidden in k for k in chains), f"key containing {forbidden!r} found"
+    # Aucun chemin n'apparaît dans les valeurs stringifiées
+    raw = report.files["chains.npz"]
+    import os
+    assert os.path.expanduser("~").encode() not in raw
+
+
+@pytest.mark.slow
+def test_chains_npz_derives_from_posterior(computed_twins):
+    """chains.npz dérive exactement de posterior.npz (mêmes échantillons, sous-échantillonnés)."""
+    from molonari_twin.twin.run import twin_status
+    api = TwinAPI(computed_twins)
+    space = space_of(computed_twins, INVERSION)
+    report = build_report(space, api)
+    chains = _load_chains(report)
+    status = twin_status(computed_twins / "twin_03")
+    with np.load(status.results_dir / "posterior.npz") as post:
+        pub_thin = space.publication_thin
+        config = load_twin(computed_twins / "twin_03")
+        ratio = pub_thin // config.mcmc.thin
+        rows = np.arange(post["samples"].shape[0])[ratio - 1 :: ratio]
+        np.testing.assert_array_equal(chains["energy"], post["energy"][rows])
+        for k in ("neg_log10_k", "porosity", "lambda_s", "rhos_cs"):
+            idx = ("neg_log10_k", "porosity", "lambda_s", "rhos_cs").index(k)
+            np.testing.assert_array_equal(chains[f"samples.{k}"], post["samples"][rows][..., idx])
+
+
+@pytest.mark.slow
+def test_chains_npz_report_cites_posterior_sha256(computed_twins):
+    """L'index du rapport cite le SHA-256 du posterior.npz et publication_thin."""
+    api = TwinAPI(computed_twins)
+    report = build_report(space_of(computed_twins, INVERSION), api)
+    chains_info = report.index.get("chains")
+    assert chains_info is not None
+    assert chains_info["publication_thin"] == 10
+    assert chains_info["posterior_sha256"] is not None
+    assert len(chains_info["posterior_sha256"]) == 64  # hex sha256
+
+
+@pytest.mark.slow
+def test_publication_thin_not_multiple_of_thin_is_rejected(tmp_path):
+    """publication_thin qui n'est pas un multiple du thin de calcul donne une erreur."""
+    yaml_text = """schema: molonari-twin/2.0.0
+name: twin_x
+mode: mcmc
+data: {lab: Laboratory, point: SamplingPoints/Point034}
+layers:
+  - {name: couche, z_low: 0.4}
+mcmc:
+  nb_chains: 7
+  nb_iter: 30
+  thin: 3
+  burn_in_max: 10
+  n_field_samples: 7
+report:
+  publication_thin: 7
+  entries:
+    - {question: water_flux, parameters: {level: 0.9}}
+    - {question: fit_quality}
+"""
+    from molonari_twin.twin.config import TwinConfigError, load_twin
+    folder = tmp_path / "twin_x"
+    folder.mkdir()
+    (folder / "twin.yaml").write_text(yaml_text, encoding="utf-8")
+    with pytest.raises(TwinConfigError) as exc_info:
+        load_twin(folder, check_data=False)
+    assert any(i.code == "E_TWIN_PUBLICATION_THIN_MULTIPLE" for i in exc_info.value.issues)
+
+
+@pytest.mark.slow
+def test_publication_thin_does_not_change_twin_id(computed_twins):
+    """Changer publication_thin ne change pas le twin_id (hors canonical)."""
+    config = load_twin(computed_twins / "twin_03")
+    id_a = config.twin_id("test-version")
+    config2 = dataclasses.replace(config, report=dataclasses.replace(config.report, publication_thin=99))
+    id_b = config2.twin_id("test-version")
+    assert id_a == id_b

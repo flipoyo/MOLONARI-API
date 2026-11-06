@@ -299,3 +299,75 @@ def test_the_public_description_gives_the_site_label_and_the_monitoring_but_not_
     assert public.data["site_label"].value == "Rivière du Bas-Rhin, site amont" and public.data["monitoring_status"].value == "actif"
     assert public.data["point"].value == "Point034"  # un rapport public appartient à un point réel
     assert not [name for name in public.data if name.startswith(("visibility.", "report_")) or name in ("name", "description")]
+
+
+# publication_thin (T2) ---------------------------------------------------------------------------------------------------
+
+
+def test_publication_thin_has_a_default_value(tmp_path, data_repo):
+    """Sans clé, publication_thin vaut 10."""
+    config = load_twin(write_twin(tmp_path, RAW_MCMC))
+    assert config.report.publication_thin == 10
+
+
+def test_publication_thin_is_read_and_validated(tmp_path, data_repo):
+    """publication_thin doit être un entier multiple du thin de calcul."""
+    # Valide : publication_thin = 20, thin = 2, multiple OK
+    text = RAW_MCMC + """report:
+  entries:
+    - {question: water_flux, parameters: {level: 0.9}}
+    - {question: fit_quality}
+  publication_thin: 20
+mcmc:
+  thin: 2
+"""
+    config = load_twin(write_twin(tmp_path, text))
+    assert config.report.publication_thin == 20
+
+
+def test_publication_thin_must_be_an_integer(tmp_path, data_repo):
+    """publication_thin doit être un entier."""
+    text = RAW_MCMC + """report:
+  entries:
+    - {question: water_flux, parameters: {level: 0.9}}
+    - {question: fit_quality}
+  publication_thin: 10.5
+"""
+    assert ("report.publication_thin", "E_TWIN_EXPECTED_INTEGER") in refused(tmp_path, text)
+
+
+def test_publication_thin_must_be_positive(tmp_path, data_repo):
+    """publication_thin doit être >= 1."""
+    text = RAW_MCMC + """report:
+  entries:
+    - {question: water_flux, parameters: {level: 0.9}}
+    - {question: fit_quality}
+  publication_thin: 0
+"""
+    assert ("report.publication_thin", "E_VALUE_OUT_OF_RANGE") in refused(tmp_path, text)
+
+
+def test_publication_thin_must_be_a_multiple_of_thin(tmp_path, data_repo):
+    """publication_thin doit être un multiple du thin de calcul."""
+    text = RAW_MCMC + """report:
+  entries:
+    - {question: water_flux, parameters: {level: 0.9}}
+    - {question: fit_quality}
+  publication_thin: 15
+mcmc:
+  thin: 4
+"""
+    assert ("report.publication_thin", "E_TWIN_PUBLICATION_THIN_MULTIPLE") in refused(tmp_path, text)
+
+
+def test_changing_publication_thin_does_not_change_the_twin_id(tmp_path, data_repo):
+    """publication_thin n'entre pas dans canonical(), donc ne change pas le twin_id."""
+    text_base = RAW_MCMC + """report:
+  entries:
+    - {question: water_flux, parameters: {level: 0.9}}
+    - {question: fit_quality}
+  publication_thin: """
+    config1 = load_twin(write_twin(tmp_path / "t1", text_base + "10"))
+    config2 = load_twin(write_twin(tmp_path / "t2", text_base + "20"))
+    # Les deux configs ne diffèrent que par publication_thin (canonical sans graine)
+    assert config1.canonical("test", with_seed=False) == config2.canonical("test", with_seed=False)

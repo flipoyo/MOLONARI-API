@@ -1,4 +1,5 @@
 {
+ "must be a multiple of the computation thin ({thin}).": "doit être un multiple du thin de calcul ({thin}).",
  "Twin {twin_id} has no saved state (chain_state.npz): run it first.": "Le twin {twin_id} n'a pas d'état sauvegardé (chain_state.npz) : lancez-le d'abord.",
  "Twin {twin_id} has no configuration saved: the results may be incomplete.": "Le twin {twin_id} n'a pas de configuration sauvegardée : les résultats sont peut-être incomplets.",
  "Twin \"{name}\" has no results yet: run it first.": "Le twin « {name} » n'a pas encore de résultats : lancez-le d'abord.",

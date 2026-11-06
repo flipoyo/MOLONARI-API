@@ -105,3 +105,33 @@ def posterior_samples(result: InversionResult | TwinResults, chains=None, iterat
             "chains": None if chains is None else selected, "iter_range": None if iterations is None else list(iterations),
             "burn": int(burn), "thin": int(thin)}},
     )
+
+
+def public_chains_npz(result: InversionResult | TwinResults, publication_thin: int, computation_thin: int) -> dict[str, np.ndarray]:
+    """Tableau npz public des chaînes (T2) : paramètres, énergies, acceptation, réinitialisations, itération d'origine.
+
+    Pas de champs T ni q, pas de graine, pas d'état final. Sélection après burn-in, une itération sur
+    ``publication_thin`` itérations calculées. ``publication_thin`` doit être un multiple de ``computation_thin``.
+
+    Retourne un dict de tableaux numpy, prêt pour ``np.savez`` (sans pickle).
+    """
+    assert publication_thin % computation_thin == 0, f"{publication_thin} is not a multiple of {computation_thin}"
+    ratio = publication_thin // computation_thin  # pas dans le tableau des itérations gardées
+    posterior = _posterior(result)
+    nb_chains = np.asarray(posterior["samples"]).shape[1]
+    rows = np.arange(np.asarray(posterior["samples"]).shape[0])[ratio - 1 :: ratio]
+    numbers = np.asarray(posterior["iteration"])[rows]
+    selected = np.arange(nb_chains)
+
+    samples = np.asarray(posterior["samples"])[np.ix_(rows, selected)]  # (I′, N, L, 4)
+
+    result_npz: dict[str, np.ndarray] = {
+        "iteration": numbers.astype(np.int64),
+        "chain": selected.astype(np.int64),
+        "energy": np.asarray(posterior["energy"])[np.ix_(rows, selected)],
+        "acceptance": np.asarray(posterior["acceptance"])[selected],
+        "resets": np.asarray(posterior["resets"])[selected],
+    }
+    for k, name in enumerate(INVERTED_PARAMETERS):
+        result_npz[f"samples.{name}"] = samples[..., k]
+    return result_npz
