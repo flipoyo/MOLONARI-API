@@ -13,6 +13,7 @@ import json
 import queue
 import threading
 import time
+from datetime import timezone, datetime
 
 import paho.mqtt.client as mqtt
 
@@ -28,6 +29,16 @@ def normalize_eui(eui):
     return str(eui).strip().lower()
 
 
+
+
+def normalize_chirpstack_time(value):
+    '''Converts a ChirpStack ISO time (nanoseconds) to the same format as the other times (sensor_capture_time and relay_receive_time) that is YYYY-MM-DDTHH:MM:SS+UTC'''
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value).astimezone(timezone.utc).replace(microsecond=0).isoformat()
+    except ValueError:
+        return None
 
 # ---- Message handling ----
 
@@ -49,6 +60,7 @@ def extract_fields_from_payload(payload: dict):
     relay_receive_timestamp = Sensor.relay_receive_time
     relay_id = payload.get("deviceInfo").get("devEui")
     relay_ts = payload.get("time")
+    chirpstack_receive_time = normalize_chirpstack_time(payload.get("rxInfo")[0].get("nsTime"))
     gateway_id = payload.get("rxInfo")[0].get("gatewayId")
     gateway_ts = payload.get("rxInfo")[0].get("gwTime")
     fcnt = payload.get("fCnt")
@@ -57,6 +69,7 @@ def extract_fields_from_payload(payload: dict):
         "device_eui": device_eui,
         "timestamp": timestamp,
         "relay_receive_time": relay_receive_timestamp,
+        "chirpstack_receive_time": chirpstack_receive_time,
         "relay_id": relay_id,
         "relay_ts": relay_ts,
         "gateway_id": gateway_id,

@@ -77,3 +77,22 @@ def run_inversion(
     from .jax.dream import DreamSampler
 
     return DreamSampler(inputs, config).run(on_progress=on_progress, should_cancel=should_cancel)
+
+
+def continue_inversion(
+    inputs: ColumnInputs,
+    config: InversionConfig,
+    chain_state: dict,
+    nb_iter_continue: int,
+    on_progress: Callable | None = None,
+    should_cancel: Callable[[], bool] | None = None,
+) -> InversionResult:
+    """Reprendre une chaîne de Markov depuis un état final sauvegardé."""
+    from .jax.dream import DreamSampler
+
+    return DreamSampler(inputs, config).continue_from_state(
+        chain_state=chain_state,
+        nb_iter_continue=nb_iter_continue,
+        on_progress=on_progress,
+        should_cancel=should_cancel,
+    )
