@@ -1,0 +1,22 @@
+name: molonari-desk-version
+
+# Version SemVer des paquets de molonari_desk/ (backend molonari-twin, frontend molonari_desk) : pyproject.toml,
+# CHANGELOG.md et, sur un tag, correspondance du tag avec le paquet de son préfixe.
+on:
+  push:
+    tags: ["molonari-desk-v*", "molonari-twin-v*"]
+  pull_request:
+    paths: ["molonari_desk/**"]
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Vérifier la version
+        env:
+          TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: python molonari_desk/tools/check_version.py "$TAG"
