@@ -123,3 +123,14 @@ def test_other_commands_do_not_import_the_server(twin_01):
     completed = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=300, check=False)
     assert completed.returncode == 0, completed.stderr
     assert completed.stdout.strip().splitlines()[-1] == "[]"
+
+
+def test_continue_and_reproduce_announce_the_levels_of_the_4_level_scheme():
+    """Après la fusion de T3 et T6 sur T1 : `continue` est annoncé pour dev et opx, `reproduce` pour opx, avec les noms de T1
+    (jamais `admin`). Le niveau oriente l'usage, il n'est pas imposé par la ligne de commande."""
+    from molonari_twin.api.access import LEVELS
+    from molonari_twin.twin.cli import LEVELS as CLI_LEVELS
+
+    assert LEVELS == CLI_LEVELS == ("user", "dev", "opx")
+    commands = cli("--help", lang="en").stdout
+    assert "reproduce" in commands and "(dev, opx)" in commands and "(opx)" in commands and "admin" not in commands

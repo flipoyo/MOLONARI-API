@@ -66,11 +66,14 @@ Un twin est défini entièrement par son `twin.yaml` : données, paramètres du 
 ```
 <racine>/
   twins/                      ← dossier choisi dans l'application (Fichier › Twins)
-    registry.csv              ← une ligne par twin exécuté ou reconnu comme doublon
-    twin_01/twin.yaml + measurements.csv
+    twin_01/
+      twin.yaml + measurements.csv
+      registry.csv            ← une ligne par exécution de ce twin (ou reconnue comme doublon)
+      results/<twin_id>/      ← temperature.csv, water_flux.csv, residuals.csv, metadata.json, champs de flux (et .npz en mcmc)
     twin_02/…
-  results/<twin_id>/          ← temperature.csv, water_flux.csv, residuals.csv, metadata.json, champs de flux (et .npz en mcmc)
 ```
+
+Le registre et les résultats sont dans le dossier du twin (le sous-dépôt du twin, dans la disposition de MOLONARI-TWIN). L'ancienne disposition (`twins/registry.csv` et `results/<twin_id>/` à la racine) reste lue, avec un avertissement ; on n'y écrit plus. La graine de référence d'un twin mcmc est lue dans `<point>/orx/<twin>.yaml`, ou à défaut dans `orx.yaml` à côté de `twin.yaml`.
 
 Les résultats sont au format 2.0.0 (`metadata.json["results_format"]`) :
 - **Format 1.x, toujours écrit à l'identique** : `temperature.csv` θ(z, t), `water_flux.csv` q(t) au fond de la rivière, `residuals.csv`, et en mcmc `posterior_summary.csv` et `posterior_samples.csv`.
@@ -131,7 +134,7 @@ Les exemples fournis portent tous sur Point034. Leurs identifiants valent pour m
 | `twin_03` | mcmc | `5e5be1abb4833551` | inversion courte (8 chaînes, 300 itérations, graine 1) |
 | `twin_04` | mcmc | `01fd14746ddae774` | créé depuis l'application, à partir d'une inversion |
 
-Pour réinitialiser la démo : fermer l'application, puis `rm examples/twins/registry.csv; rm -rf examples/results`.
+Pour réinitialiser la démo : fermer l'application, puis `rm -f examples/twins/*/registry.csv; rm -rf examples/twins/*/results`.
 
 Le schéma complet de `twin.yaml`, avec toutes les clés acceptées, est documenté dans `backend/src/molonari_twin/twin/config.py`.
 

@@ -1,14 +1,17 @@
-"""Registre des twins (`twins/registry.csv`) et emplacement des résultats (`results/<twin_id>/`).
+"""Registre d'un twin (`registry.csv`) et emplacement de ses résultats (`results/<twin_id>/`).
 
-Disposition sur disque (le dossier « twins » est celui choisi dans l'application) :
+Disposition sur disque (T7, spec 4 niveaux §9) : le registre et les résultats sont **dans le dossier du twin**, donc dans
+le sous-dépôt de ce twin, et le chemin d'un sous-dépôt est le même à tous les niveaux :
 
-    <racine>/
+    <point>/
       twins/
-        registry.csv
-        twin_01/twin.yaml (+ fichier de mesures)
-        twin_02/twin.yaml
-      results/
-        <twin_id>/  temperature.csv, water_flux.csv, residuals.csv, metadata.json, …
+        twin_mcmc/
+          twin.yaml
+          registry.csv
+          results/<twin_id>/   temperature.csv, water_flux.csv, residuals.csv, metadata.json, chain_state.npz, …
+
+Ancienne disposition, toujours lue avec un avertissement (twins de `examples/`, démo) : un registre partagé
+`<point>/twins/registry.csv` et des résultats partagés `<point>/results/<twin_id>/`. On n'y écrit plus.
 
 Le registre garde une ligne par twin exécuté (ou reconnu comme doublon). Il permet :
 - de renvoyer au résultat existant quand une config identique est relancée ;
@@ -34,24 +37,36 @@ class RegistryEntry:
     created_at: str
     duration_s: str
     code_version: str
-    results: str  # chemin relatif à la racine (parent du dossier twins)
+    results: str  # chemin relatif au dossier du twin (ancienne disposition : à la racine du point)
     duplicate_of: str = ""
 
 
-def twins_root(twins_folder: Path) -> Path:
-    return Path(twins_folder).parent
+def registry_path(twin_folder: Path) -> Path:
+    return Path(twin_folder) / REGISTRY_NAME
 
 
-def results_folder(twins_folder: Path) -> Path:
-    return twins_root(twins_folder) / RESULTS_FOLDER
+def results_folder(twin_folder: Path) -> Path:
+    return Path(twin_folder) / RESULTS_FOLDER
 
 
-def results_dir(twins_folder: Path, twin_id: str) -> Path:
-    return results_folder(twins_folder) / twin_id
+def results_dir(twin_folder: Path, twin_id: str) -> Path:
+    return results_folder(twin_folder) / twin_id
 
 
-def read_registry(twins_folder: Path) -> list[RegistryEntry]:
-    path = Path(twins_folder) / REGISTRY_NAME
+def legacy_root(twin_folder: Path) -> Path:
+    """Racine de l'ancienne disposition : le parent du dossier `twins`, qui portait `results/`."""
+    return Path(twin_folder).parent.parent
+
+
+def legacy_registry_path(twin_folder: Path) -> Path:
+    return Path(twin_folder).parent / REGISTRY_NAME
+
+
+def legacy_results_dir(twin_folder: Path, twin_id: str) -> Path:
+    return legacy_root(twin_folder) / RESULTS_FOLDER / twin_id
+
+
+def _read_csv(path: Path) -> list[RegistryEntry]:
     if not path.is_file():
         return []
     names = [f.name for f in fields(RegistryEntry)]
@@ -59,8 +74,29 @@ def read_registry(twins_folder: Path) -> list[RegistryEntry]:
         return [RegistryEntry(**{k: row.get(k, "") or "" for k in names}) for row in csv.DictReader(handle)]
 
 
-def append_entry(twins_folder: Path, entry: RegistryEntry) -> None:
-    path = Path(twins_folder) / REGISTRY_NAME
+def read_registry(twin_folder: Path) -> list[RegistryEntry]:
+    """Les lignes du registre du twin `twin_folder`, anciennes d'abord : celles du registre partagé de l'ancienne disposition
+    (pour les twins qui ont encore des résultats là), puis celles du registre du twin, qui l'emportent (`entry_for_name`
+    prend la dernière)."""
+    own = _read_csv(registry_path(twin_folder))
+    seen = {(e.twin_id, e.name, e.status) for e in own}
+    old = [e for e in _read_csv(legacy_registry_path(twin_folder)) if (e.twin_id, e.name, e.status) not in seen]
+    return old + own
+
+
+def locate_results(twin_folder: Path, entry: RegistryEntry) -> tuple[Path, bool] | None:
+    """Où sont les résultats de `entry` : (dossier, ancien emplacement ?) ou None s'ils ont disparu. Le dossier du twin
+    d'abord ; sinon l'ancien `<point>/results/`, que la ligne cite relativement à sa racine."""
+    twin_folder = Path(twin_folder)
+    for candidate, legacy in ((twin_folder / entry.results, False), (results_dir(twin_folder, entry.twin_id), False),
+                              (legacy_root(twin_folder) / entry.results, True), (legacy_results_dir(twin_folder, entry.twin_id), True)):
+        if (candidate / "metadata.json").is_file():
+            return candidate, legacy
+    return None
+
+
+def append_entry(twin_folder: Path, entry: RegistryEntry) -> None:
+    path = registry_path(twin_folder)
     new = not path.is_file()
     with open(path, "a", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=[f.name for f in fields(RegistryEntry)])

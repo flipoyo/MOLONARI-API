@@ -31,6 +31,7 @@ from __future__ import annotations
 import dataclasses
 import io
 import json
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -54,6 +55,7 @@ from .writer import (
 )
 
 REPORT_FORMAT = "1.0.0"
+PUBLIC_REPORTS = "public_reports"
 ROLES = ("forward", "inversion")
 MODE_OF_ROLE = {"forward": "direct", "inversion": "mcmc"}
 ROLE_OF_MODE = {mode: role for role, mode in MODE_OF_ROLE.items()}
@@ -81,6 +83,7 @@ class Space:
     entries: tuple[ReportEntry, ...]
     declared: bool  # False : le twin n'a pas de clé `report`, c'est le rapport par défaut
     publication_thin: int = 10  # facteur de sous-échantillonnage pour les chaînes publiques (T2)
+    local: bool = False  # rapport local d'un dev (`--forward`) : l'index le dit, ce n'est pas une publication (T7)
 
 
 @dataclass(frozen=True)
@@ -110,26 +113,34 @@ class ReportResult:
 # Space -------------------------------------------------------------------------------------------------------------
 
 
-def resolve_space(twin: str | Path) -> Space:
+def resolve_space(twin: str | Path, forward: str | Path | None = None) -> Space:
     """Le space du rapport du twin `twin` (dossier ou twin.yaml) : E_REPORT_MODEL_MODE si un twin désigné n'a pas le bon
-    mode, E_REPORT_POINT_MISMATCH si les twins ne portent pas sur le même point, E_TWIN_NOT_FOUND s'il n'existe pas."""
+    mode, E_REPORT_POINT_MISMATCH si les twins ne portent pas sur le même point, E_TWIN_NOT_FOUND s'il n'existe pas.
+    `forward` (T7) : dossier du twin direct, donné explicitement à la place du frère nommé par `report.models` ; `twin` est alors
+    l'inversion, par exemple un twin de σ hors du point. Le space est marqué local."""
     folder = config_path(twin).parent
     config = load_twin(folder)
     spec = config.report
-    if spec.forward or spec.inversion:
+    other: dict[str, Path] = {}
+    if forward is not None:
+        other["forward"] = config_path(forward).parent
+        if other["forward"].name == folder.name:
+            raise UserError("E_REPORT_FORWARD_SAME", ref=folder.name)
+        refs = {"forward": other["forward"].name, "inversion": folder.name}
+    elif spec.forward or spec.inversion:
         refs = {role: name for role, name in (("forward", spec.forward), ("inversion", spec.inversion)) if name}
     else:
         refs = {ROLE_OF_MODE[config.mode]: folder.name}
     api = TwinAPI(folder.parent)
     configs = {}
     for role, ref in refs.items():
-        configs[role] = config if ref == folder.name else load_twin(api.twin_folder(ref))
+        configs[role] = config if ref == folder.name else load_twin(other.get(role) or api.twin_folder(ref))
         if configs[role].mode != MODE_OF_ROLE[role]:
             raise UserError("E_REPORT_MODEL_MODE", ref=ref, mode=configs[role].mode, role=role, expected=MODE_OF_ROLE[role])
     points = sorted({c.point for c in configs.values()})
     if len(points) > 1:  # un rapport public appartient à un seul sampling point
         raise UserError("E_REPORT_POINT_MISMATCH", points=", ".join(points))
-    return Space(folder.name, refs, configs, spec.entries, spec.declared, spec.publication_thin)
+    return Space(folder.name, refs, configs, spec.entries, spec.declared, spec.publication_thin, local=forward is not None)
 
 
 def effective_visibility(configs) -> Visibility:
@@ -298,10 +309,13 @@ def build_report(space: Space, api: TwinAPI, npz_threshold: int = NPZ_THRESHOLD)
                 "sha256": sha256(chains_bytes),
             }
 
+    space_index = {role: (_space_entry(space.refs[role], metadata[role]) if role in space.refs else None) for role in ROLES}
+    if space.local:  # le dev cite son twin d'inversion par son twin_id (il n'est dans aucun registre public)
+        space_index["inversion"]["twin_id"] = metadata["inversion"]["twin_id"]
     index = {
         "report_format": REPORT_FORMAT,
         "point": next(iter(space.configs.values())).point,  # le sampling point du rapport, commun aux twins du space
-        "space": {role: (_space_entry(space.refs[role], metadata[role]) if role in space.refs else None) for role in ROLES},
+        "space": space_index,
         "twin_semver": None,  # le SemVer composé du Twin attend P0.4
         "generated_at": max(str(m["created_at"]) for m in metadata.values()),  # date du calcul, jamais l'horloge : mêmes octets
         "generator_version": _generator_version(),
@@ -314,6 +328,8 @@ def build_report(space: Space, api: TwinAPI, npz_threshold: int = NPZ_THRESHOLD)
         "signature": None,
         "license": None,
     }
+    if space.local:
+        index["local"] = True  # absente d'un rapport de l'OPX : ses octets ne changent pas
     files[INDEX_NAME] = dump_json(index)
     return Report(index, files, reasons)
 
@@ -324,14 +340,27 @@ def _generator_version() -> str:
     return f"molonari-twin {__version__}"
 
 
-def generate_report(twin: str | Path, output: str | Path | None = None, npz_threshold: int = NPZ_THRESHOLD) -> ReportResult:
-    """Génère le rapport du twin `twin` (dossier ou twin.yaml) dans `output` (par défaut `<twin>/Public Report`)."""
+def generate_report(twin: str | Path, output: str | Path | None = None, npz_threshold: int = NPZ_THRESHOLD,
+                    forward: str | Path | None = None) -> ReportResult:
+    """Génère le rapport du twin `twin` (dossier ou twin.yaml) dans `output` (par défaut `<twin>/Public Report`).
+
+    Avec `forward` (dossier du twin direct), le rapport est **local** (T7) : celui d'un dev pour un twin de σ hors du point.
+    Il n'écrit rien dans le twin direct (`generation.yaml` reste à l'OPX) et refuse une sortie dans `public_reports/`."""
     folder = config_path(twin).parent
-    space = resolve_space(folder)
-    report = build_report(space, TwinAPI(folder.parent), npz_threshold)
     target = Path(output) if output is not None else folder / FOLDER_NAME
+    if forward is not None and PUBLIC_REPORTS in target.resolve().parts:
+        raise UserError("E_REPORT_LOCAL_OUTPUT_FORBIDDEN", path=str(target), folder=PUBLIC_REPORTS)
+    space = resolve_space(folder, forward)
+    if forward is None:
+        report = build_report(space, TwinAPI(folder.parent), npz_threshold)
+    else:
+        # Le twin direct n'est pas un frère : un dossier d'appoint les nomme tous deux (liens), le temps du calcul.
+        with tempfile.TemporaryDirectory() as staging:
+            for role in ROLES:
+                (Path(staging) / space.refs[role]).symlink_to(space.configs[role].folder.resolve(), target_is_directory=True)
+            report = build_report(space, TwinAPI(staging), npz_threshold)
     write_folder(target, report.files)
-    if len(space.refs) == len(ROLES):
+    if forward is None and len(space.refs) == len(ROLES):
         # Réglages de génération (T4) : dans le twin direct (niveau user), jamais dans le rapport public
         from ..twin.generate import write_generation
 

@@ -4,7 +4,7 @@
     2. la config est validée (config.load_twin) ;
     3. le twin_id est calculé et le registre consulté (status) ;
     4. le twin est exécuté en mode direct ou mcmc (run_twin) ;
-    5. les résultats sont rangés dans results/<twin_id>/ et le registre mis à jour ;
+    5. les résultats sont rangés dans <dossier du twin>/results/<twin_id>/ et le registre du twin mis à jour ;
     6. une config identique relancée est signalée comme doublon : le résultat existant
        est renvoyé sans recalcul.
 """
@@ -25,6 +25,7 @@ import yaml
 
 from ..errors import Issue, UserError
 from .config import (
+    DATA_ROOT_FILE,
     TwinConfig,
     TwinConfigError,
     config_path,
@@ -33,16 +34,16 @@ from .config import (
     load_twin,
     without_seed,
 )
-from .orx import ORX_NAME
+from .orx import ORX_NAME, ORX_SCHEMA, TWINS_FOLDER
 from .provenance import provenance_warnings, strict_problems, twin_provenance
 from .registry import (
     RegistryEntry,
     append_entry,
     computed_entry,
     entry_for_name,
+    locate_results,
     read_registry,
     results_dir,
-    twins_root,
 )
 from .results import RESULTS_FORMAT, record_file_digests, write_results
 
@@ -58,10 +59,17 @@ class TwinStatus:
     state: str  # « new », « computed » (déjà calculé), « duplicate » (même config qu'un autre twin), « modified »
     source: RegistryEntry | None = None  # exécution qui a produit les résultats
     previous_id: str = ""  # pour « modified » : identifiant enregistré pour ce nom
+    results_path: Path | None = None  # où sont les résultats déjà calculés (None : ils iraient dans le dossier du twin)
+    legacy_results: bool = False  # les résultats sont à l'ancien emplacement, `<point>/results/<twin_id>/`
 
     @property
     def results_dir(self) -> Path:
-        return results_dir(self.twins_folder, self.twin_id)
+        return self.results_path or results_dir(self.config.folder, self.twin_id)
+
+    @property
+    def warnings(self) -> list[Issue]:
+        """W_RESULTS_LEGACY_LOCATION si les résultats sont lus à l'ancien emplacement (twins de `examples/`, démo)."""
+        return [Issue("results", "W_RESULTS_LEGACY_LOCATION", path=self.results_path)] if self.legacy_results else []
 
     @property
     def twins_folder(self) -> Path:
@@ -85,46 +93,51 @@ def twin_status(path_or_config, code_version: str | None = None) -> TwinStatus:
 
     config = path_or_config if isinstance(path_or_config, TwinConfig) else load_twin(path_or_config)
     code_version = code_version or api.engine_version()
-    twins_folder = config.folder.parent
-    entries = read_registry(twins_folder)
+    entries = read_registry(config.folder)
     named = entry_for_name(entries, config.name)
     if not config.has_seed:
-        return _status_without_seed(config, code_version, twins_folder, named)
+        return _status_without_seed(config, code_version, entries, named)
     twin_id = config.twin_id(code_version)
     if named is not None and named.twin_id != twin_id:
         return TwinStatus(config, twin_id, "modified", previous_id=named.twin_id)
     source = computed_entry(entries, twin_id)
-    if source is not None and (twins_root(twins_folder) / source.results / "metadata.json").is_file():
-        return TwinStatus(config, twin_id, "computed" if source.name == config.name else "duplicate", source)
+    found = locate_results(config.folder, source) if source is not None else None
+    if found is not None:
+        return TwinStatus(config, twin_id, "computed" if source.name == config.name else "duplicate", source, results_path=found[0], legacy_results=found[1])
     return TwinStatus(config, twin_id, "new")
 
 
-def _status_without_seed(config: TwinConfig, code_version: str, twins_folder: Path, named: RegistryEntry | None) -> TwinStatus:
+def _status_without_seed(config: TwinConfig, code_version: str, entries: list[RegistryEntry], named: RegistryEntry | None) -> TwinStatus:
     """État d'un twin 2.0.0 mcmc sans `orx.yaml` (lecture du dev). Le `twin_id` contient la graine : il n'est pas calculable
     ici, et c'est celui du registre qui sert. Le twin est « modified » si sa recette sans graine n'est plus celle que
     `metadata.json["config"]` a gardée ; « new » (`twin_id` vide) si le registre ne le connaît pas. Un changement de la
     seule graine ne se voit pas : seul ORX peut le voir."""
     if named is None:
         return TwinStatus(config, "", "new")
-    metadata = twins_root(twins_folder) / named.results / "metadata.json"
+    located = locate_results(config.folder, named)
     try:
-        stored = json.loads(metadata.read_text(encoding="utf-8")).get("config")
+        stored = json.loads((located[0] / "metadata.json").read_text(encoding="utf-8")).get("config") if located else None
     except (OSError, ValueError):
         return TwinStatus(config, "", "new")
     if json.loads(json.dumps(config.canonical(code_version, with_seed=False))) != stored:
         return TwinStatus(config, "", "modified", previous_id=named.twin_id)
-    source = computed_entry(read_registry(twins_folder), named.twin_id)
+    source = computed_entry(entries, named.twin_id)
     if source is None:
         return TwinStatus(config, "", "new")
-    return TwinStatus(config, named.twin_id, "computed" if source.name == config.name else "duplicate", source)
+    return TwinStatus(config, named.twin_id, "computed" if source.name == config.name else "duplicate", source,
+                      results_path=located[0], legacy_results=located[1])
 
 
-def with_sigma_temperature(path: str | Path, sigma: float) -> Path:
+def with_sigma_temperature(path: str | Path, sigma: float, space: str | Path | None = None, seed: int | None = None) -> Path:
     """Dossier du twin mcmc `path` avec σ de température = `sigma` (°C), à lancer à sa place.
 
-    Une config est figée (E_TWIN_FROZEN) : le twin d'origine n'est pas touché, le σ modifié vit dans un dossier frère
-    `<twin>_sigmaT<sigma>`, créé au premier appel et repris ensuite. Il garde la recette et la graine (`orx.yaml`) : seuls le
-    σ et le nom changent, et le rapport le désigne comme modèle d'inversion. Avec le σ du twin, rend le twin lui-même."""
+    Une config est figée (E_TWIN_FROZEN) : le twin d'origine n'est pas touché. Le σ modifié devient un **twin de dev**
+    (spec 4 niveaux §9) : le dossier `<twin>_sigmaT<sigma>` est créé dans `space` (l'operating space du dev, par défaut le
+    dossier courant), jamais dans le dépôt du point ni dans `<point>/twins/`, où un dev ne peut pas committer. Il garde la
+    recette, avec le σ et le nom changés, et **jamais la graine de référence** : ni `orx.yaml` ni `<point>/orx/<twin>.yaml` ne
+    sont copiés. Il porte la graine du dev (`seed`, écrite dans son propre `orx.yaml`) ; sans graine, `run_twin` le refuse
+    (E_TWIN_REQUIRED, `orx.mcmc.seed`). Ses résultats et son registre sont dans son dossier, comme pour tout twin. Avec le
+    σ du twin, rend le twin lui-même."""
     config = load_twin(path)
     folder = config.folder
     problems = []
@@ -134,29 +147,46 @@ def with_sigma_temperature(path: str | Path, sigma: float) -> Path:
         problems.append(Issue(SIGMA_OPTION, "E_TWIN_MCMC_ONLY", prefixed=True))
     if not config.raw_data:
         problems.append(Issue(SIGMA_OPTION, "E_TWIN_SIGMA_SCHEMA", prefixed=True))
+    if seed is not None and (isinstance(seed, bool) or seed < 0):
+        problems.append(Issue("--seed", "E_TWIN_MINIMUM", prefixed=True, v=0))
     if problems:
         raise TwinConfigError(problems)
     if sigma == config.sigma_temperature:
         return folder
-    target = folder.with_name(f"{folder.name.split(SIGMA_SUFFIX)[0]}{SIGMA_SUFFIX}{sigma!r}")
+    space = Path(space or Path.cwd()).resolve()
+    if _is_reference_repository(space, folder):
+        raise TwinConfigError([Issue(SIGMA_OPTION, "E_TWIN_SIGMA_SPACE", prefixed=True, space=space)])
+    target = space / f"{folder.name.split(SIGMA_SUFFIX)[0]}{SIGMA_SUFFIX}{sigma!r}"
     if target.exists():
         found = load_twin(target).sigma_temperature
         if found != sigma:
             raise TwinConfigError([Issue(SIGMA_OPTION, "E_TWIN_SIGMA_FOLDER", prefixed=True, folder=target, sigma=found)])
-        return target
-    recipe = yaml.safe_load(config.path.read_text(encoding="utf-8"))
-    recipe["name"] = target.name
-    recipe.pop("legacy_twin_id", None)  # l'identifiant 1.x est celui du twin d'origine
-    recipe["sensors"] = {**(recipe.get("sensors") or {}), "sigma_temperature": sigma}
-    models = (recipe.get("report") or {}).get("models") or {}
-    if models.get("inversion") == folder.name:
-        models["inversion"] = target.name
-    target.mkdir()
-    (target / config.path.name).write_text(yaml.safe_dump(recipe, sort_keys=False, allow_unicode=True), encoding="utf-8")
-    for name in (ORX_NAME, "twin.cgs"):
-        if (folder / name).is_file():
-            shutil.copy2(folder / name, target / name)
+    else:
+        recipe = yaml.safe_load(config.path.read_text(encoding="utf-8"))
+        recipe["name"] = target.name
+        recipe.pop("legacy_twin_id", None)  # l'identifiant 1.x est celui du twin d'origine
+        recipe["sensors"] = {**(recipe.get("sensors") or {}), "sigma_temperature": sigma}
+        models = (recipe.get("report") or {}).get("models") or {}
+        if models.get("inversion") == folder.name:
+            models["inversion"] = target.name
+        target.mkdir(parents=True)
+        (target / config.path.name).write_text(yaml.safe_dump(recipe, sort_keys=False, allow_unicode=True), encoding="utf-8")
+        if (folder / "twin.cgs").is_file():
+            shutil.copy2(folder / "twin.cgs", target / "twin.cgs")
+    if config.data_root is not None:
+        # Hors de l'espace cgs, le twin ne retrouverait pas les données : on lui donne la racine du twin source. Ce n'est pas
+        # la recette (twin.yaml est inchangé) et la racine n'entre pas dans canonical() : le twin_id ne dépend pas du lieu.
+        (target / DATA_ROOT_FILE).write_text(f"{config.data_root}\n", encoding="utf-8")
+    if seed is not None:
+        (target / ORX_NAME).write_text(f"schema: {ORX_SCHEMA}\nmcmc:\n  seed: {int(seed)}\n", encoding="utf-8")
     return target
+
+
+def _is_reference_repository(space: Path, twin_folder: Path) -> bool:
+    """Vrai si `space` est le dépôt du point du twin (ou son dossier `twins/`) : la graine de référence y vit, et le dev n'y
+    committe pas. Un twin hors de la disposition `<point>/twins/<twin>/` (déjà un twin de dev) n'a pas de point à protéger."""
+    twin_folder = twin_folder.resolve()
+    return twin_folder.parent.name == TWINS_FOLDER and space in (twin_folder.parent, twin_folder.parent.parent)
 
 
 def run_twin(path_or_config, on_progress: Callable | None = None, should_cancel: Callable[[], bool] | None = None,
@@ -169,7 +199,6 @@ def run_twin(path_or_config, on_progress: Callable | None = None, should_cancel:
     config = path_or_config if isinstance(path_or_config, TwinConfig) else load_twin(path_or_config)
     config.require_seed()  # calculer est une opération ORX : sans graine (orx.yaml), le twin se lit mais ne se lance pas
     status = twin_status(config)
-    twins_folder = status.twins_folder
     if status.state == "modified":
         raise UserError(
             "E_TWIN_FROZEN", name=config.name, previous=status.previous_id
@@ -181,12 +210,12 @@ def run_twin(path_or_config, on_progress: Callable | None = None, should_cancel:
         if problems:
             raise UserError("E_STRICT_REFUSED", issues=problems)
     if status.has_results:
-        entries = read_registry(twins_folder)
+        entries = read_registry(config.folder)
         if status.state == "duplicate" and entry_for_name(entries, config.name) is None:
-            append_entry(twins_folder, RegistryEntry(
+            append_entry(config.folder, RegistryEntry(
                 status.twin_id, config.name, config.mode, "duplicate", _now(), "0", status.source.code_version,
                 status.source.results, duplicate_of=status.source.name))
-        return TwinRun(status, computed=False)
+        return TwinRun(status, computed=False, warnings=status.warnings)
 
     started = time.perf_counter()
     inputs = config.column_inputs()
@@ -201,7 +230,7 @@ def run_twin(path_or_config, on_progress: Callable | None = None, should_cancel:
     code_version = api.engine_version()
     device = api.device()
     provenance = provenance or twin_provenance(config.folder, device)
-    target = results_dir(twins_folder, status.twin_id)
+    target = results_dir(config.folder, status.twin_id)
     partial = target.with_name(target.name + ".partial")
     if partial.exists():
         shutil.rmtree(partial)
@@ -212,8 +241,8 @@ def run_twin(path_or_config, on_progress: Callable | None = None, should_cancel:
     if target.exists():
         shutil.rmtree(target)
     os.replace(partial, target)  # les résultats apparaissent complets ou pas du tout
-    relative = target.relative_to(twins_root(twins_folder)).as_posix()
-    append_entry(twins_folder, RegistryEntry(status.twin_id, config.name, config.mode, "computed", _now(), f"{duration:.3f}", code_version, relative))
+    relative = target.relative_to(config.folder).as_posix()
+    append_entry(config.folder, RegistryEntry(status.twin_id, config.name, config.mode, "computed", _now(), f"{duration:.3f}", code_version, relative))
     return TwinRun(twin_status(config), computed=True, duration_s=duration, warnings=provenance_warnings(provenance))
 
 
@@ -346,8 +375,7 @@ def continue_twin(parent_folder: Path | str, nb_iter_continue: int,
     new_twin_id = f"{parent_twin_id}_+{nb_iter_continue}"
 
     # Créer un dossier temporaire pour le nouveau twin
-    twins_folder = config.folder.parent
-    target = results_dir(twins_folder, new_twin_id)
+    target = results_dir(config.folder, new_twin_id)
     partial = target.with_name(target.name + ".partial")
     if partial.exists():
         shutil.rmtree(partial)
@@ -365,8 +393,8 @@ def continue_twin(parent_folder: Path | str, nb_iter_continue: int,
     os.replace(partial, target)
 
     # Ajouter au registre
-    relative = target.relative_to(twins_root(twins_folder)).as_posix()
-    append_entry(twins_folder, RegistryEntry(
+    relative = target.relative_to(config.folder).as_posix()
+    append_entry(config.folder, RegistryEntry(
         new_twin_id, f"{config.name}_+{nb_iter_continue}", config.mode, "computed",
         _now(), f"{duration:.3f}", code_version, relative
     ))

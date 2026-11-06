@@ -234,7 +234,7 @@ def test_same_seed_in_two_fresh_processes_gives_identical_posterior(tmp_path, da
         completed = subprocess.run([sys.executable, "-m", "molonari_twin", "run", str(folder)], capture_output=True, text=True,
                                    timeout=600, check=False, env={**os.environ, "MOLONARI_LANG": "en"})
         assert completed.returncode == 0, completed.stderr
-        (results,) = (tmp_path / label / "results").iterdir()
+        (results,) = (folder / "results").iterdir()
         posteriors.append((results / "posterior.npz").read_bytes())
     assert posteriors[0] == posteriors[1]
 
@@ -278,7 +278,7 @@ def refusal(folder):
 
 
 def nothing_written(setup):
-    return not (setup.root / "results").exists() and not (setup.twins / "registry.csv").exists()
+    return not (setup.folder / "results").exists() and not (setup.folder / "registry.csv").exists()
 
 
 def test_strict_accepts_the_clean_published_setup(strict_setup):

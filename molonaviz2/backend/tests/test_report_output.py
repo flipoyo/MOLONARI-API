@@ -63,3 +63,53 @@ def test_report_output_to_public_reports_has_neither_the_seed_nor_an_absolute_pa
     for name in npz:
         with np.load(output / name, allow_pickle=False) as archive:
             assert all(archive[key].dtype.kind != "O" for key in archive.files)
+
+
+DEV_SEED = 5160273  # la graine du dev, distincte de SEED
+
+
+def tree_bytes(folder: Path) -> dict[str, bytes]:
+    return {p.relative_to(folder).as_posix(): p.read_bytes() for p in sorted(folder.rglob("*")) if p.is_file()}
+
+
+@pytest.mark.slow
+def test_a_dev_reports_a_sigma_twin_locally_against_the_direct_twin_of_the_point(tmp_path, data_repo, capsys, monkeypatch):  # noqa: F811
+    """T7 : `report <twin de σ> --forward <twin direct>`, hors du point. Local, sans `generation.yaml`, sans graine."""
+    from molonari_twin.twin.run import with_sigma_temperature
+
+    point = tmp_path / "workspace" / "Point034"
+    twins = write_space(point, seed=SEED)
+    run_twin(twins / "twin_01")
+    run_twin(twins / "twin_02")
+    assert main(["report", str(twins / "twin_02"), "--output", str(tmp_path / "opx")]) == 0  # l'OPX publie, et écrit generation.yaml
+    opx_index = json.loads((tmp_path / "opx" / "report.json").read_text(encoding="utf-8"))
+    assert "local" not in opx_index and "twin_id" not in opx_index["space"]["inversion"]  # le rapport de l'OPX garde ses octets
+    assert (twins / "twin_01" / "generation.yaml").is_file()
+
+    sigma = with_sigma_temperature(twins / "twin_02", 0.2, space=tmp_path / "dev_space", seed=DEV_SEED)
+    run_twin(sigma)
+    before = tree_bytes(twins / "twin_01")
+    capsys.readouterr()
+
+    monkeypatch.setenv("MOLONARI_LANG", "en")
+    assert main(["report", str(sigma), "--forward", str(twins / "twin_01")]) == 0  # 1. sortie par défaut : dans le twin de σ
+    out = capsys.readouterr().out
+    assert "Local report written" in out and "Public report" not in out  # pas « publié » : le rapport est local
+    local = sigma / "Public Report"
+    index = json.loads((local / "report.json").read_text(encoding="utf-8"))
+    assert index["local"] is True and index["space"]["inversion"]["twin"] == sigma.name  # le twin d'inversion est le twin de σ
+    assert index["space"]["inversion"]["twin_id"] and index["space"]["forward"]["twin"] == "twin_01"
+    assert any(e["model"] == "both" for e in index["entries"])  # la comparaison direct / inversion est là
+    assert on_disk(local) == listed(index)
+
+    for output in (point / "public_reports", point / "public_reports" / "sub"):  # 2. jamais dans public_reports/
+        capsys.readouterr()
+        assert main(["report", str(sigma), "--forward", str(twins / "twin_01"), "--output", str(output)]) == 1
+        assert "only the OPX publishes" in capsys.readouterr().err
+        assert not output.exists()
+
+    assert tree_bytes(twins / "twin_01") == before  # 3. le twin direct (generation.yaml, results/) est intact, octet pour octet
+
+    for name, content in tree_bytes(local).items():  # 4. ni la graine de référence ni celle du dev
+        for seed in (SEED, DEV_SEED):
+            assert str(seed).encode() not in content and np.int64(seed).tobytes() not in content, (name, seed)

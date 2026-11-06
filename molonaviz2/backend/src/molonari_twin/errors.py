@@ -173,6 +173,8 @@ MESSAGES: dict[str, str] = {
     # rapport public : générateur (P2c.3)
     "E_REPORT_EMPTY": "Nothing can be published: the report would have no entry.",
     "E_REPORT_POINT_MISMATCH": "The twins of a report must describe the same sampling point (found: {points}).",
+    "E_REPORT_FORWARD_SAME": "The twin \"{ref}\" cannot be its own direct twin: --forward names another twin.",
+    "E_REPORT_LOCAL_OUTPUT_FORBIDDEN": "{path} is in {folder}/: a local report (--forward) is not a publication, only the OPX publishes.",
     "E_REPORT_MODEL_MODE": "Twin \"{ref}\" is in {mode} mode, but the report expects a {role} twin ({expected} mode).",
     "W_NO_UNCERTAINTY": "Forward model: its parameters are fixed, so this result has no confidence interval.",
     # niveaux d'accès aux questions
@@ -273,12 +275,14 @@ MESSAGES: dict[str, str] = {
     "E_TWIN_REQUIRED": "required.",
     "E_TWIN_SEED_ORX": "the seed is reserved for ORX since schema 2.0.0: write mcmc.seed in orx.yaml (orx layer), not in twin.yaml.",
     "E_TWIN_SCHEMA": "unsupported schema \"{value}\" (expected {expected}).",
+    "E_TWIN_SIGMA_SPACE": "{space} is the repository of the sampling point: the twin with another σ is a dev twin, created in your own space (--space <folder>).",
     "E_TWIN_SIGMA_FOLDER": "{folder} already exists with a temperature σ of {sigma:g} °C: rename it, or remove it if it was not run.",
     "E_TWIN_SIGMA_SCHEMA": "needs a twin of schema 2.0.0.",
     "E_TWIN_SENSOR_DEPTHS": "expected 4 strictly increasing positive depths (m).",
     "E_TWIN_TOO_FEW_MEASUREMENTS": "fewer than 3 measurements in the selected period.",
     "E_TWIN_UNKNOWN_KEY": "unknown key (allowed: {keys}).",
     "W_FIELD_UNAVAILABLE": "Results written before format 2.0.0: flux fields, quantiles and chains are unavailable. Create a new twin with this version to get them.",
+    "W_RESULTS_LEGACY_LOCATION": "The results are read at the old location {path}: new results go to results/ in the twin folder.",
     "W_PROVENANCE_NOT_A_REPOSITORY": "The {target} is not in a git repository: its provenance is not recorded.",
     "W_PROVENANCE_NO_GIT": "git was not found: the provenance of the code and of the twin is not recorded.",
     "W_PROVENANCE_NO_REMOTE": "The git repository of the {target} has no remote: its URL is not recorded.",

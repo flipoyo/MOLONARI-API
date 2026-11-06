@@ -369,26 +369,66 @@ def test_sigma_temperature_of_the_yaml_reaches_the_inversion(tmp_path, data_repo
     assert config.sigma_temperature == 0.08 and config.inversion_config().sigma_t == 0.08
 
 
-def test_option_derives_a_sibling_twin_and_leaves_the_twin_untouched(tmp_path, data_repo):
+def test_option_derives_a_dev_twin_outside_the_point_and_leaves_the_twin_untouched(tmp_path, data_repo):
     text = RAW_MCMC + "legacy_twin_id: 0123456789abcdef\nreport:\n  models: {forward: twin_direct, inversion: twin_01}\n  entries:\n  - {question: water_flux, parameters: {level: 0.9}}\n  - {question: fit_quality}\n"
     folder = write_orx(write_twin(tmp_path, text))
     before = (folder / "twin.yaml").read_bytes()
+    space = tmp_path / "dev_space"
 
-    derived = with_sigma_temperature(folder, 0.08)
+    derived = with_sigma_temperature(folder, 0.08, space=space, seed=7)
 
-    assert derived == folder.with_name("twin_01_sigmaT0.08") and (folder / "twin.yaml").read_bytes() == before
+    assert derived == space / "twin_01_sigmaT0.08" and (folder / "twin.yaml").read_bytes() == before
+    assert not (folder.parent / "twin_01_sigmaT0.08").exists()  # jamais à côté du twin, dans le dépôt du point
     config, source = load_twin(derived), load_twin(folder)
     assert config.name == derived.name and config.report.inversion == derived.name and config.report.forward == "twin_direct"
-    assert config.inversion_config().sigma_t == 0.08 and config.seed == source.seed and config.legacy_twin_id is None
+    assert config.inversion_config().sigma_t == 0.08 and config.seed == 7 and config.legacy_twin_id is None
     assert config.twin_id("v") != source.twin_id("v")
-    assert with_sigma_temperature(folder, 0.08) == derived  # repris, pas recréé
-    assert with_sigma_temperature(derived, 0.2).name == "twin_01_sigmaT0.2"  # le suffixe ne s'empile pas
-    assert with_sigma_temperature(folder, source.sigma_temperature) == folder
+    assert with_sigma_temperature(folder, 0.08, space=space, seed=7) == derived  # repris, pas recréé
+    assert with_sigma_temperature(derived, 0.2, space=space, seed=7).name == "twin_01_sigmaT0.2"  # le suffixe ne s'empile pas
+    assert with_sigma_temperature(folder, source.sigma_temperature, space=space) == folder
+
+
+def test_dev_twin_never_carries_the_reference_seed(tmp_path, data_repo):
+    """Même recette : le twin_id diffère dès que la graine diffère, et la graine de référence n'est dans aucun fichier du twin créé."""
+    reference = 424242
+    folder = write_twin(tmp_path, RAW_MCMC)
+    (tmp_path / "orx").mkdir()
+    (tmp_path / "orx" / "twin_01.yaml").write_text(f"mcmc:\n  seed: {reference}\n", encoding="utf-8")  # <point>/orx/<twin>.yaml
+    (folder / "orx.yaml").write_text(f"mcmc:\n  seed: {reference}\n", encoding="utf-8")  # et, à côté, comme avant le lot 7
+    assert load_twin(folder).seed == reference
+    ids = {}
+    for label, seed in (("a", 7), ("b", 8), ("c", 7)):
+        derived = with_sigma_temperature(folder, 0.08, space=tmp_path / label, seed=seed)
+        files = sorted(p for p in derived.rglob("*") if p.is_file())
+        assert str(reference) not in "".join(p.read_text(encoding="utf-8") for p in files)
+        assert {p.name for p in files} == {"twin.yaml", "orx.yaml", "data_root.txt"}
+        ids[label] = load_twin(derived).twin_id("v")
+    assert ids["a"] != ids["b"] and ids["a"] == ids["c"]
+    assert ids["a"] != load_twin(folder).twin_id("v")
+
+
+def test_dev_twin_without_a_seed_is_refused_by_run(tmp_path, data_repo):
+    folder = seeded(tmp_path, seed=424242)
+    derived = with_sigma_temperature(folder, 0.08, space=tmp_path / "dev_space")
+    assert not (derived / "orx.yaml").exists()  # la graine de référence n'est pas copiée
+    with pytest.raises(TwinConfigError) as error:
+        run_twin(derived)
+    assert codes(error) == [("orx.mcmc.seed", "E_TWIN_REQUIRED")]
+    assert not (derived / "results").exists()
+
+
+@pytest.mark.parametrize("where", [".", "twins"])
+def test_option_refuses_the_repository_of_the_point(tmp_path, data_repo, where):
+    folder = seeded(tmp_path)  # tmp_path/twins/twin_01 : le point est tmp_path
+    with pytest.raises(TwinConfigError) as error:
+        with_sigma_temperature(folder, 0.08, space=tmp_path / where)
+    assert codes(error) == [("--sigma-temperature", "E_TWIN_SIGMA_SPACE")]
+    assert [p.name for p in (tmp_path / "twins").iterdir()] == ["twin_01"]
 
 
 def test_option_keeps_the_identity_of_a_twin_written_by_hand(tmp_path, data_repo):
-    """Même recette et même σ, à la main ou par l'option : même twin_id (le nom n'y entre pas)."""
-    derived = with_sigma_temperature(seeded(tmp_path), 0.08)
+    """Même recette, même σ et même graine, à la main ou par l'option : même twin_id (le nom n'y entre pas)."""
+    derived = with_sigma_temperature(seeded(tmp_path), 0.08, space=tmp_path / "dev_space", seed=42)
     text = RAW_MCMC.replace("layers:", "sensors: {sigma_temperature: 0.08}\nlayers:")
     by_hand = write_orx(write_twin(tmp_path, text, "twin_02"))
     assert load_twin(derived).twin_id("v") == load_twin(by_hand).twin_id("v")
@@ -398,51 +438,140 @@ def test_option_keeps_the_identity_of_a_twin_written_by_hand(tmp_path, data_repo
 def test_option_refuses_a_sigma_that_is_not_positive(tmp_path, data_repo, sigma):
     folder = seeded(tmp_path)
     with pytest.raises(TwinConfigError) as error:
-        with_sigma_temperature(folder, sigma)
+        with_sigma_temperature(folder, sigma, space=tmp_path / "dev_space")
     assert codes(error) == [("--sigma-temperature", "E_TWIN_POSITIVE")]
-    assert [path.name for path in folder.parent.iterdir()] == ["twin_01"]
+    assert [path.name for path in folder.parent.iterdir()] == ["twin_01"] and not (tmp_path / "dev_space").exists()
 
 
 def test_option_refuses_a_direct_twin(tmp_path, data_repo):
     with pytest.raises(TwinConfigError) as error:
-        with_sigma_temperature(write_twin(tmp_path, RAW_DIRECT), 0.08)
+        with_sigma_temperature(write_twin(tmp_path, RAW_DIRECT), 0.08, space=tmp_path / "dev_space")
     assert codes(error) == [("--sigma-temperature", "E_TWIN_MCMC_ONLY")]
 
 
 def test_option_refuses_a_twin_before_schema_2(tmp_path):
     folder = shutil.copytree(EXAMPLES / "twin_03", tmp_path / "twin_03")
     with pytest.raises(TwinConfigError) as error:
-        with_sigma_temperature(folder, 0.08)
+        with_sigma_temperature(folder, 0.08, space=tmp_path / "dev_space")
     assert codes(error) == [("--sigma-temperature", "E_TWIN_SIGMA_SCHEMA")]
 
 
 def test_option_refuses_a_folder_with_another_sigma(tmp_path, data_repo):
     folder = seeded(tmp_path)
-    derived = with_sigma_temperature(folder, 0.08)
+    derived = with_sigma_temperature(folder, 0.08, space=tmp_path / "dev_space")
     edited = (derived / "twin.yaml").read_text(encoding="utf-8").replace("0.08", "0.09")
     (derived / "twin.yaml").write_text(edited, encoding="utf-8")
     with pytest.raises(TwinConfigError) as error:
-        with_sigma_temperature(folder, 0.08)
+        with_sigma_temperature(folder, 0.08, space=tmp_path / "dev_space")
     assert codes(error) == [("--sigma-temperature", "E_TWIN_SIGMA_FOLDER")]
 
 
-def test_run_with_the_option_after_the_twin_was_computed(tmp_path, data_repo, capsys):
-    """Le parcours du dev : un twin calculé est figé, l'option calcule le twin frère à côté."""
+def test_run_with_the_option_after_the_twin_was_computed(tmp_path, data_repo, capsys, monkeypatch):
+    """Le parcours du dev : un twin calculé est figé, l'option calcule un twin de dev dans son espace, avec sa graine."""
     from molonari_twin.twin.cli import main
 
     folder = seeded(tmp_path)
     assert main(["run", str(folder)]) == 0
     computed = load_twin(folder).twin_id(engine_version())
+    space = tmp_path / "dev_space"
 
-    assert main(["run", str(folder), "--sigma-temperature", "0.08"]) == 0
+    (tmp_path / "cwd").mkdir()
+    monkeypatch.chdir(tmp_path / "cwd")  # sans --space, le twin de dev est créé dans le dossier courant
+    assert main(["run", str(folder), "--sigma-temperature", "0.08"]) == 1  # sans graine du dev : refusé
+    assert "orx.mcmc.seed" in capsys.readouterr().err
+    assert (tmp_path / "cwd" / "twin_01_sigmaT0.08" / "twin.yaml").is_file()
+    shutil.rmtree(tmp_path / "cwd" / "twin_01_sigmaT0.08")
+    assert main(["run", str(folder), "--sigma-temperature", "0.08", "--space", str(space), "--seed", "42"]) == 0
     assert "twin_01_sigmaT0.08" in capsys.readouterr().out
-    status = twin_status(folder.with_name("twin_01_sigmaT0.08"))
+    derived = space / "twin_01_sigmaT0.08"
+    status = twin_status(derived)
     assert status.state == "computed" and status.twin_id != computed
+    assert status.results_dir.parent == derived / "results" and (derived / "registry.csv").is_file()  # résultats et registre du twin de dev
     assert json.loads((status.results_dir / "metadata.json").read_text(encoding="utf-8"))["instruments"]["sigma_temperature_C"] == 0.08
     assert twin_status(folder).state == "computed" and twin_status(folder).twin_id == computed
+
+    with pytest.raises(SystemExit):  # --space sans --sigma-temperature
+        main(["run", str(folder), "--space", str(space)])
+    capsys.readouterr()
 
     # Le σ changé à la main dans twin.yaml, lui, reste refusé après le calcul.
     edited = (folder / "twin.yaml").read_text(encoding="utf-8").replace("layers:", "sensors: {sigma_temperature: 0.08}\nlayers:")
     (folder / "twin.yaml").write_text(edited, encoding="utf-8")
     assert main(["run", str(folder)]) == 1
     assert "twin_01" in capsys.readouterr().err
+
+
+# T7 : disposition du TWIN ---------------------------------------------------------------------------------------
+
+
+def test_the_reference_seed_is_read_in_the_orx_folder_of_the_point_first(tmp_path, data_repo):
+    folder = write_twin(tmp_path, RAW_MCMC)  # <point>/twins/twin_01
+    (tmp_path / "orx").mkdir()
+    point_file = tmp_path / "orx" / "twin_01.yaml"
+    assert not load_twin(folder).has_seed
+    write_orx(folder, ORX.replace("42", "6"))  # repli : orx.yaml à côté de twin.yaml (twins de dev)
+    assert load_twin(folder).seed == 6 and load_twin(folder).orx_path == folder / "orx.yaml"
+    point_file.write_text(ORX.replace("42", "5"), encoding="utf-8")  # <point>/orx/<twin>.yaml l'emporte
+    config = load_twin(folder)
+    assert config.seed == 5 and config.orx_path == point_file
+
+
+def test_results_and_registry_are_in_the_twin_folder_and_the_old_location_is_still_read(tmp_path, data_repo):
+    from molonari_twin.twin.registry import read_registry
+
+    folder = seeded(tmp_path)  # <point>/twins/twin_01
+    run = run_twin(folder)
+    twin_id = run.status.twin_id
+    assert run.computed and not [w for w in run.warnings if w.code == "W_RESULTS_LEGACY_LOCATION"]
+    assert run.status.results_dir == folder / "results" / twin_id
+    assert (folder / "registry.csv").is_file() and [e.results for e in read_registry(folder)] == [f"results/{twin_id}"]
+    assert not (tmp_path / "results").exists() and not (tmp_path / "twins" / "registry.csv").exists()
+
+    # L'ancienne disposition (twins de examples/, démo) : registre partagé du dossier twins/ et results/ à la racine du point.
+    (tmp_path / "results").mkdir()
+    shutil.move(folder / "results" / twin_id, tmp_path / "results" / twin_id)
+    (folder / "results").rmdir()
+    shutil.move(folder / "registry.csv", tmp_path / "twins" / "registry.csv")
+    status = twin_status(folder)
+    assert status.state == "computed" and status.legacy_results
+    assert status.results_dir == tmp_path / "results" / twin_id
+    assert [(w.code, w.params["path"]) for w in status.warnings] == [("W_RESULTS_LEGACY_LOCATION", tmp_path / "results" / twin_id)]
+    again = run_twin(folder)
+    assert not again.computed and [w.code for w in again.warnings] == ["W_RESULTS_LEGACY_LOCATION"]
+    assert not (folder / "results").exists() and not (folder / "registry.csv").exists()  # on n'y écrit plus
+
+
+def test_dev_twin_outside_the_cgs_space_finds_the_data_without_the_environment(tmp_path, data_repo, monkeypatch, capsys):
+    """Le twin de σ vit hors de l'espace cgs, sans MOLONARI_DATA : il hérite de la racine de données du twin source (fichier
+    `data_root.txt`, hors recette), et son twin_id est celui qu'aurait la même recette dans l'espace cgs."""
+    from molonari_twin.twin.cli import main
+
+    workspace = tmp_path / "ws"
+    shutil.copytree(data_repo, workspace / "data")
+    (workspace / "molonari.cgs").write_text("", encoding="utf-8")
+    monkeypatch.delenv("MOLONARI_DATA")
+    folder = seeded(workspace)
+    space = tmp_path / "dev"
+    by_hand = write_orx(write_twin(workspace, RAW_MCMC.replace("layers:", "sensors: {sigma_temperature: 0.08}\nlayers:"), "twin_02"))
+    expected = load_twin(by_hand).twin_id("v")  # même recette, dans l'espace cgs
+
+    derived = with_sigma_temperature(folder, 0.08, space=space, seed=42)
+    assert not any((parent / "molonari.cgs").exists() for parent in derived.resolve().parents)  # vraiment hors de l'espace cgs
+    assert (derived / "data_root.txt").read_text(encoding="utf-8").strip() == str((workspace / "data").resolve())
+    config = load_twin(derived)  # se valide sans variable d'environnement
+    assert config.twin_id("v") == expected and config.sigma_temperature == 0.08
+
+    monkeypatch.setenv("MOLONARI_LANG", "en")
+    capsys.readouterr()
+    assert main(["run", str(folder), "--sigma-temperature", "0.08", "--space", str(space), "--seed", "42"]) == 0  # et se calcule
+    assert twin_status(derived).state == "computed"
+
+
+def test_the_dev_twin_message_does_not_say_it_ran_when_the_computation_fails(tmp_path, data_repo, monkeypatch, capsys):
+    from molonari_twin.twin.cli import main
+
+    monkeypatch.setenv("MOLONARI_LANG", "en")
+    folder = seeded(tmp_path)
+    assert main(["run", str(folder), "--sigma-temperature", "0.08", "--space", str(tmp_path / "dev")]) == 1  # sans graine du dev
+    captured = capsys.readouterr()
+    assert "ready" in captured.out and "run with" not in captured.out and "orx.mcmc.seed" in captured.err
