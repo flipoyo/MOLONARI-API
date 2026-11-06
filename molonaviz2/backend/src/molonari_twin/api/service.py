@@ -111,6 +111,28 @@ class TwinAPI:
             origin.update(details)
         return self._with_provenance(question.run(twin, arguments), question, origin)
 
+    def ask_state(self, folder: str | Path, question_id: str, params: dict | None = None) -> Answer:
+        """Pose une question du niveau user (eau, chaleur, température) à un état généré (`generate`) : un dossier de
+        résultats d'un twin direct, sans `twin.yaml`. E_STATE_QUESTION_UNSUPPORTED pour une autre question. La réponse
+        porte W_GENERATED_STATE (une valeur seule : l'intervalle a posteriori est dans le rapport public) et, pour des
+        paramètres libres, W_FREE_PARAMETERS."""
+        from ..twin.generate import STATE_KEY, is_state
+        from .access import USER_QUESTIONS
+
+        question = self.question(question_id)
+        arguments = self.parameters(question, params)
+        folder = Path(folder)
+        if question.id not in USER_QUESTIONS or question.requires != "results":
+            raise UserError("E_STATE_QUESTION_UNSUPPORTED", question=question.id, allowed=", ".join(USER_QUESTIONS))
+        if not is_state(folder):
+            raise UserError("E_TWIN_NOT_FOUND", ref=folder.name, folder=str(folder.parent))
+        results = self._results(folder)
+        answer = question.run(TwinContext(ref=folder.name, config=None, results=results, folder=folder), arguments)
+        warnings = [*answer.warnings, Issue(None, "W_GENERATED_STATE")]
+        if results.metadata[STATE_KEY]["free_parameters"]:
+            warnings.append(Issue(None, "W_FREE_PARAMETERS"))
+        return dataclasses.replace(self._with_provenance(answer, question, {"state": folder.name}), warnings=warnings)
+
     def _computed(self, ref: str, config) -> tuple[object, dict]:
         """Résultats du twin `ref` et leur origine (twin_id, dossier) : E_TWIN_FROZEN, E_TWIN_NOT_COMPUTED."""
         from ..twin.run import twin_status

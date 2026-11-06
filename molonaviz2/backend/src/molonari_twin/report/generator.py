@@ -8,6 +8,9 @@ donné : `report.models.forward` (un twin direct) et `report.models.inversion` (
 Sans `report.models`, le space est le twin donné seul. La clé `report.entries` (la grille fixe des entrées, ou le rapport
 par défaut d'un twin qui n'a pas la clé) est celle du twin donné.
 
+Pour un space de deux instances, `generate_report` écrit aussi `generation.yaml` dans le dossier du twin direct (couches et
+discrétisation de l'inversion, bornes des paramètres : twin/generate.py). Il n'entre pas dans `Public Report/`.
+
 Le générateur tourne au niveau **dev** (P2c.3i) : il ne lit ni `orx.yaml` ni la graine, et pose ses questions par `TwinAPI`,
 qui lit les résultats sans JAX. Il ne lit directement que `metadata.json`, pour l'index.
 
@@ -328,4 +331,9 @@ def generate_report(twin: str | Path, output: str | Path | None = None, npz_thre
     report = build_report(space, TwinAPI(folder.parent), npz_threshold)
     target = Path(output) if output is not None else folder / FOLDER_NAME
     write_folder(target, report.files)
+    if len(space.refs) == len(ROLES):
+        # Réglages de génération (T4) : dans le twin direct (niveau user), jamais dans le rapport public
+        from ..twin.generate import write_generation
+
+        write_generation(space.configs["inversion"], space.configs["forward"].folder)
     return ReportResult(target, len(report.index["entries"]), len(report.index["figures"]), report.index["skipped"], report.reasons)
