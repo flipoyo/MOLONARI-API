@@ -192,6 +192,11 @@ MESSAGES: dict[str, str] = {
     "E_GENERATE_PARAMS_NUMBER": "expected a finite number.",
     "E_GENERATE_PARAMS_OUT_OF_BOUNDS": "Parameters outside the bounds of the generation settings:\n{issues}",
     "E_GENERATE_BOUND": "{value:g} is outside [{low:g}, {high:g}].",
+    # reports : lire les rapports publics (T5)
+    "E_REPORTS_NO_REPORT": "No published report for {point}: {file} is missing (pull the public reports).",
+    "E_REPORTS_INDEX_INVALID": "The report index of {point} ({file}) cannot be read.",
+    "E_REPORTS_NO_CHAINS": "No published chains for {point}: {file} is missing (pull the public reports).",
+    "E_REPORTS_CHAINS_INVALID": "The published chains of {point} ({file}) cannot be read.",
     "E_GENERATE_OUTPUT_FORBIDDEN": "{path} is inside {folder}/ of the point: a generated state stays local, outside the published reports and the results.",
     "E_GENERATE_OUTPUT_EXISTS": "{path} already exists and is not a generated state.",
     "E_STATE_QUESTION_UNSUPPORTED": "Question \"{question}\" cannot be asked of a generated state (only: {allowed}).",

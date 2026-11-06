@@ -43,6 +43,14 @@ Jusqu'à 0.6.0-alpha.1, le backend faisait partie du paquet molonaviz2 : son his
 - JAX n'est chargé que par le calcul : lire les réglages, valider l'échantillon ou les bornes, et interroger un état ne le chargent pas.
 - Contrat `/v1` et snapshot OpenAPI inchangés (aucune route ni modèle nouveau). Aucun `twin_id` ne change.
 
+### T5 : `reports list`, `show`, `chains`
+
+- `molonari-twin reports list [<dossier>]` liste les points qui ont un `public_reports/` (par défaut le dossier courant, ou ce dossier s'il est lui-même un point). `reports show <point>` affiche l'index du rapport (twins et commits, plateforme, entrées, entrées sautées, figures). `reports chains <point>` résume `chains.npz` : nombre de chaînes, échantillons par chaîne, couches, itérations, `publication_thin` et SHA-256 du `posterior.npz` complet cités par le rapport, plus l'empreinte de `chains.npz` et sa conformité à l'index.
+- Lecture seule et ouverte à tous les niveaux (pas de `--level`) : le public lit les fichiers, le user les lit aussi avec l'outil. Rien n'affiche de graine, d'empreinte de recette ni de chemin machine : les points sont donnés par leur nom.
+- `--json` suit `questions`/`ask` : le résultat en JSON sur la sortie standard ; une erreur attendue sort au format d'erreur de `/v1` (`{code, field, params, message_en}`), code de sortie 1. Nouveaux codes `E_REPORTS_NO_REPORT`, `E_REPORTS_INDEX_INVALID`, `E_REPORTS_NO_CHAINS`, `E_REPORTS_CHAINS_INVALID` ; un dossier absent donne `E_FOLDER_NOT_FOUND`.
+- Ces commandes ne chargent pas JAX (test en sous-processus). Nouveau module `twin/reports.py`.
+- Contrat `/v1` et snapshot OpenAPI inchangés (aucune route ni modèle nouveau). Aucun `twin_id` ne change.
+
 ### À venir
 
 - `molonari-twin reproduce <twin>` : relance le calcul sans cache, compare tous les fichiers produits (SHA-256) a la reference, ecrit un compte rendu JSON et texte sans la graine. Inclut `chain_state.npz` (T3), avec comparaison tableau par tableau (hors `burn_in_duration_s`). Reserve a `opx`.
