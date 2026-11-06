@@ -46,7 +46,7 @@ def client(computed_twins):
 
 @pytest.mark.parametrize("ref", [None, "twin_01", "twin_03"])
 def test_questions_json_is_the_json_of_the_api(run, computed_twins, client, ref):
-    args = ["questions", *([computed_twins / ref] if ref else []), "--level", "admin", "--json"]
+    args = ["questions", *([computed_twins / ref] if ref else []), "--level", "dev", "--json"]
     code, out, _ = run(*args)
     assert code == 0
     assert json.loads(out) == client.get("/v1/questions", params={"twin": ref} if ref else None).json()
@@ -63,7 +63,7 @@ def test_questions_json_is_the_json_of_the_api(run, computed_twins, client, ref)
     ("twin_03", "HN-10", None),  # la référence du plan vaut l'identifiant
 ])
 def test_ask_json_is_the_json_of_the_api(run, computed_twins, client, ref, question, params):
-    args = ["ask", computed_twins / ref, question, "--level", "admin", "--json"]
+    args = ["ask", computed_twins / ref, question, "--level", "dev", "--json"]
     code, out, _ = run(*args, *(["--params", json.dumps(params)] if params else []))
     assert code == 0
     assert json.loads(out) == client.post(f"/v1/twins/{ref}/questions/{question}", json=params).json()
@@ -82,7 +82,7 @@ def test_user_is_the_default_level(run, computed_twins):
     assert code == 0 and [q["id"] for q in json.loads(out)["questions"]] == FIVE
     code, out, _ = run("questions", computed_twins / "twin_03", "--level", "user", "--json")
     assert [q["id"] for q in json.loads(out)["questions"]] == FIVE
-    code, out, _ = run("questions", "--level", "admin", "--json")
+    code, out, _ = run("questions", "--level", "dev", "--json")
     assert len(json.loads(out)["questions"]) == 23
 
 
@@ -92,7 +92,7 @@ def test_the_user_level_refuses_the_other_questions_with_the_json_error_of_the_a
     body = json.loads(out)
     assert set(body) == {"code", "field", "params", "message_en"}
     assert body["code"] == "E_ACCESS_USER_ONLY" and body["params"] == {"name": "sensor_intervals"}
-    code, out, _ = run("ask", computed_twins / "twin_03", "sensor_intervals", "--level", "admin", "--json")
+    code, out, _ = run("ask", computed_twins / "twin_03", "sensor_intervals", "--level", "dev", "--json")
     assert code == 0 and "measured" in json.loads(out)["data"]
 
 
@@ -194,7 +194,7 @@ NO_WEB = textwrap.dedent(
     for name in ("fastapi", "starlette", "uvicorn"):
         sys.modules[name] = None
     from molonari_twin.twin.cli import main
-    for args in (["questions"], ["questions", {twin!r}, "--level", "admin", "--json"],
+    for args in (["questions"], ["questions", {twin!r}, "--level", "dev", "--json"],
                  ["ask", {twin!r}, "water_flux", "--json"], ["ask", {twin!r}, "temperature", "--params", '{{"z": 0.2}}']):
         assert main(args) == 0, args
     assert main(["ask", {twin!r}, "residuals", "--json"]) == 1  # refus du niveau user, aussi sans FastAPI

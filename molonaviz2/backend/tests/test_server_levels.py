@@ -1,6 +1,6 @@
-"""Niveaux d'accès de l'API HTTP (T11) : `create_app(level=…)` et `serve --level`. Au niveau `user`, seules les cinq questions
-de l'eau, de la chaleur et de la température répondent, par liste blanche ; `run` et `/v1/tasks/*` sont refusés (403).
-Sans authentification : le niveau oriente l'usage, ce n'est pas une sécurité."""
+"""Niveaux d'acces de l'API HTTP (T1) : `create_app(level=...)` et `serve --level`. Au niveau `user`, seules les cinq questions
+de l'eau, de la chaleur et de la temperature repondent, par liste blanche ; `run` et `/v1/tasks/*` sont refuses (403).
+Sans authentification : le niveau oriente l'usage, ce n'est pas une securite."""
 
 import io
 import json
@@ -34,8 +34,8 @@ def user(fake, computed_twins):
 
 
 @pytest.fixture
-def admin(fake, computed_twins):
-    return TestClient(create_app(fake, computed_twins))  # le niveau par défaut est admin
+def dev(fake, computed_twins):
+    return TestClient(create_app(fake, computed_twins))  # le niveau par defaut est opx
 
 
 @pytest.fixture
@@ -57,10 +57,10 @@ def test_refusal_is_a_403():
     assert http_status("E_ACCESS_USER_ONLY") == 403
 
 
-# Même JSON que la ligne de commande, à chaque niveau ------------------------------------------------------------
+# Meme JSON que la ligne de commande, a chaque niveau ------------------------------------------------------------
 
 
-@pytest.mark.parametrize("level", ["user", "admin"])
+@pytest.mark.parametrize("level", ["user", "dev"])
 @pytest.mark.parametrize("ref", [None, "twin_01", "twin_03"])
 def test_the_list_of_questions_is_the_json_of_the_command(fake, computed_twins, cli, level, ref):
     client = TestClient(create_app(fake, computed_twins, level=level))
@@ -72,7 +72,7 @@ def test_the_list_of_questions_is_the_json_of_the_command(fake, computed_twins, 
         assert len(response.json()["questions"]) == (5 if level == "user" else 23)
 
 
-@pytest.mark.parametrize("level", ["user", "admin"])
+@pytest.mark.parametrize("level", ["user", "dev"])
 @pytest.mark.parametrize("ref, question, params", [
     ("twin_01", "water_flux", None),
     ("twin_03", "water_flux", {"level": 0.8}),
@@ -81,7 +81,7 @@ def test_the_list_of_questions_is_the_json_of_the_command(fake, computed_twins, 
     ("twin_03", "heat_budget", {"z": 0.1}),
     ("twin_03", "temperature", {"z": 0.2, "t": "2016-07-01T12:00"}),
     ("twin_01", "temperature", {"t": "2016-07-01T12:00"}),
-    ("twin_03", "describe", None),  # refusée au niveau user : même JSON d'erreur
+    ("twin_03", "describe", None),  # refusee au niveau user : meme JSON d'erreur
     ("twin_03", "sensor_intervals", None),
     ("twin_03", "temperature", None),  # z ou t obligatoire, aux deux niveaux
     ("twin_09", "water_flux", None),
@@ -99,7 +99,7 @@ def test_an_answer_is_the_json_of_the_command(fake, computed_twins, cli, level, 
 
 @pytest.mark.parametrize("ref", ["twin_01", "twin_03"])
 @pytest.mark.parametrize("question", [q.id for q in CATALOG])
-def test_only_the_five_questions_answer_at_the_user_level(user, admin, computed_twins, ref, question):
+def test_only_the_five_questions_answer_at_the_user_level(user, dev, computed_twins, ref, question):
     config, twin_id = load_twin(computed_twins / ref), twin_status(computed_twins / ref).twin_id
     if question not in FIVE:
         body = assert_error(post(user, ref, question, PARAMS.get(question)), 403, "E_ACCESS_USER_ONLY")
@@ -112,11 +112,11 @@ def test_only_the_five_questions_answer_at_the_user_level(user, admin, computed_
     body = response.json()
     assert set(body["provenance"]) <= {"question", "ref", "parameters"} and body["provenance"]["question"] == question
     assert not FORBIDDEN_KEYS & set(body["data"]) and not FORBIDDEN_KEYS & set(body["provenance"]["parameters"])
-    full = post(admin, ref, question, PARAMS.get(question)).json()
+    full = post(dev, ref, question, PARAMS.get(question)).json()
     assert set(body["data"]) <= set(full["data"])
     for forbidden in (str(computed_twins), twin_id, config.point):
         assert forbidden not in response.text
-    # la négociation npz filtre de la même façon
+    # la negociation npz filtre de la meme facon
     binary = post(user, ref, question, PARAMS.get(question), npz=True)
     assert binary.status_code == 200 and binary.headers["content-type"] == "application/x-npz"
     answer = answer_from_npz(binary.content)
@@ -125,14 +125,14 @@ def test_only_the_five_questions_answer_at_the_user_level(user, admin, computed_
         content = str(archive["meta"]) + " ".join(archive.files)
     for forbidden in (str(computed_twins), twin_id, config.point, "samples", "seed"):
         assert forbidden not in content
-    # posée au point d'entrée des questions globales, une de ces questions (qui porte sur un twin) reçoit la même erreur qu'un admin
+    # posee au point d'entree des questions globales, une de ces questions (qui porte sur un twin) recoit la meme erreur qu'au niveau dev
     assert_error(user.post(f"/v1/questions/{question}", json=PARAMS.get(question)), 409, "E_QUESTION_TWIN_REQUIRED")
 
 
-def test_global_questions_are_refused_at_the_user_level(user, admin):
+def test_global_questions_are_refused_at_the_user_level(user, dev):
     for question in ("parameters_catalog", "raw_series", "processing_preview"):
         assert_error(user.post(f"/v1/questions/{question}"), 403, "E_ACCESS_USER_ONLY")
-    assert admin.post("/v1/questions/parameters_catalog").status_code == 200
+    assert dev.post("/v1/questions/parameters_catalog").status_code == 200
     assert_error(user.post("/v1/questions/nothing"), 404, "E_QUESTION_UNKNOWN")
 
 
@@ -145,14 +145,14 @@ def test_run_and_tasks_are_refused_at_the_user_level(user, fake):
         assert body["params"] == {"name": "tasks"}
 
 
-def test_the_admin_level_runs_a_twin_and_follows_the_task(admin, fake):
-    response = admin.post("/v1/twins/twin_01/run")
+def test_the_dev_level_runs_a_twin_and_follows_the_task(dev, fake):
+    response = dev.post("/v1/twins/twin_01/run")
     assert response.status_code == 202 and fake.submitted
-    assert admin.get(f"/v1/tasks/{response.json()['task_id']}").status_code == 200
+    assert dev.get(f"/v1/tasks/{response.json()['task_id']}").status_code == 200
 
 
-def test_info_stays_available_at_the_user_level(user, admin):
-    assert user.get("/v1/info").status_code == 200 and user.get("/v1/info").json() == admin.get("/v1/info").json()
+def test_info_stays_available_at_the_user_level(user, dev):
+    assert user.get("/v1/info").status_code == 200 and user.get("/v1/info").json() == dev.get("/v1/info").json()
 
 
 def test_the_other_errors_are_unchanged_at_the_user_level(user):
@@ -166,7 +166,7 @@ def test_the_other_errors_are_unchanged_at_the_user_level(user):
 # serve --level -----------------------------------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("flags, listed", [([], 5), (["--level", "user"], 5), (["--level", "admin"], 23)])
+@pytest.mark.parametrize("flags, listed", [([], 5), (["--level", "user"], 5), (["--level", "dev"], 23)])
 def test_serve_gives_its_level_to_the_api(monkeypatch, tmp_path, capsys, computed_twins, flags, listed):
     import uvicorn
     from molonari_twin.tasks.local import LocalTaskRunner

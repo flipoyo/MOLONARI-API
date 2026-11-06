@@ -177,7 +177,6 @@ MESSAGES: dict[str, str] = {
     "W_NO_UNCERTAINTY": "Forward model: its parameters are fixed, so this result has no confidence interval.",
     # niveaux d'accès aux questions
     "E_ACCESS_USER_ONLY": "\"{name}\" requires the dev or opx level: the user level only asks about water exchanges, heat and temperature.",
-    "E_ACCESS_ADMIN_ONLY": "\"{name}\" requires the dev or opx level: the user level only asks about water exchanges, heat and temperature.",
     # virtual lab (lab.yaml, lab build) et données traitées (processed_data)
     "E_LAB_BUILD_EMPTY": "No measurement is left for point \"{point}\" after the cleaning declared in {file}.",
     "E_LAB_CONFIG_INVALID": "{issues}",
@@ -271,6 +270,15 @@ MESSAGES: dict[str, str] = {
     "E_TASK_TIMEOUT": "The task exceeded its time limit ({timeout_s:g} s) and was stopped.",
     "E_TWIN_NOT_COMPUTED": "Twin \"{ref}\" has no results yet: run it first.",
     "E_TWIN_NOT_FOUND": "Twin \"{ref}\" not found in {folder}.",
+    # continuation (T3)
+    "E_CONTINUE_NO_STATE": "Twin {twin_id} has no saved state (chain_state.npz): run it first.",
+    "E_CONTINUE_NO_CONFIG": "Twin {twin_id} has no configuration saved: the results may be incomplete.",
+    "E_CONTINUE_NO_RESULTS": "Twin \"{name}\" has no results yet: run it first.",
+    "E_CONTINUE_MCMC_ONLY": "only allowed for MCMC twins (not {mode} mode).",
+    # reproduce
+    "E_REPRODUCE_NO_REFERENCE": "Twin \"{name}\" has no results to reproduce from: run it first.",
+    "E_REPRODUCE_RUN_FAILED": "Reproduction failed: {error}",
+    "E_REPRODUCE_NOT_RECOMPUTED": "Twin \"{name}\" was not recomputed: existing results returned.",
 }
 
 

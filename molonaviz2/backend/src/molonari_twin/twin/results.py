@@ -139,6 +139,25 @@ def _write_arrays(folder: Path, forward: ForwardResult, inversion: InversionResu
         resets=inversion.resets if inversion.resets is not None else np.zeros(chains, np.int64),
         iteration=(np.arange(kept) + 1) * inversion.thin,  # itération calculée après le burn-in
     )
+    # État final pour la prolongation (T3) : sauvegarder le chain_state
+    if inversion.chain_state is not None:
+        chain_state = inversion.chain_state
+        np.savez(
+            folder / "chain_state.npz",
+            prng_key=chain_state["prng_key"],
+            x=chain_state["x"],
+            e=chain_state["e"],
+            temperature=chain_state["temperature"],
+            water_flux=chain_state["water_flux"],
+            pcr=chain_state["pcr"],
+            jumps=chain_state["jumps"],
+            counts=chain_state["counts"],
+            burn_in_iterations=chain_state["burn_in_iterations"],
+            burn_in_duration_s=chain_state["burn_in_duration_s"],
+            total_resets=chain_state["total_resets"],
+            best_x=chain_state["best_x"],
+            best_e=chain_state["best_e"],
+        )
     if inversion.field_chain is None:
         return
     provenance = {"chain": inversion.field_chain, "iteration": inversion.field_iteration, "time": times}
