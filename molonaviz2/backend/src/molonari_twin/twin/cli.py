@@ -11,6 +11,7 @@
                                          ou à un état généré (<état> au lieu de <twin_xx> : eau, chaleur, température)
     molonari-twin generate <point>       génère un état par le modèle direct, depuis l'échantillon publié de plus basse énergie
                                          (--sample <chaîne>:<itération> | --params <fichier> ; --output <dossier>) ; niveaux user, dev, opx
+    molonari-twin reports list|show|chains   lit les rapports publics d'un point (public_reports/) ; --json comme `ask` ; tous niveaux
     molonari-twin lab build <lab> --point <point>   construit processed_data/<point>/ (mesures nettoyées et manifeste) d'après lab.yaml
     molonari-twin serve --local          API HTTP sur 127.0.0.1 (extra `server`), calculs dans des workers
 
@@ -92,6 +93,7 @@ def main(argv: list[str]) -> int:
     choice.add_argument("--params", default=None, metavar="FILE",
                         help="your own parameters (YAML or JSON, one entry per layer), within the bounds of generation.yaml: a 'free parameters' state")
     generate_parser.add_argument("--output", default=None, help="folder of the state to write (default: ./<point>_state; never in public_reports/ or results/)")
+    add_reports_commands(sub)
     lab_parser = sub.add_parser("lab", help="virtual lab (lab.yaml)")
     lab_build = lab_parser.add_subparsers(dest="lab_command", required=True).add_parser(
         "build", help="clean a point of the lab and write processed_data/<point>/ (measurements.csv and manifest.json)")
@@ -120,6 +122,8 @@ def main(argv: list[str]) -> int:
             return question_command(args)
         if args.command == "generate":
             return generate(args)
+        if args.command == "reports":
+            return reports_command(args)
         if args.command == "validate":
             config = load_twin(args.twin)
             print(tr("{name}: valid configuration ({mode} mode).").format(name=config.name, mode=config.mode))
@@ -204,6 +208,88 @@ def generate(args) -> int:
             chain=state.chain, iteration=state.iteration, folder=state.folder, rmse=state.rmse_total))
     print(tr("The state stays on this machine; ask it with: molonari-twin ask {folder} water_flux").format(folder=state.folder))
     return 0
+
+
+# Rapports publics ---------------------------------------------------------------------------------
+
+
+def add_reports_commands(sub) -> None:
+    """La commande `reports` (list, show, chains) de l'analyseur : lecture seule, ouverte à tous les niveaux."""
+    reports_parser = sub.add_parser("reports", help="read the public reports of a sampling point")
+    actions = reports_parser.add_subparsers(dest="reports_command", required=True)
+    listing = actions.add_parser("list", help="sampling points that have a public_reports/ folder")
+    listing.add_argument("folder", nargs="?", default=".", help="MOLONARI-TWIN folder (default: the current folder)")
+    show = actions.add_parser("show", help="show the report of a sampling point")
+    chains = actions.add_parser("chains", help="summarize the published chains.npz of a sampling point")
+    for parser in (show, chains):
+        parser.add_argument("point", help="sampling point folder (holds public_reports/)")
+    for parser in (listing, show, chains):
+        parser.add_argument("--json", action="store_true", help="write the result as JSON (errors too, on the standard output)")
+
+
+def reports_command(args) -> int:
+    """`reports list|show|chains`. Avec --json, le résultat, ou l'erreur attendue comme celle de /v1, va sur la sortie standard."""
+    from . import reports
+
+    try:
+        if args.reports_command == "list":
+            document, text = {"points": reports.list_points(args.folder)}, show_points
+        elif args.reports_command == "show":
+            document, text = reports.show_report(args.point), show_report
+        else:
+            document, text = reports.summarize_chains(args.point), show_chains
+    except UserError as error:
+        if not args.json:
+            raise
+        from ..tasks.model import error_dict
+
+        print(json.dumps(error_dict(error), ensure_ascii=False))
+        return 1
+    if args.json:
+        print(json.dumps(document, ensure_ascii=False))
+    else:
+        text(document)
+    return 0
+
+
+def show_points(document: dict) -> None:
+    if not document["points"]:
+        print(tr("No sampling point with public_reports/ here."))
+    for point in document["points"]:
+        report = tr("report") if point["report"] else "-"
+        chains = "chains.npz" if point["chains"] else "-"
+        print(f"{point['point']:20s} {report:8s} {chains}")
+
+
+def show_report(document: dict) -> None:
+    print(tr("Public report of {point} (format {format}, generated {date} by {generator}).").format(
+        point=document["point"], format=document["report_format"], date=document["generated_at"], generator=document["generator_version"]))
+    for role, entry in document["space"].items():
+        print(f"  {role}: {entry['twin']} ({tr('commit')} {entry['commit']})" if entry else f"  {role}: -")
+    if document["platform"]:
+        print("  " + ", ".join(f"{name} {value}" for name, value in document["platform"].items()))
+    print(tr("Entries ({n}):").format(n=len(document["entries"])))
+    for entry in document["entries"]:
+        print(f"  {entry['file']:34s} {entry['question']:20s} {entry['model']:10s} {entry['uncertainty']}")
+    for skipped in document["skipped"]:
+        print(tr("Skipped: {question} ({model}): {reason}").format(question=skipped["question"], model=skipped["model"], reason=skipped["code"]))
+    if document["figures"]:
+        print(tr("Figures ({n}):").format(n=len(document["figures"])) + " " + ", ".join(document["figures"]))
+    if document["chains"]:
+        print(tr("Published chains: {file} (molonari-twin reports chains {point}).").format(file=document["chains"], point=document["point"]))
+
+
+def show_chains(document: dict) -> None:
+    thin = document["publication_thin"] if document["publication_thin"] is not None else tr("not cited")
+    cited = document["posterior_sha256"] or tr("not cited")
+    print(tr("Published chains of {point}: {chains} chains, {samples} samples per chain, {layers} layers, iterations {first} to {last}.").format(
+        point=document["point"], chains=document["chains"], samples=document["samples_per_chain"], layers=document["layers"],
+        first=document["first_iteration"], last=document["last_iteration"]))
+    print(tr("publication_thin: {thin}").format(thin=thin))
+    print(tr("SHA-256 of the full posterior.npz (cited by the report): {sha}").format(sha=cited))
+    matches = document["sha256_matches"]
+    print(tr("SHA-256 of chains.npz: {sha} ({state})").format(
+        sha=document["sha256"], state=tr("matches the report") if matches else tr("differs from the report") if matches is False else tr("not cited")))
 
 
 def serve(args) -> int:
