@@ -20,7 +20,6 @@
 (`GET /v1/questions`, `POST /v1/twins/{ref}/questions/{question}`) ; une erreur écrit le JSON d'erreur de /v1 sur la
 sortie standard (code de sortie 1). `--level {user,dev,opx}` (user par défaut) : le user n'interroge que les échanges
 d'eau, la chaleur et la température, et reçoit des réponses réduites à une liste blanche ; dev et opx, tout le catalogue.
-`admin` reste un alias de `opx` pour la compatibilité.
 Ce niveau oriente l'usage, ce n'est pas une sécurité (api/access.py). `serve --local --level` le donne à l'API HTTP :
 au niveau user, lancer un twin (`POST …/run`) et suivre les tâches sont refusés (403).
 
@@ -117,7 +116,7 @@ def main(argv: list[str]) -> int:
     serve_parser.add_argument("--twins-folder", default=".", help="folder that contains the twin_xx folders")
     serve_parser.add_argument("--tasks-db", default=None, help="task database (default: $XDG_CACHE_HOME/molonari-twin/tasks.sqlite)")
     serve_parser.add_argument("--max-workers", type=int, default=1, help="tasks computed at the same time")
-    serve_parser.add_argument("--level", choices=LEVELS_WITH_ALIAS, default="user", help="access level: user (water, heat, temperature only), dev, opx, or admin (alias for opx)")
+    serve_parser.add_argument("--level", choices=LEVELS_WITH_ALIAS, default="user", help="access level: user (water, heat, temperature only), dev, or opx")
     args = parser.parse_args(argv)
     if args.command == "run" and args.sigma_temperature is None and (args.space is not None or args.seed is not None):
         parser.error(tr("--space and --seed need --sigma-temperature."))
@@ -388,7 +387,7 @@ def add_question_commands(sub) -> None:
     ask_parser.add_argument("question", help="question identifier (water_flux) or reference (HN-10)")
     ask_parser.add_argument("--params", default=None, help="parameters of the question, as the JSON body of the POST request")
     for parser in (questions_parser, ask_parser):
-        parser.add_argument("--level", choices=LEVELS_WITH_ALIAS, default="user", help="access level: user, dev, opx, or admin (alias for opx); default: user")
+        parser.add_argument("--level", choices=LEVELS_WITH_ALIAS, default="user", help="access level: user, dev, or opx; default: user")
         parser.add_argument("--json", action="store_true", help="write the JSON of the /v1 API (errors too, on the standard output)")
 
 

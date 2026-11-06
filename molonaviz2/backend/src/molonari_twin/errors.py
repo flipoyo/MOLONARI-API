@@ -177,7 +177,6 @@ MESSAGES: dict[str, str] = {
     "W_NO_UNCERTAINTY": "Forward model: its parameters are fixed, so this result has no confidence interval.",
     # niveaux d'accès aux questions
     "E_ACCESS_USER_ONLY": "\"{name}\" requires the dev or opx level: the user level only asks about water exchanges, heat and temperature.",
-    "E_ACCESS_ADMIN_ONLY": "\"{name}\" requires the dev or opx level: the user level only asks about water exchanges, heat and temperature.",
     # generate : état généré par le modèle direct (T4)
     "E_GENERATE_NO_SETTINGS": "No {file} under {folder}: the OPX writes it when publishing the report.",
     "E_GENERATE_SETTINGS_AMBIGUOUS": "Several twins carry {file}: {twins}.",
