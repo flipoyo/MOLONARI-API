@@ -82,6 +82,12 @@ class LeveledAPI:
         self.allow(question)
         return self.restrict(question, self.api.ask(ref, question_id, params))
 
+    def ask_state(self, folder, question_id: str, params: dict | None = None) -> Answer:
+        """Comme `ask`, pour un état généré (`generate`) : un dossier de résultats, sans twin.yaml ni registre."""
+        question = self.api.question(question_id)
+        self.allow(question)
+        return self.restrict(question, self.api.ask_state(folder, question_id, params))
+
     def ask_global(self, question_id: str, params: dict | None = None) -> Answer:
         question = self.api.question(question_id)
         self.allow(question)

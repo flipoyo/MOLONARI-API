@@ -32,6 +32,17 @@ Jusqu'à 0.6.0-alpha.1, le backend faisait partie du paquet molonaviz2 : son his
 - L'index du rapport cite le SHA-256 du `posterior.npz` complet et `publication_thin`.
 - Erreur structurée si `publication_thin` n'est pas un multiple du `thin`.
 
+### T4 : `generate` et `ask` sur un état généré
+
+- `molonari-twin generate <point> [--sample <chaîne>:<itération> | --params <fichier>] [--output <dossier>]` calcule un état par le modèle direct, aux niveaux user, dev et opx. Par défaut, il part de l'échantillon publié de plus basse énergie de `<point>/public_reports/chains.npz` : le résultat est déterministe (mêmes octets, `metadata.json` compris). `--sample` désigne la chaîne et l'itération d'origine.
+- `--params` (YAML ou JSON, une entrée par couche) explore ses propres paramètres : l'état est marqué « paramètres libres » (`generated.free_parameters`) et refusé hors des bornes de `generation.yaml` (`E_GENERATE_PARAMS_OUT_OF_BOUNDS`, un problème par valeur).
+- L'état est un dossier au format des résultats d'un twin direct, sans `twin.yaml`, sans `twin_id` ni graine. Il reste local : jamais dans `public_reports/` ni dans `results/` (`E_GENERATE_OUTPUT_FORBIDDEN`), et pas dans le registre. Par défaut : `./<point>_state`.
+- Pour un échantillon donné, l'état redonne le champ conservé par le MCMC pour cette chaîne et cette itération, à 1e-9 près (`tests/test_generate.py`).
+- `ask <état> <question>` et `questions <état>` lisent un état généré : les 5 questions du niveau user. `water_flux` répond une valeur seule (`uncertainty: none`) et l'avertissement `W_GENERATED_STATE` rappelle que l'intervalle a posteriori est dans le rapport public ; `W_FREE_PARAMETERS` s'y ajoute pour des paramètres libres. Nouvelle méthode `TwinAPI.ask_state` (et `LeveledAPI.ask_state`), hors `/v1`.
+- `report` écrit `generation.yaml` dans le dossier du twin direct d'un space de deux instances : couches, `nb_cells` et `initial_condition` de l'**inversion**, bornes des paramètres (les priors). Les bornes sont au niveau user ; elles ne figurent pas dans le rapport public.
+- JAX n'est chargé que par le calcul : lire les réglages, valider l'échantillon ou les bornes, et interroger un état ne le chargent pas.
+- Contrat `/v1` et snapshot OpenAPI inchangés (aucune route ni modèle nouveau). Aucun `twin_id` ne change.
+
 ### À venir
 
 - `molonari-twin run <twin> --sigma-temperature X` : lance un twin mcmc 2.0.0 avec un autre σ de température, dans le twin frère `<twin>_sigmaT<X>` (même recette, même graine). Le twin d'origine reste figé.

@@ -8,6 +8,9 @@
     molonari-twin report <twin_xx>       écrit le rapport public (« Public Report/ ») d'un twin calculé et de son space
     molonari-twin questions [<twin_xx>]  liste les questions du catalogue (celles d'un twin, s'il est donné)
     molonari-twin ask <twin_xx> <question>   pose une question à un twin calculé (--params '{"z": 0.2}', JSON du corps du POST)
+                                         ou à un état généré (<état> au lieu de <twin_xx> : eau, chaleur, température)
+    molonari-twin generate <point>       génère un état par le modèle direct, depuis l'échantillon publié de plus basse énergie
+                                         (--sample <chaîne>:<itération> | --params <fichier> ; --output <dossier>) ; niveaux user, dev, opx
     molonari-twin lab build <lab> --point <point>   construit processed_data/<point>/ (mesures nettoyées et manifeste) d'après lab.yaml
     molonari-twin serve --local          API HTTP sur 127.0.0.1 (extra `server`), calculs dans des workers
 
@@ -81,6 +84,14 @@ def main(argv: list[str]) -> int:
     report_parser.add_argument("twin", help="twin_xx folder or twin.yaml (the twin that carries the report key)")
     report_parser.add_argument("--output", default=None, help="folder to write (default: 'Public Report' in the twin folder)")
     add_question_commands(sub)
+    generate_parser = sub.add_parser("generate", help="generate a state with the direct model, from a published sample of a sampling point")
+    generate_parser.add_argument("point", help="sampling point folder (holds public_reports/chains.npz and twins/<direct twin>/generation.yaml)")
+    choice = generate_parser.add_mutually_exclusive_group()
+    choice.add_argument("--sample", default=None, metavar="CHAIN:ITERATION",
+                        help="published sample to start from (default: the published sample of lowest energy)")
+    choice.add_argument("--params", default=None, metavar="FILE",
+                        help="your own parameters (YAML or JSON, one entry per layer), within the bounds of generation.yaml: a 'free parameters' state")
+    generate_parser.add_argument("--output", default=None, help="folder of the state to write (default: ./<point>_state; never in public_reports/ or results/)")
     lab_parser = sub.add_parser("lab", help="virtual lab (lab.yaml)")
     lab_build = lab_parser.add_subparsers(dest="lab_command", required=True).add_parser(
         "build", help="clean a point of the lab and write processed_data/<point>/ (measurements.csv and manifest.json)")
@@ -107,6 +118,8 @@ def main(argv: list[str]) -> int:
             return serve(args)
         if args.command in ("questions", "ask"):
             return question_command(args)
+        if args.command == "generate":
+            return generate(args)
         if args.command == "validate":
             config = load_twin(args.twin)
             print(tr("{name}: valid configuration ({mode} mode).").format(name=config.name, mode=config.mode))
@@ -178,6 +191,21 @@ def main(argv: list[str]) -> int:
     return 0
 
 
+def generate(args) -> int:
+    """`generate` : un état par le modèle direct, local. Une erreur attendue sort comme pour les autres commandes (code 1)."""
+    from .generate import generate_state
+
+    state = generate_state(args.point, args.sample, args.params, args.output)
+    if state.free_parameters:
+        print(tr("State generated from free parameters (not calibrated): {folder} (total RMSE {rmse:.4g} °C).").format(
+            folder=state.folder, rmse=state.rmse_total))
+    else:
+        print(tr("State generated from the published sample {chain}:{iteration}: {folder} (total RMSE {rmse:.4g} °C).").format(
+            chain=state.chain, iteration=state.iteration, folder=state.folder, rmse=state.rmse_total))
+    print(tr("The state stays on this machine; ask it with: molonari-twin ask {folder} water_flux").format(folder=state.folder))
+    return 0
+
+
 def serve(args) -> int:
     """Lance l'API sur une adresse locale, avec un LocalTaskRunner ; les workers sont arrêtés à la sortie."""
     try:
@@ -234,8 +262,14 @@ def question_command(args) -> int:
 
 
 def leveled_api(args, twin: str | None):
-    """(API au niveau demandé, référence du twin) : le dossier parent du twin est le dossier de twins."""
+    """(API au niveau demandé, référence du twin) : le dossier parent du twin est le dossier de twins. Pour un état
+    généré, la référence est son dossier."""
     from ..api import LeveledAPI, TwinAPI
+    from .generate import is_state
+
+    if twin is not None and is_state(Path(twin)):
+        folder = Path(twin).resolve()
+        return LeveledAPI(TwinAPI(folder.parent), args.level), folder
 
     if twin is None:
         return LeveledAPI(TwinAPI(Path.cwd()), args.level), None
@@ -246,7 +280,12 @@ def leveled_api(args, twin: str | None):
 
 def list_questions(args) -> int:
     api, ref = leveled_api(args, args.twin)
-    questions = api.questions(ref)
+    if isinstance(ref, Path):  # un état généré : les questions du niveau user qui ont un sens pour un twin direct
+        from ..api.access import USER_QUESTIONS
+
+        questions = [q for q in api.questions() if q.id in USER_QUESTIONS and "D" in q.modes]
+    else:
+        questions = api.questions(ref)
     if args.json:
         from ..contract.catalog import questions_out
 
@@ -274,7 +313,7 @@ def read_params(text: str | None) -> dict | None:
 def ask(args) -> int:
     params = read_params(args.params)
     api, ref = leveled_api(args, args.twin)
-    answer = api.ask(ref, args.question, params)
+    answer = api.ask_state(ref, args.question, params) if isinstance(ref, Path) else api.ask(ref, args.question, params)
     if args.json:
         from ..contract.codec import answer_to_json
 
