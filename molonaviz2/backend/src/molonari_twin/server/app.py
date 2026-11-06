@@ -10,9 +10,9 @@
     GET    /v1/tasks/{id}/result       résultat ou erreur ; 409 tant que la tâche n'est pas terminée
 
 Les questions lisent des résultats : elles répondent tout de suite, sans tâche ni JAX (TwinAPI). Calculer un
-twin passe par une tâche. Erreurs : {code, field, params, message_en}. Niveaux d'accès (`create_app(level=…)`, `serve --level`) : `admin`, par défaut, offre
-tout ce qui précède ; `user` ne répond qu'aux cinq questions de l'eau, de la chaleur et de la température (réponses réduites à
-une liste blanche), et refuse le reste, `run` et `/v1/tasks/*` par 403 E_ACCESS_ADMIN_ONLY (`/v1/info` reste accessible). Ce niveau
+twin passe par une tâche. Erreurs : {code, field, params, message_en}. Niveaux d'accès (`create_app(level=…)`, `serve --level`) : `dev` et `opx` offrent
+tout ; `user` ne répond qu'aux cinq questions de l'eau, de la chaleur et de la température (réponses réduites à
+une liste blanche), et refuse le reste, `run` et `/v1/tasks/*` par 403 E_ACCESS_USER_ONLY (`/v1/info` reste accessible). Ce niveau
 oriente l'usage, ce n'est pas une sécurité (api/access.py). Les endpoints sont synchrones : FastAPI les exécute dans un pool de
 threads, et l'API reste disponible pendant un calcul, qui tourne de toute façon dans un autre processus.
 """
@@ -30,7 +30,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from .. import __version__
-from ..api import ADMIN, CATALOG, LeveledAPI, TwinAPI
+from ..api import CATALOG, OPX, LeveledAPI, TwinAPI
 from ..contract import API_VERSION
 from ..contract.catalog import questions_out
 from ..contract.codec import NPZ_MEDIA_TYPE, answer_to_json, answer_to_npz
@@ -51,7 +51,7 @@ from ..twin.config import SCHEMA_WRITTEN
 from ..twin.results import RESULTS_FORMAT
 
 HTTP_STATUS = {
-    "E_ACCESS_ADMIN_ONLY": 403,
+    "E_ACCESS_USER_ONLY": 403,
     "E_TASK_NOT_FOUND": 404,
     "E_TWIN_NOT_FOUND": 404,
     "E_QUESTION_UNKNOWN": 404,
@@ -68,7 +68,7 @@ ERRORS = {404: {"model": ErrorOut}, 409: {"model": ErrorOut}}
 
 
 def http_status(code: str) -> int:
-    """Statut HTTP d'une erreur attendue : 403 (réservé au niveau admin), 404 (inconnu), 409 (état du twin ou de la tâche), 422 (paramètres d'une
+    """Statut HTTP d'une erreur attendue : 403 (accès restreint au level user), 404 (inconnu), 409 (état du twin ou de la tâche), 422 (paramètres d'une
     question, ou réponse impossible avec ces paramètres), 400 sinon."""
     if code in HTTP_STATUS:
         return HTTP_STATUS[code]
@@ -99,9 +99,9 @@ def task_result_out(record: TaskRecord) -> TaskResultOut:
 
 
 def create_app(runner: TaskRunner, twins_folder: str | Path, events_poll_s: float = 0.1, device_task: str | None = None,
-               level: str = ADMIN) -> FastAPI:
+               level: str = OPX) -> FastAPI:
     """`device_task` : identifiant de la tâche `diag.device` lancée au démarrage (par `serve`) ; son résultat est l'appareil
-    de /v1/info, null tant qu'elle n'a pas réussi. `level` : niveau d'accès (`admin`, par défaut : tout ; `user` : les cinq
+    de /v1/info, null tant qu'elle n'a pas réussi. `level` : niveau d'accès (`opx`, par défaut : tout ; `user` : les cinq
     questions de l'eau, de la chaleur et de la température)."""
     twins_folder = Path(twins_folder)
     questions = LeveledAPI(TwinAPI(twins_folder), level)
@@ -161,7 +161,7 @@ def create_app(runner: TaskRunner, twins_folder: str | Path, events_poll_s: floa
 
     @app.post("/v1/twins/{ref}/run", status_code=202, responses=ERRORS)
     def run_twin(ref: str, body: RunIn | None = None) -> TaskOut:
-        questions.require_admin("twin.run")
+        questions.require_dev("twin.run")
         folder = questions.api.twin_folder(ref)
         params = {"path": str(folder.resolve()), "strict": (body or RunIn()).strict}
         record = runner.submit("twin.run", params, key=task_key("twin.run", params, twin=ref))
@@ -169,23 +169,23 @@ def create_app(runner: TaskRunner, twins_folder: str | Path, events_poll_s: floa
 
     @app.get("/v1/tasks/{task_id}", responses=ERRORS)
     def get_task(task_id: str) -> TaskOut:
-        questions.require_admin("tasks")
+        questions.require_dev("tasks")
         return task_out(runner.get(task_id))
 
     @app.delete("/v1/tasks/{task_id}", status_code=202, responses=ERRORS)
     def cancel_task(task_id: str) -> TaskOut:
-        questions.require_admin("tasks")
+        questions.require_dev("tasks")
         return task_out(runner.cancel(task_id))
 
     @app.get("/v1/tasks/{task_id}/result", responses=ERRORS)
     def task_result(task_id: str) -> TaskResultOut:
-        questions.require_admin("tasks")
+        questions.require_dev("tasks")
         return task_result_out(runner.result(task_id))
 
     @app.get("/v1/tasks/{task_id}/events", responses={404: {"model": ErrorOut}})
     def task_events(task_id: str, request: Request,
                     last_event_id: str | None = Header(default=None, alias="Last-Event-ID")) -> StreamingResponse:
-        questions.require_admin("tasks")
+        questions.require_dev("tasks")
         runner.get(task_id)  # 404 avant d'ouvrir le flux
         after = int(last_event_id) if last_event_id and last_event_id.isdigit() else None
 
