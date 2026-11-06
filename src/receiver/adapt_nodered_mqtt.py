@@ -13,6 +13,7 @@ import json
 import queue
 import threading
 import time
+from datetime import timezone, datetime
 
 import paho.mqtt.client as mqtt
 
@@ -28,6 +29,16 @@ def normalize_eui(eui):
     return str(eui).strip().lower()
 
 
+
+
+def normalize_chirpstack_time(value):
+    '''Converts a ChirpStack ISO time (nanoseconds) to the same format as the other times (sensor_capture_time and relay_receive_time) that is YYYY-MM-DDTHH:MM:SS+UTC'''
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value).astimezone(timezone.utc).replace(microsecond=0).isoformat()
+    except ValueError:
+        return None
 
 # ---- Message handling ----
 
