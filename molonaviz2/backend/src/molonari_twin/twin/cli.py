@@ -160,8 +160,11 @@ def main(argv: list[str]) -> int:
             for skipped, reason in zip(result.skipped, result.reasons, strict=True):
                 print(tr("Skipped: {question} ({model}): {reason}").format(
                     question=skipped["question"], model=skipped["model"], reason=render(reason, tr)))
-            print(tr("Public report written: {folder} ({entries} entries, {figures} figures, {skipped} skipped).").format(
-                folder=result.folder, entries=result.entries, figures=result.figures, skipped=len(result.skipped)))
+            if args.forward:
+                message = tr("Local report written: {folder} ({entries} entries, {figures} figures, {skipped} skipped).")
+            else:
+                message = tr("Public report written: {folder} ({entries} entries, {figures} figures, {skipped} skipped).")
+            print(message.format(folder=result.folder, entries=result.entries, figures=result.figures, skipped=len(result.skipped)))
         elif args.command == "reproduce":
             report = reproduce(args.twin)
             twin_folder = Path(args.twin).resolve()
@@ -196,7 +199,7 @@ def main(argv: list[str]) -> int:
             twin = args.twin
             if args.sigma_temperature is not None:
                 twin = with_sigma_temperature(args.twin, args.sigma_temperature, space=args.space, seed=args.seed)
-                print(tr("Twin run with a temperature σ of {sigma:g} °C: {folder}").format(sigma=args.sigma_temperature, folder=twin))
+                print(tr("Dev twin with a temperature σ of {sigma:g} °C ready: {folder}").format(sigma=args.sigma_temperature, folder=twin))
             run = run_twin(twin, on_progress=progress, strict=args.strict)
             if shown:
                 print()  # termine la ligne de progression

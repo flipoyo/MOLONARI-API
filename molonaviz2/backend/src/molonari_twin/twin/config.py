@@ -112,6 +112,7 @@ CANONICAL_SCHEMA_2 = SCHEMA_2_0_0  # forme canonique d'un twin 2.0.0
 CONFIG_NAME = "twin.yaml"
 MODES = ("direct", "mcmc")
 ID_LENGTH = 16
+DATA_ROOT_FILE = "data_root.txt"  # twin de dev hors de l'espace cgs (run --sigma-temperature) : racine de données du twin source
 DATA_ROOT_ENV = "MOLONARI_DATA"  # racine du dépôt de données d'un twin 2.0.0 (sinon : `data/` de l'espace de travail cgs)
 WORKSPACE_MARKER = "molonari.cgs"  # fichier à la racine de l'espace de travail cgs, dont `data/` est le dépôt de données
 
@@ -402,12 +403,16 @@ def frame_digest(frame: pd.DataFrame) -> str:
 
 def data_root(twin_folder: Path) -> Path | None:
     """Racine du dépôt de données d'un twin 2.0.0 : la variable MOLONARI_DATA, sinon le dossier `data/` de l'espace de
-    travail cgs qui contient le twin (celui où se trouve `molonari.cgs`). None si aucun des deux. Le dépôt et la version
+    travail cgs qui contient le twin (celui où se trouve `molonari.cgs`), ou le fichier `data_root.txt` d'un twin de dev. None si
+    rien de cela. Le dépôt et la version
     des données sont ceux du manifeste cgs : le twin.yaml n'en dit pas plus que des chemins relatifs à cette racine."""
     declared = os.environ.get(DATA_ROOT_ENV)
     if declared:
         return Path(declared).expanduser().resolve()
     twin_folder = Path(twin_folder).resolve()
+    pointer = twin_folder / DATA_ROOT_FILE
+    if pointer.is_file():  # hors de la recette : le twin_id ne dépend pas de l'endroit où sont les données
+        return Path(pointer.read_text(encoding="utf-8").strip()).expanduser().resolve()
     for folder in (twin_folder, *twin_folder.parents):
         if (folder / WORKSPACE_MARKER).is_file():
             return folder / "data"

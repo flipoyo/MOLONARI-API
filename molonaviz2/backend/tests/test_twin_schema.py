@@ -401,7 +401,7 @@ def test_dev_twin_never_carries_the_reference_seed(tmp_path, data_repo):
         derived = with_sigma_temperature(folder, 0.08, space=tmp_path / label, seed=seed)
         files = sorted(p for p in derived.rglob("*") if p.is_file())
         assert str(reference) not in "".join(p.read_text(encoding="utf-8") for p in files)
-        assert {p.name for p in files} == {"twin.yaml", "orx.yaml"}
+        assert {p.name for p in files} == {"twin.yaml", "orx.yaml", "data_root.txt"}
         ids[label] = load_twin(derived).twin_id("v")
     assert ids["a"] != ids["b"] and ids["a"] == ids["c"]
     assert ids["a"] != load_twin(folder).twin_id("v")
@@ -539,3 +539,39 @@ def test_results_and_registry_are_in_the_twin_folder_and_the_old_location_is_sti
     again = run_twin(folder)
     assert not again.computed and [w.code for w in again.warnings] == ["W_RESULTS_LEGACY_LOCATION"]
     assert not (folder / "results").exists() and not (folder / "registry.csv").exists()  # on n'y écrit plus
+
+
+def test_dev_twin_outside_the_cgs_space_finds_the_data_without_the_environment(tmp_path, data_repo, monkeypatch, capsys):
+    """Le twin de σ vit hors de l'espace cgs, sans MOLONARI_DATA : il hérite de la racine de données du twin source (fichier
+    `data_root.txt`, hors recette), et son twin_id est celui qu'aurait la même recette dans l'espace cgs."""
+    from molonari_twin.twin.cli import main
+
+    workspace = tmp_path / "ws"
+    shutil.copytree(data_repo, workspace / "data")
+    (workspace / "molonari.cgs").write_text("", encoding="utf-8")
+    monkeypatch.delenv("MOLONARI_DATA")
+    folder = seeded(workspace)
+    space = tmp_path / "dev"
+    by_hand = write_orx(write_twin(workspace, RAW_MCMC.replace("layers:", "sensors: {sigma_temperature: 0.08}\nlayers:"), "twin_02"))
+    expected = load_twin(by_hand).twin_id("v")  # même recette, dans l'espace cgs
+
+    derived = with_sigma_temperature(folder, 0.08, space=space, seed=42)
+    assert not any((parent / "molonari.cgs").exists() for parent in derived.resolve().parents)  # vraiment hors de l'espace cgs
+    assert (derived / "data_root.txt").read_text(encoding="utf-8").strip() == str((workspace / "data").resolve())
+    config = load_twin(derived)  # se valide sans variable d'environnement
+    assert config.twin_id("v") == expected and config.sigma_temperature == 0.08
+
+    monkeypatch.setenv("MOLONARI_LANG", "en")
+    capsys.readouterr()
+    assert main(["run", str(folder), "--sigma-temperature", "0.08", "--space", str(space), "--seed", "42"]) == 0  # et se calcule
+    assert twin_status(derived).state == "computed"
+
+
+def test_the_dev_twin_message_does_not_say_it_ran_when_the_computation_fails(tmp_path, data_repo, monkeypatch, capsys):
+    from molonari_twin.twin.cli import main
+
+    monkeypatch.setenv("MOLONARI_LANG", "en")
+    folder = seeded(tmp_path)
+    assert main(["run", str(folder), "--sigma-temperature", "0.08", "--space", str(tmp_path / "dev")]) == 1  # sans graine du dev
+    captured = capsys.readouterr()
+    assert "ready" in captured.out and "run with" not in captured.out and "orx.mcmc.seed" in captured.err

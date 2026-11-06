@@ -25,6 +25,7 @@ import yaml
 
 from ..errors import Issue, UserError
 from .config import (
+    DATA_ROOT_FILE,
     TwinConfig,
     TwinConfigError,
     config_path,
@@ -172,6 +173,10 @@ def with_sigma_temperature(path: str | Path, sigma: float, space: str | Path | N
         (target / config.path.name).write_text(yaml.safe_dump(recipe, sort_keys=False, allow_unicode=True), encoding="utf-8")
         if (folder / "twin.cgs").is_file():
             shutil.copy2(folder / "twin.cgs", target / "twin.cgs")
+    if config.data_root is not None:
+        # Hors de l'espace cgs, le twin ne retrouverait pas les données : on lui donne la racine du twin source. Ce n'est pas
+        # la recette (twin.yaml est inchangé) et la racine n'entre pas dans canonical() : le twin_id ne dépend pas du lieu.
+        (target / DATA_ROOT_FILE).write_text(f"{config.data_root}\n", encoding="utf-8")
     if seed is not None:
         (target / ORX_NAME).write_text(f"schema: {ORX_SCHEMA}\nmcmc:\n  seed: {int(seed)}\n", encoding="utf-8")
     return target

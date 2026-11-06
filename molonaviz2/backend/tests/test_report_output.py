@@ -73,7 +73,7 @@ def tree_bytes(folder: Path) -> dict[str, bytes]:
 
 
 @pytest.mark.slow
-def test_a_dev_reports_a_sigma_twin_locally_against_the_direct_twin_of_the_point(tmp_path, data_repo, capsys):  # noqa: F811
+def test_a_dev_reports_a_sigma_twin_locally_against_the_direct_twin_of_the_point(tmp_path, data_repo, capsys, monkeypatch):  # noqa: F811
     """T7 : `report <twin de σ> --forward <twin direct>`, hors du point. Local, sans `generation.yaml`, sans graine."""
     from molonari_twin.twin.run import with_sigma_temperature
 
@@ -91,7 +91,10 @@ def test_a_dev_reports_a_sigma_twin_locally_against_the_direct_twin_of_the_point
     before = tree_bytes(twins / "twin_01")
     capsys.readouterr()
 
+    monkeypatch.setenv("MOLONARI_LANG", "en")
     assert main(["report", str(sigma), "--forward", str(twins / "twin_01")]) == 0  # 1. sortie par défaut : dans le twin de σ
+    out = capsys.readouterr().out
+    assert "Local report written" in out and "Public report" not in out  # pas « publié » : le rapport est local
     local = sigma / "Public Report"
     index = json.loads((local / "report.json").read_text(encoding="utf-8"))
     assert index["local"] is True and index["space"]["inversion"]["twin"] == sigma.name  # le twin d'inversion est le twin de σ
@@ -102,7 +105,7 @@ def test_a_dev_reports_a_sigma_twin_locally_against_the_direct_twin_of_the_point
     for output in (point / "public_reports", point / "public_reports" / "sub"):  # 2. jamais dans public_reports/
         capsys.readouterr()
         assert main(["report", str(sigma), "--forward", str(twins / "twin_01"), "--output", str(output)]) == 1
-        assert "seul l'OPX publie" in capsys.readouterr().err
+        assert "only the OPX publishes" in capsys.readouterr().err
         assert not output.exists()
 
     assert tree_bytes(twins / "twin_01") == before  # 3. le twin direct (generation.yaml, results/) est intact, octet pour octet
