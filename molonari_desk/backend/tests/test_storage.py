@@ -273,6 +273,15 @@ def test_layer_from_dict_refuses_lateral_exchange():
     assert error.value.code == "E_LATERAL_EXCHANGE_UNSUPPORTED"
 
 
+@pytest.mark.parametrize("value", ["abc", True])
+def test_layer_from_dict_refuses_non_numeric_lateral_exchange(value):
+    from molonari_twin.domain.compute import LayerSpec
+
+    with pytest.raises(UserError) as error:
+        LayerSpec.from_dict({"name": "a", "z_low": 0.4, "q_s": value})
+    assert error.value.code == "E_LATERAL_EXCHANGE_UNSUPPORTED"
+
+
 def test_layer_from_dict_ignores_zero_lateral_exchange():
     from molonari_twin.domain.compute import LayerSpec
 
