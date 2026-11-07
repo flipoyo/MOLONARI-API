@@ -20,7 +20,7 @@ corrélées dans le temps : un lot d'itérations consécutives en tient compte, 
 presque aussi large que l'a priori et l'autocorrélation dépasse la longueur d'un lot de 100 itérations : l'erreur par
 lots y était sous-estimée (dispersion réelle entre graines 0,05 à 0,07 sur la médiane de neg_log10_k, pour 0,025
 annoncés). On y calcule donc chaque quantile sur chaque chaîne entière, la valeur comparée est celle des chaînes
-regroupées, et l'erreur est std(statistiques par chaîne, ddof=1)/sqrt(nombre de chaînes). La tolérance est la même
+regroupées, et l'erreur est std(statistiques par chaîne, ddof=1)/sqrt(nombre de chaînes), soit 16 chaînes et 15 degrés de liberté pour l'erreur. La tolérance est la même
 partout : `N_STANDARD_ERRORS` erreurs types, jamais élargie pour faire passer un test.
 
 Test 2 : avec un bruit de 0,5 °C, lambda_s, rhos_cs et porosity restent proches de leur loi a priori : la comparaison
@@ -215,7 +215,7 @@ def test_both_dreams_sample_the_same_gaussian():
 # Test 2 : colonne synthétique -----------------------------------------------------------------------------------
 COLUMN_TIMES = 60
 COLUMN_CELLS = 20
-COLUMN_CHAINS = 8
+COLUMN_CHAINS = 16
 COLUMN_BURN_IN_MAX = 1500
 COLUMN_ITERATIONS = 2000
 SIGMA_T = 0.5  # bruit des observations et sigma_t de la config : à 0,1 °C l'a posteriori est si étroit que le burn-in dépasse 1000 pas
