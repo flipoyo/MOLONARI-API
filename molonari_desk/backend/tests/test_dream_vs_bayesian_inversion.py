@@ -16,8 +16,15 @@ l'erreur Monte-Carlo près.
 Méthode d'erreur, reprise de `tests/test_samplers.py` de bayesian_inversion (bb07a12) : moyennes de lots d'itérations
 consécutives (`N_BATCH`), erreur type = écart-type des moyennes de lots / sqrt(`N_BATCH`). Les chaînes d'un DREAM sont
 corrélées dans le temps : un lot d'itérations consécutives en tient compte, pas une erreur calculée comme si les
-échantillons étaient indépendants. Pour les quantiles, on prend le quantile de chaque lot. La tolérance est la même
+échantillons étaient indépendants. Cette méthode sert au test 1 (gaussienne). Au test 2 (colonne), l'a posteriori est
+presque aussi large que l'a priori et l'autocorrélation dépasse la longueur d'un lot de 100 itérations : l'erreur par
+lots y était sous-estimée (dispersion réelle entre graines 0,05 à 0,07 sur la médiane de neg_log10_k, pour 0,025
+annoncés). On y calcule donc chaque quantile sur chaque chaîne entière, la valeur comparée est celle des chaînes
+regroupées, et l'erreur est std(statistiques par chaîne, ddof=1)/sqrt(nombre de chaînes). La tolérance est la même
 partout : `N_STANDARD_ERRORS` erreurs types, jamais élargie pour faire passer un test.
+
+Test 2 : avec un bruit de 0,5 °C, lambda_s, rhos_cs et porosity restent proches de leur loi a priori : la comparaison
+contraint surtout neg_log10_k (et le flux, qui en dépend).
 
 Même loi a priori des deux côtés (vérifiée par les tests) : uniforme dans `neg_log10_k`, `porosity`, `lambda_s` et
 `rhos_cs` entre les bornes de `config.priors`. Côté bayesian_inversion, `IntrinK` en échelle `log` équivaut à une loi
@@ -75,12 +82,13 @@ def batch_second_moment_and_error(samples, center):
     return batch_mean_and_error((samples - center) ** 2)
 
 
-def batch_quantiles_and_errors(samples, quantiles):
-    """Quantiles de samples (itérations, chaînes, K), moyenne des quantiles de chaque lot et erreur type : (Q, K)."""
-    batch = batches(samples)
-    flat = batch.reshape(N_BATCH, -1, batch.shape[-1])
-    per_batch = np.quantile(flat, quantiles, axis=1)  # (Q, N_BATCH, K)
-    return per_batch.mean(axis=1), per_batch.std(axis=1, ddof=1) / math.sqrt(N_BATCH)
+def chain_quantiles_and_errors(samples, quantiles):
+    """Quantiles des chaînes regroupées (itérations, chaînes, K) et erreur type entre chaînes : (Q, K).
+
+    La statistique est calculée sur chaque chaîne entière ; l'erreur est std(par chaîne, ddof=1)/sqrt(chaînes)."""
+    pooled = np.quantile(samples.reshape(-1, samples.shape[-1]), quantiles, axis=0)
+    per_chain = np.quantile(samples, quantiles, axis=0)  # (Q, chaînes, K)
+    return pooled, per_chain.std(axis=1, ddof=1) / math.sqrt(samples.shape[1])
 
 
 def check_close(label, value, expected, error, failures):
@@ -169,6 +177,7 @@ def test_both_dreams_sample_the_same_gaussian():
     result = jax_gaussian_samples(config)
     # burn-in de longueur fixe : gr_threshold ne peut pas être atteint, le burn-in dure burn_in_max pas
     assert result.burn_in_iterations == GAUSS_BURN_IN, "le burn-in JAX devait durer burn_in_max pas"
+    assert result.resets.sum() == 0, f"{int(result.resets.sum())} chaînes JAX remplacées pendant le burn-in"
     jax_samples = result.samples[:, :, 0, :]  # (itérations, chaînes, 4)
     bi_samples, bi_acceptance = bayesian_inversion_gaussian_samples(config)
     assert jax_samples.shape == bi_samples.shape == (GAUSS_ITERATIONS, GAUSS_CHAINS, 4)
@@ -335,13 +344,16 @@ def test_both_dreams_agree_on_a_synthetic_column():
 
     failures = []
     report = {}
+    margins = {}
     for label, jax_values, bi_values in (
         ("paramètres", jax_samples, bi_samples), ("flux d'eau", jax_flux, bi_flux),
     ):
-        jax_q, jax_e = batch_quantiles_and_errors(jax_values, QUANTILES)
-        bi_q, bi_e = batch_quantiles_and_errors(bi_values, QUANTILES)
+        jax_q, jax_e = chain_quantiles_and_errors(jax_values, QUANTILES)
+        bi_q, bi_e = chain_quantiles_and_errors(bi_values, QUANTILES)
         assert np.all(jax_e > 0) and np.all(bi_e > 0)
         for i, q in enumerate(QUANTILES):
+            bound = N_STANDARD_ERRORS * np.sqrt(jax_e[i] ** 2 + bi_e[i] ** 2)
+            margins[f"{label} q{q:.2f}"] = np.abs(jax_q[i] - bi_q[i]) / bound
             check_agree(f"{label}, quantile {q}", jax_q[i], jax_e[i], bi_q[i], bi_e[i], failures)
         report[label] = (jax_q, jax_e, bi_q, bi_e)
 
@@ -360,4 +372,6 @@ def test_both_dreams_agree_on_a_synthetic_column():
                     f"[colonne] {label} {name} q{q:.2f} : JAX {jax_q[i, k]:.6g} ± {jax_e[i, k]:.2g}, "
                     f"bayesian_inversion {bi_q[i, k]:.6g} ± {bi_e[i, k]:.2g}"
                 )
+    for label, ratio in margins.items():
+        print(f"[colonne] marge (écart / tolérance) {label} : {np.round(ratio, 2)}")
     assert not failures, "\n".join(failures)
