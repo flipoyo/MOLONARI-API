@@ -17,6 +17,7 @@ Jusqu'à 0.6.0-alpha.1, le backend faisait partie du paquet molonaviz2 (aujourd'
 ## [Non publié]
 
 ### Ajouté
+- `tests/test_dream_vs_bayesian_inversion.py` (slow) : les deux DREAM, celui du twin (JAX) et celui de bayesian_inversion 0.4.0, échantillonnent la même loi à l'erreur Monte-Carlo près (moyennes de lots, 4 erreurs types). Une cible gaussienne dont les moments sont connus, puis une colonne synthétique à une couche : médianes et quantiles à 5 % et 95 % des quatre paramètres et du flux d'eau, recalculé par le même modèle direct. Aucun code de production ne change.
 - `E_LATERAL_EXCHANGE_UNSUPPORTED` : un échange latéral `q_s` non nul est refusé explicitement, dans `twin.yaml` (sur `layers[i].q_s`, à la place de « clé inconnue ») et par `LayerSpec.from_dict` (projets relus). `q_s: 0` est accepté sans effet sur le `twin_id` ; `t_lateral` est ignoré. Le moteur n'a pas de terme source latéral.
 
 ### Modifié
