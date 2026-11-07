@@ -8,6 +8,8 @@
     molonari-twin report <twin_xx>       écrit le rapport public (« Public Report/ ») d'un twin calculé et de son space
                                          (--forward <twin direct> : rapport local d'un dev, par exemple pour un twin de σ ; jamais dans public_reports/)
     molonari-twin reproduce <twin_xx>    relance et vérifie le déterminisme d'un twin calculé (opx)
+    molonari-twin reproduce <twin_xx> --export <dossier>   exporte les résultats existants, leurs empreintes et leurs valeurs clés (sans relancer ; opx)
+    molonari-twin reproduce --compare <A> <B>   compare deux exports, tableau par tableau ; code 0 si identiques, 1 sinon (--json ; opx)
     molonari-twin questions [<twin_xx>]  liste les questions du catalogue (celles d'un twin, s'il est donné)
     molonari-twin ask <twin_xx> <question>   pose une question à un twin calculé (--params '{"z": 0.2}', JSON du corps du POST)
                                          ou à un état généré (<état> au lieu de <twin_xx> : eau, chaleur, température)
@@ -95,8 +97,14 @@ def main(argv: list[str]) -> int:
     report_parser.add_argument("--forward", default=None, metavar="FOLDER",
                                help="direct twin of the space (dev): a local report of this twin against it, for example a twin from --sigma-temperature; never written in public_reports/")
     reproduce_parser = sub.add_parser("reproduce", help="reproduce a twin and verify determinism (opx)")
-    reproduce_parser.add_argument("twin", help="twin_xx folder with computed results")
+    reproduce_parser.add_argument("twin", nargs="?", default=None, help="twin_xx folder with computed results (not needed with --compare)")
     reproduce_parser.add_argument("--output", default=None, help="folder to write JSON and text reports (default: twin folder)")
+    reproduce_mode = reproduce_parser.add_mutually_exclusive_group()
+    reproduce_mode.add_argument("--export", default=None, metavar="FOLDER",
+                                help="do not recompute: export the existing results, their fingerprints and key values into FOLDER")
+    reproduce_mode.add_argument("--compare", nargs=2, default=None, metavar=("A", "B"),
+                                help="compare two exports (exit code 0 if identical, 1 otherwise)")
+    reproduce_parser.add_argument("--json", action="store_true", help="with --compare: write the comparison as JSON on the standard output")
     add_question_commands(sub)
     generate_parser = sub.add_parser("generate", help="generate a state with the direct model, from a published sample of a sampling point")
     generate_parser.add_argument("point", help="sampling point folder (holds public_reports/chains.npz and twins/<direct twin>/generation.yaml)")
@@ -123,12 +131,19 @@ def main(argv: list[str]) -> int:
     args = parser.parse_args(argv)
     if args.command == "run" and args.sigma_temperature is None and (args.space is not None or args.seed is not None):
         parser.error(tr("--space and --seed need --sigma-temperature."))
+    if args.command == "reproduce":
+        if args.compare is None and args.twin is None:
+            reproduce_parser.error(tr("a twin is needed, except with --compare."))
+        if args.output is not None and (args.export is not None or args.compare is not None):
+            reproduce_parser.error(tr("--output does not apply to --export or --compare."))
+        if args.json and args.compare is None:
+            reproduce_parser.error(tr("--json needs --compare."))
     if args.command == "serve" and args.host not in LOCAL_HOSTS:
         serve_parser.error(tr("only a local address is allowed until authentication exists"))
 
     from .config import TwinConfigError, load_twin
     from .lab import LabConfigError
-    from .reproduce import reproduce
+    from .reproduce import compare_exports, export_twin, reproduce
     from .run import (
         continue_twin,
         list_twins,
@@ -165,6 +180,13 @@ def main(argv: list[str]) -> int:
             else:
                 message = tr("Public report written: {folder} ({entries} entries, {figures} figures, {skipped} skipped).")
             print(message.format(folder=result.folder, entries=result.entries, figures=result.figures, skipped=len(result.skipped)))
+        elif args.command == "reproduce" and args.compare is not None:
+            comparison = compare_exports(*args.compare)
+            print(json.dumps(comparison.to_dict(), indent=2, ensure_ascii=False) if args.json else comparison.to_text())
+            return 0 if comparison.identical else 1
+        elif args.command == "reproduce" and args.export is not None:
+            folder = export_twin(args.twin, args.export)
+            print(tr("Export written: {folder} (results/, fingerprint.json, resultats.txt).").format(folder=folder))
         elif args.command == "reproduce":
             report = reproduce(args.twin)
             twin_folder = Path(args.twin).resolve()

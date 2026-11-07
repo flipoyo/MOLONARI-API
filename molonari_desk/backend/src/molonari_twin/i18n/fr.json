@@ -336,5 +336,9 @@
  "Twin \"{name}\" has no results to reproduce from: run it first.": "Le twin « {name} » n'a pas de résultats à reproduire : lancez-le d'abord.",
  "Reproduction failed: {error}": "La reproduction a échoué : {error}",
  "Twin \"{name}\" was not recomputed: existing results returned.": "Le twin « {name} » n'a pas été recalculé : résultats existants renvoyés.",
- "Reproduction report written: {json_file}, {text_file}": "Rapport de reproduction écrit : {json_file}, {text_file}"
+ "Reproduction report written: {json_file}, {text_file}": "Rapport de reproduction écrit : {json_file}, {text_file}",
+ "a twin is needed, except with --compare.": "un twin est nécessaire, sauf avec --compare.",
+ "--output does not apply to --export or --compare.": "--output ne s'applique ni à --export ni à --compare.",
+ "--json needs --compare.": "--json demande --compare.",
+ "Export written: {folder} (results/, fingerprint.json, resultats.txt).": "Export écrit : {folder} (results/, fingerprint.json, resultats.txt)."
 }

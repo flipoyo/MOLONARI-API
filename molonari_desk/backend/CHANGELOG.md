@@ -16,6 +16,10 @@ Jusqu'à 0.6.0-alpha.1, le backend faisait partie du paquet molonaviz2 (aujourd'
 
 ## [Non publié]
 
+### Ajouté
+- `reproduce <twin> --export DOSSIER` : exporte les résultats existants (sans relancer le calcul) dans `DOSSIER/results/`, avec `fingerprint.json` (SHA-256 des fichiers et des métadonnées comparables, `twin_id`, versions, machine, état CGS) et `resultats.txt` (flux d'eau et de chaleur moyens, RMSE, en `repr` et en hex). Aucune graine.
+- `reproduce --compare A B [--json]` : compare deux exports fichier par fichier et tableau par tableau (forme, type, éléments différents, écart maximal) ; code de sortie 0 si identiques, 1 sinon ; une recette différente (twin_id, versions, données nettoyées) est signalée. Réservé à opx, comme `reproduce`. `reproduce <twin>` est inchangé.
+
 ### Modifié
 - L'espace uv s'appelle `molonari_desk/` et l'application `molonari-desk` (anciennement molonaviz2) : textes, docstrings et dossier temporaire du moteur de référence (`molonari_desk_pyheatmy`). Les messages `E_PROJECT_INVALID` et `E_PROJECT_TOO_NEW` citent MOLONARI Desk. Aucun calcul ni identifiant ne change.
 

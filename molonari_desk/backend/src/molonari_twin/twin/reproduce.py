@@ -4,6 +4,11 @@
 les fichiers produits, les compare à la référence et écrit un compte rendu sans la graine : machine,
 versions, empreintes, résultat, écart maximal par fichier.
 
+`reproduce <twin> --export DOSSIER` n'exécute rien : il copie les résultats existants dans DOSSIER/results/ et écrit
+`fingerprint.json` (empreintes, versions, machine) et `resultats.txt` (valeurs clés en repr et en hex), sans la graine.
+`reproduce --compare A B` compare deux exports (fichier par fichier, tableau par tableau pour les .npz) : code de sortie
+0 si identiques, 1 sinon.
+
 La commande est réservée à `opx`.
 """
 
@@ -11,11 +16,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import platform
+import shutil
 import socket
 import zipfile
 from dataclasses import dataclass, field
 from datetime import datetime
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 import numpy as np
@@ -148,8 +156,6 @@ def reproduce(twin_path: str | Path, strict: bool = True) -> ReproductionReport:
     Supprime les resultats existants, relance `run_twin` (avec ``strict`` par defaut),
     compare fichier par fichier et ecrit un compte rendu sans la graine.
     """
-    import shutil
-
     from ..engine import api
 
     twin_path = Path(twin_path).resolve()
@@ -227,3 +233,204 @@ def reproduce(twin_path: str | Path, strict: bool = True) -> ReproductionReport:
         chain_state_match=cs_match,
         message="IDENTIQUE" if all_match else "DIFFERENCES DETECTEES",
     )
+
+
+# --- export et comparaison entre deux machines (T10) ---
+
+FINGERPRINT_MACHINE_FIELDS = ("platform", "device")  # propres à la machine : jamais une « recette différente »
+FINGERPRINT_RECIPE_FIELDS = ("twin_id", "engine_version", "jax", "jaxlib", "numpy", "cleaned_sha256")
+
+
+def _library_version(name: str) -> str | None:
+    try:
+        return version(name)
+    except PackageNotFoundError:
+        return None
+
+
+def _metadata_sha256(results_dir: Path) -> str:
+    canonical = json.dumps(_comparable_metadata(results_dir), sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _key_values(results_dir: Path) -> list[tuple[str, float | None]]:
+    """Flux d'eau moyen, flux de chaleur (z = 0) et RMSE, par les fonctions des questions ; None si indisponible."""
+    from ..questions.flux import water_flux  # dans la fonction : twin/ n'importe pas questions/ au chargement
+    from ..questions.heat import heat_budget
+    from .results import load_results
+
+    results = load_results(results_dir)
+    values: list[tuple[str, float | None]] = []
+    try:
+        values.append(("water_flux_mean", float(water_flux(results).data["mean"].value)))
+    except UserError:
+        values.append(("water_flux_mean", None))
+    try:
+        heat = heat_budget(results, z=0.0).data
+        for key in ("total", "advective", "conductive"):
+            values.append((f"heat_{key}", float(heat[key].value)))
+    except UserError:
+        values += [(f"heat_{key}", None) for key in ("total", "advective", "conductive")]
+    rmse = results.metadata.get("rmse_celsius") or {}
+    for key in ("t1", "t2", "t3", "total"):
+        value = rmse.get(key)
+        values.append((f"rmse_{key}", None if value is None else float(value)))
+    return values
+
+
+def export_twin(twin_path: str | Path, folder: str | Path) -> Path:
+    """Exporte les résultats existants d'un twin et leurs empreintes dans `folder`, sans relancer le calcul ni écrire la graine."""
+    from ..engine import api
+    from .provenance import cgs_state_digest, code_path
+
+    twin_path = Path(twin_path).resolve()
+    config = load_twin(twin_path)
+    status = twin_status(config)
+    if not status.has_results:
+        raise UserError("E_REPRODUCE_NO_REFERENCE", name=config.name)
+    results_dir = status.results_dir
+    folder = Path(folder).resolve()
+    exported = folder / "results"
+    if exported.exists():
+        shutil.rmtree(exported)
+    exported.mkdir(parents=True)
+    names = sorted(p.name for p in results_dir.iterdir() if p.is_file())
+    for name in names:
+        shutil.copy2(results_dir / name, exported / name)
+
+    fingerprint = {
+        "files": {name: _sha256_file(exported / name) for name in names},
+        "comparable_metadata_sha256": _metadata_sha256(exported),
+        "cleaned_sha256": (config.processed_manifest or {}).get("cleaned_sha256"),
+        "twin_id": status.twin_id,
+        "engine_version": api.engine_version(),
+        "device": api.device(),
+        "platform": {"system": platform.system(), "release": platform.release(),
+                     "machine": platform.machine(), "processor": platform.processor()},
+        "jax": _library_version("jax"),
+        "jaxlib": _library_version("jaxlib"),
+        "numpy": _library_version("numpy"),
+        "cgs_state_sha256": cgs_state_digest(Path(config.folder), code_path()),
+    }
+    (folder / "fingerprint.json").write_text(json.dumps(fingerprint, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    lines = [f"# mode = {config.mode} (en mcmc, le flux d'eau est la moyenne a posteriori)"]
+    for name, value in _key_values(exported):
+        lines.append(f"{name} = indisponible" if value is None else f"{name} = {value!r} | {value.hex()}")
+    (folder / "resultats.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return folder
+
+
+@dataclass(frozen=True)
+class ExportFileComparison:
+    """Comparaison d'un fichier des résultats entre deux exports."""
+
+    path: str
+    match: bool
+    detail: str = ""  # explication d'une différence (présence, empreinte)
+    arrays: list[dict] = field(default_factory=list)  # tableaux différents d'un .npz : nom, motif, écart
+
+
+@dataclass(frozen=True)
+class ExportComparison:
+    """Comparaison de deux exports de twin."""
+
+    identical: bool
+    files: list[ExportFileComparison] = field(default_factory=list)
+    recipe_differences: list[str] = field(default_factory=list)  # « recette différente » : champs de fingerprint.json
+
+    def to_dict(self) -> dict:
+        return {
+            "identical": self.identical,
+            "files": [{"path": f.path, "match": f.match, "detail": f.detail, "arrays": f.arrays} for f in self.files],
+            "recipe_differences": self.recipe_differences,
+        }
+
+    def to_text(self) -> str:
+        lines = ["=" * 70, "Comparaison de deux exports", "=" * 70, ""]
+        lines.append("IDENTIQUE" if self.identical else "DIFFERENCES DETECTEES")
+        for f in self.files:
+            lines.append(f"  {f.path}: {'ok' if f.match else 'DIFFERENT'}" + (f" ({f.detail})" if f.detail else ""))
+            for array in f.arrays:
+                lines.append(f"    {array['name']}: {array['reason']}")
+        for name in self.recipe_differences:
+            lines.append(f"  recette différente : {name}")
+        lines.append("=" * 70)
+        return "\n".join(lines)
+
+
+def _read_json(path: Path) -> dict:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _compare_arrays(a: np.ndarray, b: np.ndarray) -> dict | None:
+    """Différence entre deux tableaux (forme, type, éléments, écart absolu maximal), ou None s'ils sont égaux."""
+    if a.shape != b.shape:
+        return {"reason": f"forme {a.shape} contre {b.shape}", "shape": [list(a.shape), list(b.shape)]}
+    if a.dtype != b.dtype:
+        return {"reason": f"type {a.dtype} contre {b.dtype}", "dtype": [str(a.dtype), str(b.dtype)]}
+    if np.issubdtype(a.dtype, np.number):
+        different = ~((a == b) | (np.isnan(a) & np.isnan(b))) if np.issubdtype(a.dtype, np.inexact) else (a != b)
+        count = int(different.sum())
+        if count == 0:
+            return None
+        gap = float(np.nanmax(np.abs(a[different].astype(float) - b[different].astype(float))))
+        if math.isnan(gap):
+            gap = float("inf")
+        return {"reason": f"{count} éléments différents sur {a.size}, écart absolu maximal {gap!r}", "different": count, "max_abs_diff": gap}
+    count = int((a != b).sum())
+    return None if count == 0 else {"reason": f"{count} éléments différents sur {a.size}", "different": count}
+
+
+def _compare_npz(path_a: Path, path_b: Path, name: str) -> list[dict]:
+    try:
+        with np.load(path_a, allow_pickle=False) as a, np.load(path_b, allow_pickle=False) as b:
+            keys_a, keys_b = set(a.keys()), set(b.keys())
+            out = [{"name": k, "reason": "absent de B"} for k in sorted(keys_a - keys_b)]
+            out += [{"name": k, "reason": "absent de A"} for k in sorted(keys_b - keys_a)]
+            for key in sorted(keys_a & keys_b):
+                if name == "chain_state.npz" and key == "burn_in_duration_s":
+                    continue
+                diff = _compare_arrays(a[key], b[key])
+                if diff is not None:
+                    out.append({"name": key, **diff})
+            return out
+    except (OSError, ValueError, zipfile.BadZipFile) as exc:
+        return [{"name": "(fichier)", "reason": f"illisible : {exc}"}]
+
+
+def compare_exports(a: str | Path, b: str | Path) -> ExportComparison:
+    """Compare deux dossiers produits par `export_twin`, fichier par fichier, puis les empreintes hors machine."""
+    a, b = Path(a), Path(b)
+    results_a, results_b = a / "results", b / "results"
+    names_a = {p.name for p in results_a.iterdir() if p.is_file()} if results_a.is_dir() else set()
+    names_b = {p.name for p in results_b.iterdir() if p.is_file()} if results_b.is_dir() else set()
+    files: list[ExportFileComparison] = []
+    for name in sorted(names_a | names_b):
+        if name not in names_b:
+            files.append(ExportFileComparison(name, False, "absent de B"))
+        elif name not in names_a:
+            files.append(ExportFileComparison(name, False, "absent de A"))
+        elif name == "metadata.json":
+            same = _metadata_sha256(results_a) == _metadata_sha256(results_b)
+            files.append(ExportFileComparison(name, same, "" if same else "métadonnées comparables différentes (hors date, durée, provenance)"))
+        elif _sha256_file(results_a / name) == _sha256_file(results_b / name):
+            files.append(ExportFileComparison(name, True))
+        elif name.endswith(".npz"):
+            arrays = _compare_npz(results_a / name, results_b / name, name)
+            # chain_state.npz : burn_in_duration_s est exclu (T3), donc des octets différents sans tableau différent y sont admis
+            admitted = name == "chain_state.npz" and not arrays
+            detail = "" if admitted else "empreintes SHA-256 différentes" + ("" if arrays else " (tableaux identiques)")
+            files.append(ExportFileComparison(name, admitted, detail, arrays))
+        else:
+            files.append(ExportFileComparison(name, False, "empreintes SHA-256 différentes"))
+
+    recipe: list[str] = []
+    fp_a, fp_b = a / "fingerprint.json", b / "fingerprint.json"
+    if fp_a.is_file() and fp_b.is_file():
+        fa, fb = _read_json(fp_a), _read_json(fp_b)
+        recipe = [k for k in FINGERPRINT_RECIPE_FIELDS if fa.get(k) != fb.get(k)]
+    else:
+        recipe = ["fingerprint.json"]
+    identical = all(f.match for f in files) and not recipe
+    return ExportComparison(identical, files, recipe)
