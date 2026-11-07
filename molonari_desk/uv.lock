@@ -147,6 +147,15 @@ wheels = [
 ]
 
 [[package]]
+name = "bayesian-inversion"
+version = "0.4.0"
+source = { git = "https://github.com/YunusEmre4418/MOLONARI-bayesian-inversion?rev=bb07a127acd893fd38b7c339fa561d941077408f#bb07a127acd893fd38b7c339fa561d941077408f" }
+dependencies = [
+    { name = "numpy" },
+    { name = "tqdm" },
+]
+
+[[package]]
 name = "beautifulsoup4"
 version = "4.15.0"
 source = { registry = "https://pypi.org/simple" }
@@ -911,6 +920,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "bayesian-inversion" },
     { name = "pyheatmy" },
     { name = "pytest" },
     { name = "pytest-qt" },
@@ -927,7 +937,8 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "pyheatmy", editable = "../../pyheatmy" },
+    { name = "bayesian-inversion", git = "https://github.com/YunusEmre4418/MOLONARI-bayesian-inversion?rev=bb07a127acd893fd38b7c339fa561d941077408f" },
+    { name = "pyheatmy", git = "https://github.com/YunusEmre4418/MOLONARI-pyheatmy?rev=401d8e1b48a40cf13efc74302fa9a1a8c67c665d" },
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-qt", specifier = ">=4.4" },
 ]
@@ -957,6 +968,7 @@ server = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "bayesian-inversion" },
     { name = "fastapi" },
     { name = "httpx2" },
     { name = "jsonschema" },
@@ -983,10 +995,11 @@ provides-extras = ["server"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "bayesian-inversion", git = "https://github.com/YunusEmre4418/MOLONARI-bayesian-inversion?rev=bb07a127acd893fd38b7c339fa561d941077408f" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx2", specifier = ">=2.16" },
     { name = "jsonschema", specifier = ">=4.22" },
-    { name = "pyheatmy", editable = "../../pyheatmy" },
+    { name = "pyheatmy", git = "https://github.com/YunusEmre4418/MOLONARI-pyheatmy?rev=401d8e1b48a40cf13efc74302fa9a1a8c67c665d" },
     { name = "pytest", specifier = ">=8" },
     { name = "uvicorn", specifier = ">=0.30" },
 ]
@@ -1401,8 +1414,8 @@ wheels = [
 
 [[package]]
 name = "pyheatmy"
-version = "0.9.7"
-source = { editable = "../../pyheatmy" }
+version = "0.12.0"
+source = { git = "https://github.com/YunusEmre4418/MOLONARI-pyheatmy?rev=401d8e1b48a40cf13efc74302fa9a1a8c67c665d#401d8e1b48a40cf13efc74302fa9a1a8c67c665d" }
 dependencies = [
     { name = "ipython" },
     { name = "matplotlib" },
@@ -1410,21 +1423,6 @@ dependencies = [
     { name = "nbformat" },
     { name = "nbmake" },
     { name = "numba" },
-    { name = "pandas" },
-    { name = "psutil" },
-    { name = "pytest" },
-    { name = "scipy" },
-    { name = "tqdm" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "ipython" },
-    { name = "matplotlib" },
-    { name = "nbconvert" },
-    { name = "nbformat" },
-    { name = "nbmake" },
-    { name = "numba", specifier = ">=0.60" },
     { name = "pandas" },
     { name = "psutil" },
     { name = "pytest" },

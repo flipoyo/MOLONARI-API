@@ -29,7 +29,8 @@ molonari-twin = "molonari_twin.__main__:main"
 [dependency-groups]
 dev = [
     "pytest>=8",
-    "pyheatmy",  # référence des tests du moteur (engine/reference.py)
+    "pyheatmy",  # référence des tests du moteur : modèle direct (engine/reference.py)
+    "bayesian_inversion",  # référence des tests du moteur : énergie du MCMC (engine/reference.py)
     "fastapi>=0.115",  # tests de l'API (extra server)
     "uvicorn>=0.30",
     "httpx2>=2.16",  # TestClient de FastAPI (starlette 1.x)
