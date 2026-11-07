@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 
-from ..errors import Issue  # aussi importable d'ici (ancien emplacement)
+from ..errors import Issue, UserError  # aussi importable d'ici (ancien emplacement)
 from ..i18n import N_
 
 # Paramètres estimés par l'inversion, dans l'espace où les lois a priori sont uniformes.
@@ -48,8 +48,11 @@ class LayerSpec:
 
     @classmethod
     def from_dict(cls, data: dict) -> LayerSpec:
-        """Couche relue d'un projet. Les clés q_s et t_lateral des projets plus anciens
-        (échange latéral, pas pris en charge dans cette version) sont ignorées."""
+        """Couche relue d'un projet. L'échange latéral n'est pas pris en charge dans cette version : `q_s`
+        absent ou nul est accepté, `q_s` non nul lève E_LATERAL_EXCHANGE_UNSUPPORTED. `t_lateral` est ignoré."""
+        lateral = data.get("q_s", 0)
+        if isinstance(lateral, bool) or not isinstance(lateral, int | float) or lateral != 0:
+            raise UserError("E_LATERAL_EXCHANGE_UNSUPPORTED", None, value=lateral)
         return cls(**{k: v for k, v in data.items() if k not in ("q_s", "t_lateral")})
 
 

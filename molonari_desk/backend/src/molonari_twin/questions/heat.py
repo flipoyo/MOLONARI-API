@@ -1,7 +1,7 @@
 """Bilan de chaleur à une profondeur (HN-20) : flux advectif, conductif et total, moyennés sur une période.
 
 Les flux de chaleur viennent du format 2.0.0 des résultats, en W/m², positifs vers le bas. L'échange latéral
-n'est pas pris en charge par cette version (LayerSpec.from_dict ignore q_s et t_lateral) : il vaut 0.
+n'est pas pris en charge par cette version (LayerSpec.from_dict refuse un q_s non nul) : il vaut 0.
 """
 
 from __future__ import annotations

@@ -230,6 +230,7 @@ MESSAGES: dict[str, str] = {
     "E_TWIN_DATA_ROOT": "the data repository is unknown: set {env} or put the twin in a cgs workspace (molonari.cgs).",
     "E_TWIN_EXPECTED_LIST": "expected a list.",
     "E_TWIN_KEY_FROM_DATA": "since schema 2.0.0, the depths and the offset are read from the laboratory and point files.",
+    "E_LATERAL_EXCHANGE_UNSUPPORTED": "lateral exchange (q_s) is not supported by the engine of this version: q_s must be 0 (got {value}).",
     "E_TWIN_KEY_MOVED": "moved to {new} since schema 2.0.0.",
     "E_TWIN_LEGACY_ID": "expected a twin_id of {length} hexadecimal characters.",
     "E_TWIN_METHOD": "must be one of {methods}.",

@@ -200,6 +200,7 @@
  "the data repository is unknown: set {env} or put the twin in a cgs workspace (molonari.cgs).": "le dépôt de données est inconnu : définissez {env} ou placez le twin dans un espace cgs (molonari.cgs).",
  "expected a list.": "liste attendue.",
  "since schema 2.0.0, the depths and the offset are read from the laboratory and point files.": "depuis le schéma 2.0.0, les profondeurs et le décalage sont lus dans les fichiers du laboratoire et du point.",
+ "lateral exchange (q_s) is not supported by the engine of this version: q_s must be 0 (got {value}).": "échange latéral (q_s) non pris en charge par le moteur de cette version : q_s doit valoir 0 (reçu : {value}).",
  "moved to {new} since schema 2.0.0.": "déplacé vers {new} depuis le schéma 2.0.0.",
  "the seed is reserved for ORX since schema 2.0.0: write mcmc.seed in orx.yaml (orx layer), not in twin.yaml.": "la graine est réservée à ORX depuis le schéma 2.0.0 : écrire mcmc.seed dans orx.yaml (couche orx), pas dans twin.yaml.",
  "expected a text.": "texte attendu.",

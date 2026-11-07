@@ -262,3 +262,19 @@ def test_inversion_result_of_0_3_0_is_read_without_the_new_arrays(filled):
     loaded = InversionResult.from_arrays(project.load_result(cid))
     assert loaded.thin == 1 and all(getattr(loaded, name) is None for name in OPTIONAL_ARRAYS)
     np.testing.assert_array_equal(loaded.samples, arrays["samples"])
+
+
+def test_layer_from_dict_refuses_lateral_exchange():
+    """Un q_s non nul n'est pas pris en charge par le moteur : refus explicite."""
+    from molonari_twin.domain.compute import LayerSpec
+
+    with pytest.raises(UserError) as error:
+        LayerSpec.from_dict({"name": "a", "z_low": 0.4, "q_s": 1e-6})
+    assert error.value.code == "E_LATERAL_EXCHANGE_UNSUPPORTED"
+
+
+def test_layer_from_dict_ignores_zero_lateral_exchange():
+    from molonari_twin.domain.compute import LayerSpec
+
+    plain = LayerSpec.from_dict({"name": "a", "z_low": 0.4})
+    assert LayerSpec.from_dict({"name": "a", "z_low": 0.4, "q_s": 0, "t_lateral": 12.0}) == plain

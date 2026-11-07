@@ -16,7 +16,12 @@ Jusqu'à 0.6.0-alpha.1, le backend faisait partie du paquet molonaviz2 (aujourd'
 
 ## [Non publié]
 
+### Ajouté
+- `E_LATERAL_EXCHANGE_UNSUPPORTED` : un échange latéral `q_s` non nul est refusé explicitement, dans `twin.yaml` (sur `layers[i].q_s`, à la place de « clé inconnue ») et par `LayerSpec.from_dict` (projets relus). `q_s: 0` est accepté sans effet sur le `twin_id` ; `t_lateral` est ignoré. Le moteur n'a pas de terme source latéral.
+
 ### Modifié
+- Référence des tests du moteur : pyheatmy 0.12.0 (modèle direct) et bayesian_inversion 0.4.0 (énergie du MCMC), figés par commit dans `molonari_desk/pyproject.toml` et `uv.lock`, ne sont plus montés dans l'espace cgs (la CI ne récupère plus MOLONARI-computo). La physique est identique à celle de pyheatmy 0.9.7 : aucun identifiant ne change.
+- Règle de synchronisation (docstring d'`engine/reference.py`, README) : si `tests/test_engine_forward.py` (1e-9) échoue après avoir monté le commit figé, on porte d'abord le changement dans le moteur JAX.
 - L'espace uv s'appelle `molonari_desk/` et l'application `molonari-desk` (anciennement molonaviz2) : textes, docstrings et dossier temporaire du moteur de référence (`molonari_desk_pyheatmy`). Les messages `E_PROJECT_INVALID` et `E_PROJECT_TOO_NEW` citent MOLONARI Desk. Aucun calcul ni identifiant ne change.
 
 ## [0.9.0-alpha.1] - 2026-11-06
