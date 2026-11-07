@@ -9,11 +9,10 @@ import shutil
 
 import numpy as np
 import pytest
+from conftest import EXAMPLE_TWINS
 from molonari_twin.twin import cli
 from molonari_twin.twin.reproduce import compare_exports, export_twin
 from molonari_twin.twin.run import run_twin, twin_status
-
-from conftest import EXAMPLE_TWINS
 
 
 def fake_export(folder, values=None, fingerprint=None):
@@ -137,9 +136,9 @@ def test_export_has_no_seed(tmp_path):
         checked += 1
         if path.suffix == ".npz":
             with np.load(path, allow_pickle=False) as archive:
-                assert "seed" not in archive.keys()
-                assert all("731942" not in key for key in archive.keys())
-                for key in archive.keys():
+                assert "seed" not in archive
+                assert all("731942" not in key for key in archive)
+                for key in archive:
                     assert not (archive[key].dtype.kind in "iu" and 731942 in archive[key])
         else:
             content = path.read_text(encoding="utf-8")

@@ -255,7 +255,8 @@ def _metadata_sha256(results_dir: Path) -> str:
 
 def _key_values(results_dir: Path) -> list[tuple[str, float | None]]:
     """Flux d'eau moyen, flux de chaleur (z = 0) et RMSE, par les fonctions des questions ; None si indisponible."""
-    from ..questions.flux import water_flux  # dans la fonction : twin/ n'importe pas questions/ au chargement
+    # imports dans la fonction : twin/ n'importe pas questions/ au chargement (cycle)
+    from ..questions.flux import water_flux
     from ..questions.heat import heat_budget
     from .results import load_results
 
