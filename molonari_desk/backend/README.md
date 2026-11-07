@@ -10,7 +10,7 @@ Depuis `molonari_desk/` (l'espace uv) :
 
 ```bash
 uv sync --package molonari-twin            # backend et outils de test, sans PySide6
-uv sync --package molonari-twin --no-dev   # backend seul : ni pyheatmy (référence des tests), ni matplotlib
+uv sync --package molonari-twin --no-dev   # backend seul : ni pyheatmy ni bayesian_inversion (références des tests), ni matplotlib
 ```
 
 ## Ligne de commande
@@ -92,3 +92,12 @@ uv run pytest -p no:pytest-qt -m slow
 ## Version
 
 Version dans `pyproject.toml`, historique dans [CHANGELOG.md](CHANGELOG.md), tags `molonari-twin-vX.Y.Z`. La version entre dans `engine_version()` (`molonari-twin X.Y.Z · jax …`), donc dans chaque `twin_id`.
+
+## Moteur de référence
+
+- pyheatmy (modèle direct) et bayesian_inversion (énergie du MCMC) sont figés par commit dans
+  `molonari_desk/pyproject.toml` et `uv.lock`, et ne servent qu'aux tests du moteur.
+- Quand on monte le commit figé de pyheatmy et que `tests/test_engine_forward.py` (1e-9) échoue, on porte d'abord le
+  changement dans le moteur JAX.
+- Côté computo, tout changement de la physique est signalé dans le message de commit.
+- Après le 13/11, `rev` sera remplacé par `tag = "MOLONARI-computo-2"`.
