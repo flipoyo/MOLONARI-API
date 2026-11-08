@@ -1,7 +1,13 @@
-"""Adaptateur vers pyheatmy, moteur de référence utilisé pour valider le moteur JAX.
+"""Adaptateur vers pyheatmy et bayesian_inversion, références utilisées pour valider le moteur JAX.
 
-pyheatmy n'est pas embarqué dans l'application distribuée : ce module n'est
-importé que par les tests (dépendance de développement).
+pyheatmy fournit le modèle direct (`Column`, `layersListCreator`), bayesian_inversion l'énergie du MCMC
+(`compute_energy`). Ni l'un ni l'autre n'est embarqué dans l'application distribuée ni monté dans l'espace cgs :
+ce module n'est importé que par les tests (dépendances de développement), figées par commit dans
+`molonari_desk/pyproject.toml` et `uv.lock`.
+
+Règle de synchronisation : quand on monte le commit figé de pyheatmy et que `tests/test_engine_forward.py` (1e-9)
+échoue, on porte d'abord le changement dans le moteur JAX. Côté computo, tout changement de la physique est signalé
+dans le message de commit. Après le 13/11, `rev` sera remplacé par `tag = "MOLONARI-computo-2"`.
 """
 
 from __future__ import annotations
@@ -59,7 +65,7 @@ def forward(inputs: ColumnInputs, config: ForwardConfig) -> ForwardResult:
 
 
 def energy(temp_simul, temp_ref, sigma2) -> float:
-    """Énergie de pyheatmy (`compute_energy`) avec une loi a priori constante sur σ²."""
-    from pyheatmy.core import compute_energy
+    """Énergie de bayesian_inversion (`compute_energy`) avec une loi a priori constante sur σ²."""
+    from bayesian_inversion import compute_energy
 
     return float(compute_energy(temp_simul, temp_ref, sigma2, lambda x: 1.0))

@@ -205,14 +205,30 @@ def test_twin_id_depends_on_data_and_code_version(twins, point034):
     assert load_twin(folder).twin_id("v1") != reference
 
 
-def test_lateral_exchange_keys_are_refused(twins, point034):
-    """L'échange latéral (q_s, t_lateral) n'est pas pris en charge dans cette version."""
+def test_lateral_exchange_is_refused(twins, point034):
+    """L'échange latéral (q_s non nul) n'est pas pris en charge : code dédié, pas « clé inconnue »."""
     folder = make_twin(twins, point034)
-    edit(folder, "rhos_cs: 5000000", "rhos_cs: 5000000, q_s: 1.0e-7, t_lateral: 12")
+    edit(folder, "rhos_cs: 5000000", "rhos_cs: 5000000, q_s: 1.0e-6")
     with pytest.raises(TwinConfigError) as error:
         load_twin(folder)
-    assert any("q_s" in issue for issue in error.value.issues), error.value.issues
-    assert any("t_lateral" in issue for issue in error.value.issues), error.value.issues
+    assert [(issue.field, issue.code) for issue in error.value.issues] == [("layers[0].q_s", "E_LATERAL_EXCHANGE_UNSUPPORTED")]
+
+
+@pytest.mark.parametrize("value", ['"abc"', "true"])
+def test_non_numeric_lateral_exchange_is_refused(twins, point034, value):
+    folder = make_twin(twins, point034)
+    edit(folder, "rhos_cs: 5000000", f"rhos_cs: 5000000, q_s: {value}")
+    with pytest.raises(TwinConfigError) as error:
+        load_twin(folder)
+    assert [(issue.field, issue.code) for issue in error.value.issues] == [("layers[0].q_s", "E_LATERAL_EXCHANGE_UNSUPPORTED")]
+
+
+def test_zero_lateral_exchange_keeps_the_twin_id(twins, point034):
+    """q_s nul et t_lateral sont acceptés et ne changent pas le twin_id."""
+    folder = make_twin(twins, point034)
+    reference = load_twin(folder).twin_id("v1")
+    edit(folder, "rhos_cs: 5000000", "rhos_cs: 5000000, q_s: 0.0, t_lateral: 12.0")
+    assert load_twin(folder).twin_id("v1") == reference
 
 
 # C3 + C4 : registre, exécution, doublons ---------------------------------------------------

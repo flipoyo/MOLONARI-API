@@ -870,6 +870,14 @@ def load_twin(path: str | Path, check_data: bool = True, data_folder: str | Path
             raw_layers = []
         for i, raw_layer in enumerate(raw_layers):
             where = f"layers[{i}]"
+            if isinstance(raw_layer, dict):
+                # Échange latéral : pas de terme source dans le moteur. q_s nul est accepté (sans effet sur le twin_id),
+                # t_lateral n'a de sens qu'avec q_s et est ignoré.
+                raw_layer = dict(raw_layer)
+                lateral = raw_layer.pop("q_s", 0)
+                raw_layer.pop("t_lateral", None)
+                if isinstance(lateral, bool) or not isinstance(lateral, int | float) or lateral != 0:
+                    check.add(f"{where}.q_s", "E_LATERAL_EXCHANGE_UNSUPPORTED", value=lateral)
             layer = check.mapping(raw_layer, where, LAYER_KEYS, ("z_low",))
             values = {"name": str(layer.get("name", f"layer {i + 1}"))}
             for key in ("z_low", "neg_log10_k", "porosity", "lambda_s", "rhos_cs"):

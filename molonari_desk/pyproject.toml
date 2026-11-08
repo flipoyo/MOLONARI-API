@@ -13,6 +13,7 @@ dev = [
     "pytest>=8",
     "pytest-qt>=4.4",
     "pyheatmy",
+    "bayesian_inversion",
 ]
 package = [
     "pyinstaller>=6.10",
@@ -28,4 +29,7 @@ members = ["backend", "frontend"]
 [tool.uv.sources]
 molonari-twin = { workspace = true }
 molonari-desk = { workspace = true }
-pyheatmy = { path = "../../pyheatmy", editable = true }
+# Références des tests du moteur, figées par commit (MOLONARI-computo séparé, plus monté dans l'espace cgs) :
+# pyheatmy 0.12.0 (modèle direct) et bayesian_inversion 0.4.0 (énergie du MCMC).
+pyheatmy = { git = "https://github.com/YunusEmre4418/MOLONARI-pyheatmy", rev = "401d8e1b48a40cf13efc74302fa9a1a8c67c665d" }
+bayesian_inversion = { git = "https://github.com/YunusEmre4418/MOLONARI-bayesian-inversion", rev = "bb07a127acd893fd38b7c339fa561d941077408f" }
