@@ -16,6 +16,10 @@ Jusqu'à 0.6.0-alpha.1, le backend faisait partie du paquet molonaviz2 (aujourd'
 
 ## [Non publié]
 
+## [0.9.0-alpha.2] - 2026-11-08
+
+Refus explicite de `q_s ≠ 0`, tests de référence figés par commit (pyheatmy 0.12.0, bayesian_inversion 0.4.0), tests communs des deux DREAM et `reproduce --export` / `--compare`. En bref : `E_LATERAL_EXCHANGE_UNSUPPORTED` (Y1) ; pyheatmy 0.12.0 et bayesian_inversion 0.4.0 figés par commit pour les tests (Y1) ; tests DREAM communs (Y2) ; `reproduce --export` et `reproduce --compare` (T10). `API_VERSION` reste à 1.0.0-alpha.8 : le schéma OpenAPI et `gen_api_doc.py --check` ne changent pas. Les identifiants de 0.9.0-alpha.1 ne se reproduisent plus depuis les sources (suffixe `+g<commit>` de `engine_version()` depuis R1) ; ceux de cette version, sans suffixe local, sont ci-dessous.
+
 ### Ajouté
 - `tests/test_dream_vs_bayesian_inversion.py` (slow) : les deux DREAM, celui du twin (JAX) et celui de bayesian_inversion 0.4.0, échantillonnent la même loi à l'erreur Monte-Carlo près (moyennes de lots, 4 erreurs types). Une cible gaussienne dont les moments sont connus, puis une colonne synthétique à une couche : médianes et quantiles à 5 % et 95 % des quatre paramètres et du flux d'eau, recalculé par le même modèle direct. Aucun code de production ne change.
 - `E_LATERAL_EXCHANGE_UNSUPPORTED` : un échange latéral `q_s` non nul est refusé explicitement, dans `twin.yaml` (sur `layers[i].q_s`, à la place de « clé inconnue ») et par `LayerSpec.from_dict` (projets relus). `q_s: 0` est accepté sans effet sur le `twin_id` ; `t_lateral` est ignoré. Le moteur n'a pas de terme source latéral.
@@ -26,6 +30,14 @@ Jusqu'à 0.6.0-alpha.1, le backend faisait partie du paquet molonaviz2 (aujourd'
 - Référence des tests du moteur : pyheatmy 0.12.0 (modèle direct) et bayesian_inversion 0.4.0 (énergie du MCMC), figés par commit dans `molonari_desk/pyproject.toml` et `uv.lock`, ne sont plus montés dans l'espace cgs (la CI ne récupère plus MOLONARI-computo). La physique est identique à celle de pyheatmy 0.9.7 : aucun identifiant ne change.
 - Règle de synchronisation (docstring d'`engine/reference.py`, README) : si `tests/test_engine_forward.py` (1e-9) échoue après avoir monté le commit figé, on porte d'abord le changement dans le moteur JAX.
 - L'espace uv s'appelle `molonari_desk/` et l'application `molonari-desk` (anciennement molonaviz2) : textes, docstrings et dossier temporaire du moteur de référence (`molonari_desk_pyheatmy`). Les messages `E_PROJECT_INVALID` et `E_PROJECT_TOO_NEW` citent MOLONARI Desk. Aucun calcul ni identifiant ne change.
+
+### Identifiants de référence (0.9.0-alpha.2)
+
+Identifiants de référence (sans suffixe local, une fois le tag posé) :
+
+- `twin_01` : `efd0566b24b09276` ; `twin_02` : `efd0566b24b09276` (copie de `twin_01`, voulue pour la détection de doublon) ; `twin_03` : `fb6f2cd5e11898a7` ; `twin_04` : `23fc6611cce4ba3a`.
+- Point034, `twin_direct` : `a7a33fbcc256cb59` ; Point034, `twin_mcmc` (graine 1 de `orx/twin_mcmc.yaml`) : `dcc15cb7c17e0a21`.
+- Calculés avec `release_version()` (`molonari-twin 0.9.0-alpha.2 · jax 0.11.2`), sans suffixe local. Le `processed_sha256` de Point034 reste `513b1b93…`, et ses flux et RMSE sont identiques au bit.
 
 ## [0.9.0-alpha.1] - 2026-11-06
 
