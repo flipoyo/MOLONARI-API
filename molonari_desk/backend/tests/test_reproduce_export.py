@@ -6,6 +6,7 @@ Les tests de comparaison travaillent sur des dossiers fabriqués ; ceux de l'exp
 import json
 import re
 import shutil
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -28,6 +29,40 @@ def fake_export(folder, values=None, fingerprint=None):
     data.update(fingerprint or {})
     (folder / "fingerprint.json").write_text(json.dumps(data), encoding="utf-8")
     return folder
+
+
+NUMBER = re.compile(r"(?<![\w.])[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?(?![\w.])")
+SEED_KEY = re.compile(r'"seed"|\bseed\s*[:=]')
+
+
+def _text_forms(content, seed):
+    """Les formes de la graine dans un texte : un nombre isolé de même valeur (731942, 731942.0, 7.31942e5...), ou la clé « seed »."""
+    forms = [f"nombre {token}" for token in NUMBER.findall(content) if float(token) == float(seed)]
+    if SEED_KEY.search(content):
+        forms.append("clé seed")
+    return forms
+
+
+def seed_occurrences(folder: Path, seed: int) -> list[str]:
+    """Une description « chemin relatif: forme » par occurrence de la graine (ou de la clé « seed ») dans un export ; vide s'il n'y en a pas."""
+    found = []
+    for path in sorted(folder.rglob("*")):
+        if not path.is_file():
+            continue
+        name = path.relative_to(folder).as_posix()
+        if path.suffix != ".npz":
+            found += [f"{name}: {form}" for form in _text_forms(path.read_text(encoding="utf-8"), seed)]
+            continue
+        with np.load(path, allow_pickle=False) as archive:
+            for key in archive.files:
+                if "seed" in key or str(seed) in key:
+                    found.append(f"{name}: tableau nommé {key}")
+                array = archive[key]
+                if array.dtype.kind in "iuf" and np.any(array == seed):
+                    found.append(f"{name}[{key}]: valeur numérique")
+                elif array.dtype.kind in "US":
+                    found += [f"{name}[{key}]: {form}" for item in array.ravel() for form in _text_forms(str(item), seed)]
+    return found
 
 
 def test_compare_same_export_is_identical(tmp_path):
@@ -84,6 +119,45 @@ def test_compare_cli_json_and_exit_code(tmp_path, capsys):
     assert json.loads(capsys.readouterr().out)["identical"] is True
 
 
+def _write(path, content):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+def _metadata_with(folder, extra):
+    meta = folder / "results" / "metadata.json"
+    _write(meta, json.dumps({**json.loads(meta.read_text(encoding="utf-8")), **extra}))
+
+
+INJECTIONS = {
+    "entier dans csv": lambda f: _write(f / "results" / "table.csv", "a,b\n731942,2\n"),
+    "flottant 731942.0 dans metadata": lambda f: _write(
+        f / "results" / "metadata.json", '{"twin_id": "x", "x": 731942.0}'),
+    "notation 7.31942e5": lambda f: _write(f / "results" / "table.csv", "a,b\n7.31942e5,2\n"),
+    "notation 7.319420E+05": lambda f: _write(f / "results" / "table.csv", "a,b\n7.319420E+05,2\n"),
+    "npz flottant": lambda f: np.savez(f / "results" / "extra.npz", v=np.array([1.0, 731942.0])),
+    "npz entier": lambda f: np.savez(f / "results" / "extra.npz", v=np.array([731942])),
+    "npz chaînes": lambda f: np.savez(f / "results" / "extra.npz", v=np.array(["a", "731942"])),
+    "npz nommé seed": lambda f: np.savez(f / "results" / "extra.npz", seed=np.array(3)),
+    "clé json": lambda f: _metadata_with(f, {"seed": 3}),
+    "clé yaml": lambda f: _write(f / "results" / "recipe.yaml", "seed: 3\n"),
+    "clé yaml en ligne": lambda f: _write(f / "results" / "recipe.yaml", "{seed: 3}\n"),
+    "clé avec égal": lambda f: _write(f / "results" / "recipe.yaml", "seed=3\n"),
+}
+
+
+def test_seed_detector_finds_every_form(tmp_path):
+    assert seed_occurrences(fake_export(tmp_path / "clean"), 731942) == []
+    for i, (case, inject) in enumerate(INJECTIONS.items()):
+        folder = fake_export(tmp_path / f"case{i}")
+        inject(folder)
+        assert seed_occurrences(folder, 731942), f"graine non vue : {case}"
+    for i, neighbour in enumerate(("0.731942", "7319420", "1731942", "731942.5", "a731942", "731942b")):
+        folder = fake_export(tmp_path / f"neg{i}")
+        _write(folder / "results" / "table.csv", f"a,b\n{neighbour},2\n")
+        assert seed_occurrences(folder, 731942) == [], f"faux positif : {neighbour}"
+
+
 def test_reproduce_option_errors(tmp_path):
     for argv in (["reproduce"], ["reproduce", "--json"], ["reproduce", "--compare", "a", "b", "--output", "o"],
                  ["reproduce", "t", "--export", "e", "--compare", "a", "b"]):
@@ -129,20 +203,5 @@ def test_export_has_no_seed(tmp_path):
     assert "731942" in yaml.read_text(encoding="utf-8")
     run_twin(twin)
     folder = export_twin(twin, tmp_path / "export")
-    checked = 0
-    for path in sorted(folder.rglob("*")):
-        if not path.is_file():
-            continue
-        checked += 1
-        if path.suffix == ".npz":
-            with np.load(path, allow_pickle=False) as archive:
-                assert "seed" not in archive
-                assert all("731942" not in key for key in archive)
-                for key in archive:
-                    assert not (archive[key].dtype.kind in "iu" and 731942 in archive[key])
-        else:
-            content = path.read_text(encoding="utf-8")
-            # la graine comme nombre entier isolé : les suites de chiffres d'un flottant ne comptent pas
-            assert not re.search(r"(?<![\w.])731942(?![\w.])", content), path
-            assert '"seed"' not in content and "seed:" not in content, path
-    assert checked > 5
+    assert sum(1 for p in folder.rglob("*") if p.is_file()) > 5
+    assert seed_occurrences(folder, 731942) == []
