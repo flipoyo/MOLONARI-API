@@ -17,9 +17,12 @@ Méthode d'erreur, reprise de `tests/test_samplers.py` de bayesian_inversion (bb
 consécutives (`N_BATCH`), erreur type = écart-type des moyennes de lots / sqrt(`N_BATCH`). Les chaînes d'un DREAM sont
 corrélées dans le temps : un lot d'itérations consécutives en tient compte, pas une erreur calculée comme si les
 échantillons étaient indépendants. Cette méthode sert au test 1 (gaussienne). Au test 2 (colonne), l'a posteriori est
-presque aussi large que l'a priori et l'autocorrélation dépasse la longueur d'un lot de 100 itérations : l'erreur par
-lots y était sous-estimée (dispersion réelle entre graines 0,05 à 0,07 sur la médiane de neg_log10_k, pour 0,025
-annoncés). On y calcule donc chaque quantile sur chaque chaîne entière, la valeur comparée est celle des chaînes
+presque aussi large que l'a priori, et l'erreur par lots y était sous-estimée (dispersion réelle entre graines 0,05 à
+0,07 sur la médiane de neg_log10_k, pour 0,025 annoncés). Ce n'est pas que l'autocorrélation dépasse un lot : le temps
+d'autocorrélation intégré vaut environ 39 itérations (19 à 79 selon les chaînes), soit 2,6 par lot de 100. Mais un lot
+regroupe toutes les chaînes. Une chaîne qui garde longtemps sa propre région (vu côté bayesian_inversion, qui ne
+remplace pas les chaînes aberrantes) décale alors tous les lots de la même façon, et leur dispersion ne la voit pas. On
+y calcule donc chaque quantile sur chaque chaîne entière, la valeur comparée est celle des chaînes
 regroupées, et l'erreur est std(statistiques par chaîne, ddof=1)/sqrt(nombre de chaînes), soit 16 chaînes et 15 degrés de liberté pour l'erreur. La tolérance est la même
 partout : `N_STANDARD_ERRORS` erreurs types, jamais élargie pour faire passer un test.
 
