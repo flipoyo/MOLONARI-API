@@ -429,7 +429,7 @@ def fit_quality_figure(published: dict[str, Answer]) -> Built | None:
         sensors = [str(s).upper() for s in _array(answer, "sensor")] + ["Total"]
         groups = groups or sensors
         series.append((name.split("-")[0], [float(v) for v in _array(answer, "rmse")] + [_number(answer, "rmse_total")]))
-    plot = Plot("Temperature misfit (RMSE)", "RMSE of the simulated temperature at the thermometers; inversion: best sample",
+    plot = Plot("Temperature misfit (RMSE)", "RMSE at the thermometers; inversion: best sample",
                 width=560, height=270, left=64, right=20, bottom=30,
                 desc=f"Root mean square error of the simulated temperature at each thermometer and in total, from {', '.join(names)}.")
     colors = {"forward": BLUE, "inversion": ORANGE}
@@ -456,7 +456,7 @@ def compare_figure(published: dict[str, Answer]) -> Built | None:
         return None
     sensors = [str(s).upper() for s in _array(answer, "sensor")]
     mean, rmse, total = _array(answer, "mean_difference").astype(float), _array(answer, "rmse").astype(float), _number(answer, "rmse_total")
-    plot = Plot("Forward minus inversion", f"mean difference of the simulated temperature at each thermometer, bar: ± RMSE; total RMSE {total:.3f} °C",
+    plot = Plot("Forward minus inversion", f"total RMSE of the difference {total:.3f} °C",
                 width=560, height=300, left=64, right=20,
                 desc="Mean difference between the forward and the inversion models at each thermometer, with its RMSE, from compare.json.")
     plot.legend((BLUE, "mean difference (forward − inversion)", "box"), (INK, "± RMSE of the difference", "line"))

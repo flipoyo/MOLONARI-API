@@ -812,6 +812,39 @@ def test_svg_root_has_viewbox_title_and_desc(with_states):
         assert root[0].tag.endswith("title") and root[0].text and root[1].tag.endswith("desc") and len(root[1].text) > 40, name
 
 
+def text_extents(root):
+    """(texte, gauche, droite) estimés de chaque `<text>` d'un SVG, dans le repère de la racine : largeur = nombre de
+    caractères × CHAR_WIDTH (×13/12 pour un titre), ancrage start / middle / end, `translate` des panneaux cumulés."""
+    from molonari_twin.report.svgplot import CHAR_WIDTH
+
+    svg = "{http://www.w3.org/2000/svg}"
+
+    def walk(node, dx):
+        if node.tag == f"{svg}g" and node.get("transform", "").startswith("translate("):
+            dx += float(node.get("transform")[len("translate("):-1].split()[0])
+        if node.tag == f"{svg}text":
+            text = "".join(node.itertext())
+            small = sum(len(t.text or "") for t in node.iter(f"{svg}tspan"))  # exposants : 9 px au lieu de 12
+            width = (len(text) - small * 0.25) * CHAR_WIDTH * (13 / 12 if node.get("font-weight") == "bold" else 1)
+            x = float(node.get("x")) + dx
+            anchor = node.get("text-anchor", "start")
+            left = {"start": x, "middle": x - width / 2, "end": x - width}[anchor]
+            yield text, left, left + width
+        for child in node:
+            yield from walk(child, dx)
+
+    return list(walk(root, 0.0))
+
+
+def test_no_text_overflows_the_viewbox_of_any_figure(with_states):
+    for name, root, _ in svg_texts(with_states["both"]):
+        width = float(root.get("viewBox").split()[2])
+        for text, left, right in text_extents(root):
+            assert left >= -1 and right <= width + 1, f"{name}: « {text} » déborde ({left:.0f} à {right:.0f} sur {width:.0f})"
+    compare = with_states["both"].files["figures/compare.svg"].decode()
+    assert "total RMSE" in compare and f"{float(answer(with_states['both'], 'compare.json').data['rmse_total'].value):.3f}" in compare
+
+
 def test_no_scientific_tick_label_in_any_figure(with_states):
     for name, _, texts in svg_texts(with_states["both"]):
         assert not [t for t in texts if re.fullmatch(r"-?\d\.\d+e[-+]\d+", t)], name
