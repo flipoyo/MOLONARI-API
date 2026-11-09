@@ -58,9 +58,9 @@ def _level(question) -> str:
     from molonari_twin.questions import PUBLIC_DATA
 
     if question.id not in USER_QUESTIONS:
-        return "admin seulement (le niveau `user` la refuse : 403 `E_ACCESS_ADMIN_ONLY`)."
+        return "`dev` et `opx` seulement (le niveau `user` la refuse : 403 `E_ACCESS_USER_ONLY`)."
     names = PUBLIC_DATA[question.id] if question.id in WATER_QUESTIONS else USER_DATA[question.id]
-    return "`user` et `admin`. Le `user` reçoit : " + ", ".join(f"`{n}`" for n in names) + "."
+    return "`user`, `dev` et `opx`. Le `user` reçoit : " + ", ".join(f"`{n}`" for n in names) + "."
 
 
 def _type(schema: dict) -> str:
@@ -133,15 +133,16 @@ def render() -> str:
         "",
         "## Niveaux d'accès",
         "",
-        "`molonari-twin serve --local --level {user,admin}` (`user` par défaut) et `molonari-twin questions|ask --level …`.",
+        "`molonari-twin serve --local --level {user,dev,opx}` (`user` par défaut) et `molonari-twin questions|ask --level …` ;",
+        "`admin` reste accepté comme alias d'`opx`.",
         "Le **user** n'interroge que les échanges d'eau, la chaleur et la température : `water_flux`, `exchange_direction`,",
         "`exchanged_volume`, `heat_budget` et `temperature`, sur les twins direct et mcmc (`sensor_intervals` n'en fait pas partie :",
-        "elle révèle les mesures). Tout le reste est réservé à l'**admin**, qui a l'API complète.",
+        "elle révèle les mesures). Tout le reste est réservé à **dev** et **opx**, qui ont l'API complète.",
         "",
         "Au niveau `user` :",
         "",
         "- `GET /v1/questions` ne liste que ces cinq questions ; toute autre question, `POST /v1/twins/{ref}/run`, `/v1/tasks/*` et",
-        "  `POST /v1/questions/{id}` d'une question sans twin sont refusés en **403** (`E_ACCESS_ADMIN_ONLY`, avant toute autre",
+        "  `POST /v1/questions/{id}` d'une question sans twin sont refusés en **403** (`E_ACCESS_USER_ONLY`, avant toute autre",
         "  vérification). `GET /v1/info` reste accessible.",
         "- Une réponse est réduite à une liste blanche de grandeurs (ligne « Niveau » de chaque question) et à la provenance",
         "  `{question, ref, parameters}` : ni graine, ni chemin, ni `twin_id`, ni nom de point, ni échantillons. La réduction",
@@ -150,13 +151,13 @@ def render() -> str:
         "- `temperature` exige toujours `z` ou `t` (`E_QUESTION_PARAMS`).",
         "",
         "**Ce n'est pas une sécurité** : sans authentification, le niveau oriente l'usage (un guide), il ne contrôle aucune identité.",
-        "`create_app` (le serveur) reste à `admin` par défaut ; `serve --local` le lance à `user`.",
+        "`create_app` (le serveur) reste à `opx` par défaut ; `serve --local` le lance à `user`.",
         "",
         "## En ligne de commande",
         "",
         "```bash",
-        "molonari-twin questions [<twin>] [--level {user,admin}] [--json]",
-        "molonari-twin ask <twin> <question> [--params '{\"z\": 0.2}'] [--level {user,admin}] [--json]",
+        "molonari-twin questions [<twin>] [--level {user,dev,opx}] [--json]",
+        "molonari-twin ask <twin> <question> [--params '{\"z\": 0.2}'] [--level {user,dev,opx}] [--json]",
         "```",
         "",
         "Une couche mince sur `TwinAPI`, sans FastAPI. `<twin>` est un dossier de twin ou un `twin.yaml`. Avec `--json`, la",
@@ -164,6 +165,10 @@ def render() -> str:
         "sortie standard comme celle de l'API, avec le code de sortie 1 ; `--params` a le contenu du corps du POST. Sans `--json`,",
         "le texte donne le libellé, les valeurs, les unités et les avertissements (un long tableau est résumé : nombre, minimum,",
         "maximum).",
+        "",
+        "`ask` exige un twin, ou le dossier d'un état écrit par `molonari-twin generate`. Les questions qui ne portent sur",
+        "aucun twin (`parameters_catalog`, `raw_series`, `processing_preview`) se posent par `POST /v1/questions/{id}` ou par",
+        "`TwinAPI.ask_global` en Python.",
         "",
         "## Réponse",
         "",
@@ -177,8 +182,8 @@ def render() -> str:
         "  comme un tableau de forme `[]`.",
         "- **npz** (`Accept: application/x-npz`) : chaque tableau va dans l'archive (`data/<nom>/value`, `…/low`,",
         "  `…/high`) ; la réponse elle-même est l'entrée `meta` (JSON). L'archive se lit sans pickle.",
-        "- **Dates** : ISO 8601 à la seconde, **sans fuseau**, dans le repère des données du twin. Un fuseau donné en",
-        "  paramètre est refusé tant que la convention de dates n'est pas fixée (P2.1f, après le pipeline brut).",
+        "- **Dates** : ISO 8601 à la seconde, **sans fuseau**, en UTC (convention de l'équipe) dès que les bruts déclarent",
+        "  leur fuseau, sinon telles qu'écrites dans les bruts. Un fuseau donné en paramètre est refusé.",
         "- **Unités** : SI (m/s, m³/m², °C, m, s). Les conversions d'affichage (m/jour, L/m²) sont faites par le client.",
         "- **Tableaux aux capteurs** : capteur d'abord, `(3, T)`.",
         "",
