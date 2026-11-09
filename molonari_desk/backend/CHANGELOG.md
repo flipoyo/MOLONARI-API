@@ -23,6 +23,9 @@ Jusqu'à 0.6.0-alpha.1, le backend faisait partie du paquet molonaviz2 (aujourd'
 - Manifeste des données traitées : schéma `molonari-processed/1.1.0`. `utc_offset` vaut `+00:00` (décalage des dates de `measurements.csv`) et la nouvelle clé `source_utc_offset` garde celui des bruts (`+01:00`). Un dossier 1.0.0, aux dates en heure du logger, est refusé (`E_PROCESSED_SCHEMA`) : à reconstruire avec `molonari-twin lab build`.
 - Les dates changent, donc `cleaned_sha256` et le `twin_id` des twins construits sur des bruts qui déclarent leur fuseau. Les valeurs calculées ne changent pas tant que la fenêtre garde les mêmes mesures.
 
+### Corrigé
+- Documentation en retard sur les niveaux `user`, `dev` et `opx` : `docs/API_V1.md` (régénérée par `tools/gen_api_doc.py`) et le README écrivaient encore `--level {user,admin}`, « admin seulement » et le code 403 `E_ACCESS_ADMIN_ONLY`, alors que l'API répond `E_ACCESS_USER_ONLY` depuis 0.9.0-alpha.1. La ligne « Dates » d'`API_V1.md` donne la convention UTC. Le README compte 23 questions (et non 20), et dit que les questions sans twin se posent par `POST /v1/questions/{id}` ou `TwinAPI.ask_global`, pas par `ask`. La docstring de `twin/reproduce.py` ne prétend plus relancer `lab build`.
+
 ### Retiré
 - La convention provisoire « `GMT+01:00` lu comme UTC+2 toute l'année » (`PROVISIONAL_UTC_OFFSET`, `HEADER_OFFSET_OVERRIDDEN`) et son avertissement `W_MEASURES_TIMEZONE_OVERRIDDEN`.
 - `W_PIPELINE_TIMEZONE_SHIFTED` : une pression et une température déclarées dans deux décalages différents sont chacune ramenées en UTC, il n'y a plus rien à décaler. `E_PIPELINE_TIMEZONE_AMBIGUOUS` (un seul des deux fichiers déclare son fuseau) reste.
