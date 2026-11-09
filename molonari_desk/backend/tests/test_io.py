@@ -197,7 +197,7 @@ def test_point034_hobo_measures():
     assert " + " in pressure.date_format
     assert temperature.kept_rows == 1436 and len(temperature.dropped) == 2
     first = pressure.frame.iloc[0]
-    assert first["date"] == pd.Timestamp(2016, 6, 27, 12, 0)
+    assert first["date"] == pd.Timestamp(2016, 6, 27, 11, 0)  # « 12:00 » en GMT+01:00, en UTC
     assert (first["voltage"], first["temp_bed"]) == (1.26787, 18.342)
     assert temperature.frame["date"].is_monotonic_increasing
     assert temperature.frame.iloc[0][["t1", "t2", "t3", "t4"]].tolist() == [13.810, 13.834, 13.858, 13.810]

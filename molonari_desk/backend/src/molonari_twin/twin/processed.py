@@ -12,11 +12,16 @@ relues avec un analyseur exact : l'aller-retour redonne les mêmes flottants, do
 donc le même `twin_id` que depuis le brut. Le manifeste ne porte aucun horodatage : deux constructions des mêmes
 entrées avec le même code donnent les mêmes octets.
 
-Manifeste (`schema: molonari-processed/1.0.0`) : `lab` (nom du lab), `point` (libellé), `code_version` (celle qui a
+Manifeste (`schema: molonari-processed/1.1.0`) : `lab` (nom du lab), `point` (libellé), `code_version` (celle qui a
 construit), `raw_files` (empreintes des fichiers bruts du point, noms relatifs au dossier du point), `lab_files`
 (empreintes des fichiers du laboratoire utilisés : capteur de pression, tige, thermomètre, noms relatifs au dossier du
-laboratoire), `depths`, `offset`, `sigma_pressure`, `sigma_temperature`, `utc_offset`, `processing` (le nettoyage
-appliqué), `rows`, `start`, `end` et `cleaned_sha256`.
+laboratoire), `depths`, `offset`, `sigma_pressure`, `sigma_temperature`, `utc_offset` (décalage à UTC des dates de
+`measurements.csv` : « +00:00 », elles sont en UTC, ou None si les bruts ne déclarent pas de fuseau),
+`source_utc_offset` (décalage déclaré par les bruts, « +01:00 »), `processing` (le nettoyage appliqué), `rows`, `start`,
+`end` et `cleaned_sha256`.
+
+Schéma 1.1.0 : dates en UTC (convention de l'équipe, UTC+0). Un dossier 1.0.0, aux dates en heure du logger, est
+refusé (E_PROCESSED_SCHEMA) : il se reconstruit avec `molonari-twin lab build`.
 
 Ce module ne dépend pas de `config.py` (qui l'importe) : l'empreinte est vérifiée par `config.py`, qui a `frame_digest`.
 """
@@ -35,7 +40,7 @@ from ..domain.models import CLEANED_COLUMNS
 from ..errors import UserError
 from ..processing.cleanup import read_cleaned_csv
 
-PROCESSED_SCHEMA = "molonari-processed/1.0.0"
+PROCESSED_SCHEMA = "molonari-processed/1.1.0"
 PROCESSED_FOLDER = "processed_data"  # dossier, à la racine des données, qui contient un sous-dossier par point
 MEASUREMENTS_NAME = "measurements.csv"
 MANIFEST_NAME = "manifest.json"
