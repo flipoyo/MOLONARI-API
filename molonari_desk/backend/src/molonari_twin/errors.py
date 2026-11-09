@@ -1,7 +1,7 @@
 """Exceptions et messages partagés par toutes les couches (domaine, stockage, moteur, interface).
 
 Chaque erreur attendue (`UserError`) et chaque problème de saisie (`Issue`) porte un code stable
-(`E_…` pour une erreur, `W_…` pour un avertissement), les paramètres de son message et, s'il y a
+(`E_…` pour une erreur, `W_…` pour un avertissement, `I_…` pour un constat du rapport public), les paramètres de son message et, s'il y a
 lieu, le champ concerné. Le texte est le modèle anglais de `MESSAGES`, formaté avec ces paramètres :
 le cœur ne traduit rien. Le bord (interface, ligne de commande) traduit à partir du code, le modèle
 anglais servant de clé dans le catalogue (`i18n.render`).
@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import re
 
-CODE_PATTERN = re.compile(r"^[EW]_[A-Z0-9_]+$")
+CODE_PATTERN = re.compile(r"^[EWI]_[A-Z0-9_]+$")
 
 # Code → modèle anglais. Le modèle est aussi la clé de sa traduction dans i18n/fr.json.
 MESSAGES: dict[str, str] = {
@@ -177,6 +177,16 @@ MESSAGES: dict[str, str] = {
     "E_REPORT_LOCAL_OUTPUT_FORBIDDEN": "{path} is in {folder}/: a local report (--forward) is not a publication, only the OPX publishes.",
     "E_REPORT_MODEL_MODE": "Twin \"{ref}\" is in {mode} mode, but the report expects a {role} twin ({expected} mode).",
     "W_NO_UNCERTAINTY": "Forward model: its parameters are fixed, so this result has no confidence interval.",
+    # constats du rapport public (F1) : un constat décrit une valeur, jamais un seuil ; il n'est jamais levé en UserError
+    "I_FLUX_MEAN_INFILTRATION": "For the {model}, the mean water flux is {mean} m/s: positive, so on average the river feeds the aquifer (infiltration). Order of magnitude: 10 to the power {exponent}.",
+    "I_FLUX_MEAN_EXFILTRATION": "For the {model}, the mean water flux is {mean} m/s: negative, so on average the aquifer feeds the river (exfiltration). Order of magnitude: 10 to the power {exponent}.",
+    "I_FLUX_INTERVAL_EXCLUDES_ZERO": "The {level} % posterior interval of the mean flux, [{low}, {high}] m/s, does not contain zero: the whole interval is on the same side of zero.",
+    "I_FLUX_INTERVAL_CONTAINS_ZERO": "The {level} % posterior interval of the mean flux, [{low}, {high}] m/s, contains zero: the posterior allows both directions of exchange on average.",
+    "I_FLUX_INFILTRATION_SHARE": "For the {model}, in the cell at the bottom of the river (z = {depth} m), q is zero or positive (infiltration) {share} % of the time, with one value every {step} h. This is the best-fit field at this time step, not the posterior share of the exchange direction.",
+    "I_DAILY_DAMPING": "For the {model}, the daily temperature wave has an amplitude of {amplitude_top} °C at the top and {amplitude_bottom} °C at z = {depth_bottom} m: a ratio of {ratio}, with the maximum reached {lag} h later at the bottom.",
+    "I_MODEL_DIFFERENCE": "The simulated temperatures of the two models differ by {mean_difference} °C on average over the thermometers (forward minus inversion), with a total RMSE of the difference of {rmse} °C.",
+    "I_FIT_RMSE": "For the {model}, the total RMSE of the simulated temperature at the thermometers is {rmse} °C.",
+    "I_CONVERGENCE": "The inversion ran {chains} chains; the largest R̂ is {rhat_max}, the smallest effective sample size is {ess_min} and the burn-in lasted {burn_in} iterations.",
     # niveaux d'accès aux questions
     "E_ACCESS_USER_ONLY": "\"{name}\" requires the dev or opx level: the user level only asks about water exchanges, heat and temperature.",
     # generate : état généré par le modèle direct (T4)
