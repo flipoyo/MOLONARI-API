@@ -186,6 +186,7 @@ MESSAGES: dict[str, str] = {
     "I_FIT_RMSE": "For the {model}, the total RMSE of the simulated temperature at the thermometers is {rmse} °C.",
     "I_CONVERGENCE": "The inversion ran {chains} chains; the largest R̂ is {rhat_max}, the smallest effective sample size is {ess_min} and the burn-in lasted {burn_in} iterations.",
     # niveaux d'accès aux questions
+    "E_PLOT_OUTPUT_FORBIDDEN": "{path} is inside {folder}/: an admin plot shows measurements and is never published.",
     "E_ACCESS_USER_ONLY": "\"{name}\" requires the dev or opx level: the user level only asks about water exchanges, heat and temperature.",
     # generate : état généré par le modèle direct (T4)
     "E_GENERATE_NO_SETTINGS": "No {file} under {folder}: the OPX writes it when publishing the report.",
