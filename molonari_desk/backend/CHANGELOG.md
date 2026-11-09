@@ -16,6 +16,17 @@ Jusqu'à 0.6.0-alpha.1, le backend faisait partie du paquet molonaviz2 (aujourd'
 
 ## [Non publié]
 
+### Modifié
+- **Dates en UTC** (convention de l'équipe : UTC+0). Le décalage déclaré par un brut (en-tête `Date Heure, GMT+01:00` ou décalage porté par les dates) est cru tel quel, et les dates lues sont ramenées en UTC : UTC = date écrite − décalage (`06/27/16 12:00:00 PM` en `GMT+01:00` devient `2016-06-27 11:00`). Les mesures nettoyées, `processed_data/`, les résultats (`results/*.csv`) et les réponses aux questions sont donc en UTC. Sans déclaration, les dates restent telles qu'écrites (`W_MEASURES_TIMEZONE_UNDECLARED`, qui le dit).
+- La fenêtre de nettoyage (`processing.start`/`end`, `data.start`/`end`) et les dates écartées sont lues dans le même repère que les dates : en UTC dès que les bruts déclarent leur fuseau. Une fenêtre écrite en heure du logger est à réécrire (`2016-06-27 13:00` en `GMT+01:00` devient `2016-06-27 12:00`).
+- `utc_offset` (`ParsedMeasures`, `RawPoint`, `LoadedPoint`, `PipelineResult`) garde le décalage déclaré par les bruts ; le paramètre `timezone` le vérifie toujours (`+01:00` pour les bruts actuels, `+02:00` est maintenant un conflit).
+- Manifeste des données traitées : schéma `molonari-processed/1.1.0`. `utc_offset` vaut `+00:00` (décalage des dates de `measurements.csv`) et la nouvelle clé `source_utc_offset` garde celui des bruts (`+01:00`). Un dossier 1.0.0, aux dates en heure du logger, est refusé (`E_PROCESSED_SCHEMA`) : à reconstruire avec `molonari-twin lab build`.
+- Les dates changent, donc `cleaned_sha256` et le `twin_id` des twins construits sur des bruts qui déclarent leur fuseau. Les valeurs calculées ne changent pas tant que la fenêtre garde les mêmes mesures.
+
+### Retiré
+- La convention provisoire « `GMT+01:00` lu comme UTC+2 toute l'année » (`PROVISIONAL_UTC_OFFSET`, `HEADER_OFFSET_OVERRIDDEN`) et son avertissement `W_MEASURES_TIMEZONE_OVERRIDDEN`.
+- `W_PIPELINE_TIMEZONE_SHIFTED` : une pression et une température déclarées dans deux décalages différents sont chacune ramenées en UTC, il n'y a plus rien à décaler. `E_PIPELINE_TIMEZONE_AMBIGUOUS` (un seul des deux fichiers déclare son fuseau) reste.
+
 ## [0.9.0-alpha.2] - 2026-11-08
 
 Refus explicite de `q_s ≠ 0`, tests de référence figés par commit (pyheatmy 0.12.0, bayesian_inversion 0.4.0), tests communs des deux DREAM et `reproduce --export` / `--compare`. En bref : `E_LATERAL_EXCHANGE_UNSUPPORTED` (Y1) ; pyheatmy 0.12.0 et bayesian_inversion 0.4.0 figés par commit pour les tests (Y1) ; tests DREAM communs (Y2) ; `reproduce --export` et `reproduce --compare` (T10). `API_VERSION` reste à 1.0.0-alpha.8 : le schéma OpenAPI et `gen_api_doc.py --check` ne changent pas. Les identifiants de 0.9.0-alpha.1 ne se reproduisent plus depuis les sources (suffixe `+g<commit>` de `engine_version()` depuis R1) ; ceux de cette version, sans suffixe local, sont ci-dessous.

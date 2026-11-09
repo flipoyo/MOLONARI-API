@@ -45,12 +45,12 @@ def test_raw_series_of_point034(api):
     assert data["voltage"].value.shape == data["pressure_time"].value.shape == data["pressure_temperature"].value.shape == (1460,)
     assert (data["temperature_dropped"].value, data["pressure_dropped"].value) == (2, 0)
     assert data["voltage"].unit == "V" and data["pressure_temperature"].unit == "°C"
-    assert data["temperature_time"].value[0] == np.datetime64("2016-06-27T12:00:00")
+    assert data["temperature_time"].value[0] == np.datetime64("2016-06-27T11:00:00")  # « 12:00 » en GMT+01:00, en UTC
     assert data["voltage"].value[0] == 1.26787 and data["temperature"].value[:, 0].tolist() == [13.81, 13.834, 13.858, 13.81]
     assert answer.provenance == {"question": "raw_series", "ref": "BN-03",
                                  "parameters": {"point_folder": POINT, "start": None, "end": None}}
-    # Convention de fuseau provisoire (P2.1f, TODO(fuseau)) : l'en-tête GMT+01:00 est lu UTC+2, et la réponse le dit.
-    assert sorted(w.code for w in answer.warnings) == ["W_MEASURES_TIMEZONE_OVERRIDDEN"] * 2
+    # Convention UTC+0 : l'en-tête GMT+01:00 est cru, les dates sont en UTC, sans avertissement.
+    assert answer.warnings == []
 
 
 def test_raw_series_period_is_included_at_both_ends():
@@ -71,7 +71,7 @@ def test_raw_series_answers_with_the_file_that_exists(api, tmp_path):
     (folder / "point034_P_measures.csv").unlink()
     answer = api.ask_global("raw_series", {"point_folder": str(folder)})
     assert "temperature" in answer.data and "voltage" not in answer.data
-    assert sorted(w.code for w in answer.warnings) == ["E_PIPELINE_NO_PRESSURE_FILE", "W_MEASURES_TIMEZONE_OVERRIDDEN"]
+    assert [w.code for w in answer.warnings] == ["E_PIPELINE_NO_PRESSURE_FILE"]
 
 
 def test_raw_series_refuses_unsupported_formats(api, tmp_path):
@@ -118,12 +118,12 @@ def test_preview_without_settings_keeps_every_common_date(api):
 
 def test_preview_is_what_the_pipeline_cleans(api):
     """La prévisualisation montre exactement les mesures que le pipeline garde."""
-    answer = preview(api, start="2016-06-27T13:00:00", end="2016-07-12T10:15:00", methods={"t1": "iqr"},
+    answer = preview(api, start="2016-06-27T12:00:00", end="2016-07-12T09:15:00", methods={"t1": "iqr"},
                      excluded=["2016-06-28T00:00:00"])
     data = answer.data
     from molonari_twin.processing.cleanup import CleanupSettings
 
-    settings = CleanupSettings(start=datetime(2016, 6, 27, 13), end=datetime(2016, 7, 12, 10, 15),
+    settings = CleanupSettings(start=datetime(2016, 6, 27, 12), end=datetime(2016, 7, 12, 9, 15),
                                methods={**CleanupSettings().methods, "t1": "iqr"}, excluded=[datetime(2016, 6, 28)])
     cleaned = run_pipeline(POINT, LAB, settings).cleaned
     kept = data["kept"].value

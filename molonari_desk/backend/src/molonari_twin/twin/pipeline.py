@@ -19,19 +19,15 @@ Sont refusés :
 - des fichiers de mesures dont un seul déclare son fuseau (E_PIPELINE_TIMEZONE_AMBIGUOUS), ou dont une date
   contredit le fuseau déclaré (E_MEASURES_TIMEZONE_CONFLICT, par le lecteur).
 
-Fuseau des dates (P2.1f). La convention est celle des données brutes : l'en-tête de la colonne des dates de chaque
-export déclare un décalage fixe à UTC (« Date Heure, GMT+01:00 »), et une date peut porter le sien. Normalisation :
-les dates du point restent des dates sans fuseau, écrites telles quelles dans le repère du fichier ; `utc_offset` donne
-le décalage, et UTC = date - `utc_offset`. Si la pression est déclarée dans un autre décalage que la température, ses
-dates sont décalées vers celui de la température (exact, avec un avertissement), pour que l'association par date reste
-juste. Le paramètre `timezone` ne choisit rien : c'est une vérification (« +02:00 », « UTC », « GMT+2 ») contre le
-`utc_offset` des fichiers. Rien n'est supposé quand rien n'est déclaré : les dates restent telles qu'écrites,
-`utc_offset` est None et un avertissement le dit.
-
-CONVENTION PROVISOIRE (TODO(fuseau), à régler les années suivantes) : un en-tête « GMT+01:00 » est lu comme UTC+2
-toute l'année (`io.dates.PROVISIONAL_UTC_OFFSET`, avertissement W_MEASURES_TIMEZONE_OVERRIDDEN), car il ne reflète
-pas l'heure d'été réelle. L'heure réelle des loggers doit être confirmée auprès des opérateurs terrain, puis la
-gestion CET/CEST traitée proprement. Les dates ne bougent pas, donc les mesures nettoyées non plus.
+Fuseau des dates (P2.1f). Convention de l'équipe : UTC+0, toutes les dates du point sont en UTC. L'en-tête de la
+colonne des dates de chaque export déclare un décalage fixe à UTC (« Date Heure, GMT+01:00 »), cru tel quel, et une
+date peut porter le sien. Les lecteurs ramènent chaque fichier en UTC (UTC = date écrite - décalage déclaré) : une
+pression déclarée dans un autre décalage que la température s'associe donc juste, sans rien décaler de plus.
+`utc_offset` garde le décalage déclaré par les fichiers (celui de la température). Le paramètre `timezone` ne choisit
+rien : c'est une vérification (« +01:00 », « UTC », « GMT+1 ») contre ce décalage déclaré. Rien n'est supposé quand rien
+n'est déclaré : les dates restent telles qu'écrites, `utc_offset` est None et un avertissement le dit. La fenêtre de
+nettoyage et les dates écartées (`CleanupSettings`) sont lues dans le même repère que les dates : en UTC dès que les
+fichiers déclarent un décalage.
 
 Les incertitudes σ des instruments viennent du laboratoire : `Sigma_Meas_P` du capteur de pression, `Sigma_Meas_T`
 du thermomètre de la tige. Elles peuvent être remplacées explicitement.
@@ -77,7 +73,7 @@ class RawPoint:
     temperature: ParsedMeasures | None
     pressure: ParsedMeasures | None
     warnings: list[Issue] = field(default_factory=list)
-    utc_offset: timedelta | None = None  # décalage à UTC des dates (UTC = date - utc_offset), None si non déclaré
+    utc_offset: timedelta | None = None  # décalage à UTC déclaré par les fichiers (les dates sont en UTC), None si non déclaré
 
     @property
     def name(self) -> str:
@@ -139,10 +135,11 @@ def check_timezone(timezone: str | None, declared: timedelta | None) -> None:
 
 
 def align_time_frames(files: PointFiles, temperature: ParsedMeasures | None, pressure: ParsedMeasures | None) -> tuple[timedelta | None, list[Issue]]:
-    """Met les dates de pression dans le repère de la température ; retourne le décalage commun et les avertissements.
+    """Vérifie que les deux fichiers sont dans le même repère ; retourne le décalage déclaré et les avertissements.
 
-    Les dates sont sans fuseau, écrites au décalage déclaré par chaque fichier. Deux déclarations différentes se
-    ramènent exactement l'une à l'autre ; une déclaration d'un côté seulement ne le permet pas (refusé)."""
+    Un fichier qui déclare son décalage a été ramené en UTC par le lecteur, quel que soit ce décalage : deux
+    déclarations différentes s'associent donc juste. Une déclaration d'un côté seulement mêlerait des dates en UTC et
+    des dates telles qu'écrites (refusé). Le décalage retourné est celui de la température."""
     parsed = [m for m in (temperature, pressure) if m is not None]
     warnings = [w for m in parsed for w in m.warnings]
     if temperature is None or pressure is None:
@@ -154,12 +151,6 @@ def align_time_frames(files: PointFiles, temperature: ParsedMeasures | None, pre
         raise UserError(
             "E_PIPELINE_TIMEZONE_AMBIGUOUS",
             declared_file=declared_file, declared=format_offset(reference if reference is not None else other), other_file=other_file,
-        )
-    if reference is not None and other != reference:
-        pressure.frame["date"] = pressure.frame["date"] + (reference - other)
-        warnings.append(
-            Issue(None, "W_PIPELINE_TIMEZONE_SHIFTED", file=files.pressure.name, declared=format_offset(other), reference_file=files.temperature.name,
-                  reference=format_offset(reference), shift=format_offset(reference - other))
         )
     return reference, warnings
 
@@ -270,7 +261,7 @@ def load_point(
 ) -> LoadedPoint:
     """Étapes 1 à 3 : le laboratoire, les fichiers du point, puis ses instruments. Rien n'est encore nettoyé.
 
-    `timezone` : vérification du fuseau déclaré par les fichiers (voir l'en-tête du module)."""
+    `timezone` : vérification du fuseau déclaré par les fichiers (voir l'en-tête du module). Les dates sont en UTC."""
     if timezone is not None:
         parse_offset_parameter(timezone)  # un nom de zone est refusé avant de lire quoi que ce soit
     imported = import_lab_directory(lab_folder)
@@ -307,8 +298,9 @@ def run_pipeline(
 ) -> PipelineResult:
     """Du brut au résultat : lit le laboratoire et le point, nettoie, et prépare les entrées d'une colonne.
 
-    `settings` : fenêtre de dates, méthodes de valeurs aberrantes et dates écartées (aucun nettoyage par défaut).
-    `timezone` (« +01:00 », « UTC ») est vérifié contre le fuseau que déclarent les fichiers, il ne le remplace pas."""
+    `settings` : fenêtre de dates, méthodes de valeurs aberrantes et dates écartées (aucun nettoyage par défaut), en UTC
+    quand les fichiers déclarent leur fuseau. `timezone` (« +01:00 », « UTC ») est vérifié contre le fuseau que
+    déclarent les fichiers, il ne le remplace pas."""
     point = load_point(point_folder, lab_folder, timezone, sigma_temperature, sigma_pressure)
     cleanup = clean_point(point, settings)
     return PipelineResult(point, cleanup, column_inputs(point, cleanup))
