@@ -30,6 +30,7 @@ from .svgplot import (
     Figure,
     Plot,
     edges_from_centers,
+    factor_text,
     minus,
     num,
     rich_number,
@@ -44,10 +45,9 @@ HISTOGRAM_BINS = 30
 PARAMETERS = {  # paramètre inversé → (libellé court, libellé d'axe)
     "neg_log10_k": ("−log10 k", "−log10 k (k in m^{2})"),
     "porosity": ("porosity n", "porosity n (1)"),
-    "lambda_s": ("λs", "λs (W·m^{-1}·K^{-1})"),
-    "rhos_cs": ("ρs·cs", "ρs·cs (J·m^{-3}·K^{-1})"),
+    "lambda_s": ("λs", "λs ({factor} W·m^{-1}·K^{-1})"),
+    "rhos_cs": ("ρs·cs", "ρs·cs ({factor} J·m^{-3}·K^{-1})"),
 }
-SOIL_NAMES = {"neg_log10_k": ("k", True), "porosity": ("n", False), "lambda_s": ("lambda_s", False), "rhos_cs": ("rhos_cs", False)}
 
 Built = tuple[str, bytes, list[str]]
 
@@ -120,17 +120,18 @@ def water_flux_figure(published: dict[str, Answer]) -> Built | None:
     plot.legend((INK, "mean", "dot"), (GREY, "q(t) 5th to 95th percentile", "line"),
                 *(((BLUE, f"{rows[-1]['level'] * 100:g} % posterior interval of the mean", "line"),) if any(r["interval"] for r in rows) else ()))
     band = 24
-    row_height = 62
+    row_height = 70
     plot.plot_height(band + row_height * len(rows))
     x = plot.x_scale(low, high)
     plot.y_scale(0.0, 1.0)
     for i, row in enumerate(rows):
         top = plot.top + band + i * row_height
-        middle = top + 38
+        middle = top + 48
         if i:
             plot.add(f'<line x1="{plot.left}" y1="{num(top)}" x2="{plot.right}" y2="{num(top)}" stroke="{LIGHT}" stroke-width="0.5"/>')
         label = "forward model — no interval" if row["role"] == "forward" else f"inversion model — {row['level'] * 100:g} % posterior interval"
         plot.text(plot.left + 6, top + 16, label, "start", INK, halo=True)
+        plot.text(plot.left + 6, top + 32, _flux_numbers(row), "start", GREY, halo=True)  # les valeurs, quand une barre est trop courte pour se lire
         plot.add(f'<line x1="{num(x(row["p5"]))}" y1="{num(middle)}" x2="{num(x(row["p95"]))}" y2="{num(middle)}" stroke="{GREY}" stroke-width="3"/>')
         if row["interval"] is not None:
             plot.add(f'<line x1="{num(x(row["interval"][0]))}" y1="{num(middle)}" x2="{num(x(row["interval"][1]))}" y2="{num(middle)}" stroke="{BLUE}" stroke-width="8"/>')
@@ -141,6 +142,14 @@ def water_flux_figure(published: dict[str, Answer]) -> Built | None:
     plot.text(zero - 6, plot.top + 14, "← exfiltration (q < 0)", "end", INK)
     plot.x_axis(x, "water flux q ({factor} m·s^{-1})")
     return "figures/water_flux.svg", plot.to_bytes(), names
+
+
+def _flux_numbers(row: dict) -> str:
+    """La moyenne (et l'intervalle a posteriori) écrits avec un même facteur commun : `mean −4.5, 90 % [−7.3, −1.9] × 10^{-9} m·s^{-1}`."""
+    values = [row["mean"], *(row["interval"] or ())]
+    parts, exponent = shared(values)
+    text = f"mean {parts[0]}" + (f", {row['level'] * 100:g} % interval [{parts[1]}, {parts[2]}]" if row["interval"] else "")
+    return f"{text} {factor_text(exponent)} m\u00b7s^{{-1}}".replace("  ", " ")
 
 
 def _room_around_zero(low: float, high: float, width: float, left_room: float = 150, right_room: float = 175) -> tuple[float, float]:
