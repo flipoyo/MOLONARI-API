@@ -16,6 +16,22 @@ Jusqu'à 0.6.0-alpha.1, le backend faisait partie du paquet molonaviz2 (aujourd'
 
 ## [Non publié]
 
+Rapport public : figures présentables, champs en profondeur, constats et page lisible (F1). Le contrat de l'API ne change pas (`API_VERSION` reste à 1.0.0-alpha.8), mais le contenu des rapports change : voir « Modifié ». Les `twin_id` ne changent pas (`visibility` et `report` n'entrent pas dans la forme canonique).
+
+### Ajouté
+- Figures du rapport, écrites sans bibliothèque graphique (mêmes octets d'une génération à l'autre) : `figures/water_flux.svg` (un axe q commun, signe expliqué, facteur `× 10⁻ⁿ`), `figures/temperature_field-<modèle>.svg` (carte de chaleur T(z, t), profondeur vers le bas, dates, profondeurs des thermomètres), `figures/temperature_depths-<modèle>.svg` (T(t) à dix profondeurs et profils T(z) à cinq dates), `figures/water_flux_field-<modèle>.svg` (frise q(z, t) divergente centrée sur 0 et q(t) dans la maille du fond), `figures/posterior.svg` (histogrammes des paramètres inversés et de log10 K par couche, médiane et intervalle à 90 %), `figures/chains.svg` (énergie et paramètres par chaîne), `figures/fit_quality.svg` (RMSE par capteur, forward et inversion) et `figures/compare.svg` (différence forward − inversion). Primitives de `report/svgplot.py` : polylignes, aires, histogrammes, barres d'erreur, lignes de référence, cartes de chaleur en rectangles regroupés par niveau (au plus 180 × 60 cellules), barre de couleur, panneaux, axe du temps en dates sans locale, palettes viridis (16) et divergente (17, blanc au centre) écrites en dur, séries décimées à 200 points.
+- Entrée `fields` du rapport (BN-30) : température et flux d'eau du meilleur ajustement (`depth`, `time`, `temperature`, `water_flux`, sans flux de chaleur), toujours en npz (`<modèle>-fields.npz`). Facultative : publiée seulement si `visibility.states` est public dans chaque twin du space, sinon notée dans `skipped` (`E_REPORT_PRIVATE`). Le défaut reste privé.
+- Clé `report.fields_time_step` de `twin.yaml` (entier de 1 à 96, 4 par défaut : une date de champ sur 4, soit une heure à 15 min). Comme `visibility`, elle n'entre pas dans le `twin_id`.
+- `findings` dans `report.json` : des constats structurés `{figure, code, params}`, sans aucun seuil (signe et ordre de grandeur du flux moyen, intervalle a posteriori avec ou sans zéro, part du temps en infiltration au fond, amortissement et déphasage de l'onde journalière, écart entre les modèles, RMSE, R̂ et ESS écrits comme des valeurs). Codes `I_*` déclarés dans `MESSAGES` (le motif `CODE_PATTERN` admet le préfixe `I_`) et traduits.
+- `README.md` à la racine du rapport, en français, listé dans `report.json` (`readme`, avec son SHA-256) : une section par figure (image en lien relatif, légende, constats) et une section « Limites ».
+- `tests/leaks.py` : détecteur de fuite commun (graine, σ, bornes a priori, séries mesurées) pour les exports de T10 et les rapports.
+
+### Modifié
+- `REPORT_FORMAT` passe à 1.1.0 (ajout de `findings`, `readme`, `from_entries`).
+- Les anciennes figures `figures/<rôle>-water_flux.svg` et `figures/<rôle>-fit_quality.svg` ne sont plus produites : elles sont remplacées par les figures ci-dessus. Chaque figure de `report.json` porte `from_entry` (une source) ou `from_entries` (plusieurs ; `chains.npz` compte comme une source). Les figures sont recalculées des octets publiés, pas des réponses en mémoire : aucune ne porte une valeur que le rapport ne publie pas.
+- Tout rapport dont les états sont privés (le défaut) porte désormais deux `skipped` `fields` (`E_REPORT_PRIVATE`) : les octets de son `report.json` changent.
+- `questions/public.py` : BN-30 a une projection publique (`depth`, `time`, `temperature`, `water_flux`) ; `docs/API_V1.md` régénéré.
+
 ## [0.9.0-alpha.2] - 2026-11-08
 
 Refus explicite de `q_s ≠ 0`, tests de référence figés par commit (pyheatmy 0.12.0, bayesian_inversion 0.4.0), tests communs des deux DREAM et `reproduce --export` / `--compare`. En bref : `E_LATERAL_EXCHANGE_UNSUPPORTED` (Y1) ; pyheatmy 0.12.0 et bayesian_inversion 0.4.0 figés par commit pour les tests (Y1) ; tests DREAM communs (Y2) ; `reproduce --export` et `reproduce --compare` (T10). `API_VERSION` reste à 1.0.0-alpha.8 : le schéma OpenAPI et `gen_api_doc.py --check` ne changent pas. Les identifiants de 0.9.0-alpha.1 ne se reproduisent plus depuis les sources (suffixe `+g<commit>` de `engine_version()` depuis R1) ; ceux de cette version, sans suffixe local, sont ci-dessous.
