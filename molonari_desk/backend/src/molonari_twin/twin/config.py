@@ -170,7 +170,8 @@ VISIBILITY_REVEALED = "inversion_settings_public"  # public de fait tant que `po
 MONITORING_STATUS = ("actif", "inactif")
 MONITORING_KEYS = {"status"}
 SITE_LABEL_MAX = 120
-REPORT_KEYS = {"models", "entries", "publication_thin"}
+REPORT_KEYS = {"models", "entries", "publication_thin", "fields_time_step"}
+FIELDS_TIME_STEP_MAX = 96  # 24 h à 15 min : au-delà, l'amortissement journalier des champs n'a plus de sens
 REPORT_MODEL_KEYS = ("forward", "inversion")
 REPORT_ENTRY_KEYS = {"question", "parameters"}
 # Rapport par défaut (twin sans clé `report`) : le flux d'eau à 90 % et la qualité de l'ajustement (HN-10, HN-40).
@@ -198,6 +199,7 @@ class ReportSpec:
     inversion: str | None = None
     declared: bool = False
     publication_thin: int = 10  # facteur de sous-échantillonnage pour les chaînes publiques (T2)
+    fields_time_step: int = 4  # une date sur N pour les champs publics (F1) : 4 = une heure à 15 min
 
 
 def default_report() -> ReportSpec:
@@ -667,12 +669,13 @@ def _report_quantiles(check: _Checker, asked: list[str], quantiles: tuple[float,
 
 
 def _report(check: _Checker, raw, mode, quantiles: tuple[float, ...] | None, mcmc: InversionConfig | None = None) -> ReportSpec:
-    """Clé `report: {models, entries, publication_thin}`.
+    """Clé `report: {models, entries, publication_thin, fields_time_step}`.
 
     Sans clé : le rapport par défaut. Avec la clé : les questions existent, leurs paramètres sont valides, aucune entrée
     n'est en double, le flux d'eau et la qualité de l'ajustement y sont (en mode mcmc, le flux avec un intervalle à 90 %),
     et `mcmc.quantiles` contient 0,05 et 0,95 dès qu'une entrée demande un intervalle à 90 %. `publication_thin` (T2)
-    est un multiple du `thin` de calcul. `quantiles` : None hors du mode mcmc, ou si `mcmc` est invalide."""
+    est un multiple du `thin` de calcul ; `fields_time_step` (F1), de 1 à 96, garde une date de champ sur N (aucune des
+    deux clés n'entre dans `canonical()` : elles ne changent pas le `twin_id`). `quantiles` : None hors du mode mcmc, ou si `mcmc` est invalide."""
     if raw is None:
         _report_quantiles(check, ["water_flux"], quantiles)  # le rapport par défaut demande le flux d'eau à 90 %
         return default_report()
@@ -724,7 +727,15 @@ def _report(check: _Checker, raw, mode, quantiles: tuple[float, ...] | None, mcm
     elif mcmc is not None and publication_thin % mcmc.thin != 0:
         check.add("report.publication_thin", "E_TWIN_PUBLICATION_THIN_MULTIPLE", thin=mcmc.thin)
 
-    return ReportSpec(entries=tuple(entries), forward=forward, inversion=inversion, declared=True, publication_thin=int(publication_thin) if isinstance(publication_thin, int) else 10)
+    fields_time_step = section.get("fields_time_step", 4)
+    if not isinstance(fields_time_step, int) or isinstance(fields_time_step, bool):
+        check.add("report.fields_time_step", "E_TWIN_EXPECTED_INTEGER")
+    elif not 1 <= fields_time_step <= FIELDS_TIME_STEP_MAX:
+        check.add("report.fields_time_step", "E_VALUE_OUT_OF_RANGE", low=1, high=FIELDS_TIME_STEP_MAX)
+
+    return ReportSpec(entries=tuple(entries), forward=forward, inversion=inversion, declared=True,
+                      publication_thin=int(publication_thin) if isinstance(publication_thin, int) else 10,
+                      fields_time_step=fields_time_step if isinstance(fields_time_step, int) and not isinstance(fields_time_step, bool) else 4)
 
 
 def load_twin(path: str | Path, check_data: bool = True, data_folder: str | Path | None = None) -> TwinConfig:

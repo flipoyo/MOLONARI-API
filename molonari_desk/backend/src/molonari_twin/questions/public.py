@@ -15,9 +15,12 @@ sont **blanches** : un champ n'est publié que s'il est listé ici, et une quest
 
 Livrées avec le générateur (P2c.3) : HN-40 `fit_quality` (RMSE et biais par capteur, RMSE totale ; ni σ, ni RMSE/σ, qui la
 révèlent), la différence entre les deux modèles (`model_difference`, nom `compare` dans le rapport), HN-42 `soil_properties`,
-BN-32 `posterior_samples` et BN-34 `chain_data`. Les autres questions (HN-20, HN-30, HN-33, BN-30 : des états ou des
-mesures ; HN-41 dont le verdict n'est pas public) n'ont pas de projection : elles sont refusées, même déclarées publiques,
-tant que la résolution de la grille de requêtes n'est pas décidée (tension T3).
+BN-32 `posterior_samples` et BN-34 `chain_data`. Livrée avec F1 : BN-30 `fields`, projetée sur la profondeur, le temps,
+la température et le flux d'eau (`depth`, `time`, `temperature`, `water_flux` : les flux de chaleur ne sont pas publiés),
+sous-échantillonnée en temps par `report.fields_time_step` ; elle n'entre dans un rapport que si `states` est public.
+Les autres questions (HN-20, HN-30, HN-33 : des états ou des mesures ; HN-41 dont le verdict n'est pas public) n'ont pas
+de projection : elles sont refusées, même déclarées publiques, tant que la résolution de la grille de requêtes n'est
+pas décidée (tension T3).
 """
 
 from __future__ import annotations
@@ -51,6 +54,8 @@ PUBLIC_DATA: dict[str, tuple[str, ...]] = {
         "iteration", "chain", "samples.neg_log10_k", "samples.porosity", "samples.lambda_s", "samples.rhos_cs", "energy",
         "acceptance", "resets", "count",
     ),
+    # F1 : champs du meilleur ajustement (états : publics si `states` l'est), sans flux de chaleur
+    "fields": ("depth", "time", "temperature", "water_flux"),
     "public_convergence": (
         "rhat_max", "ess_min", "acceptance_mean", "burn_in_converged", "burn_in_iterations", "chains", "samples_per_chain",
         "rhat_green", "rhat_orange", "ess_green", "ess_orange", "thresholds_validated",
