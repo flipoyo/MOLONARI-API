@@ -38,12 +38,15 @@ from pathlib import Path
 import numpy as np
 
 from ..api import TwinAPI, check_publishable
+from ..contract.codec import answer_from_json, answer_from_npz
 from ..errors import Issue, UserError
 from ..questions import ELEMENTS, Answer, Visibility, public_answer
 from ..questions.chains import public_chains_npz
 from ..questions.visibility import ELEMENT_MODES
 from ..twin.config import ReportEntry, TwinConfig, config_path, load_twin, without_seed
-from .figures import FIGURES
+from .figures import build_figures
+from .interpretation import findings as interpret
+from .readme import readme
 from .writer import (
     FOLDER_NAME,
     INDEX_NAME,
@@ -54,7 +57,7 @@ from .writer import (
     write_folder,
 )
 
-REPORT_FORMAT = "1.0.0"
+REPORT_FORMAT = "1.1.0"
 PUBLIC_REPORTS = "public_reports"
 ROLES = ("forward", "inversion")
 MODE_OF_ROLE = {"forward": "direct", "inversion": "mcmc"}
@@ -63,14 +66,18 @@ LETTER = {"direct": "D", "mcmc": "M"}
 UNCERTAINTY = {"forward": "none", "inversion": "posterior"}
 BOTH = "both"
 COMPARE = "compare"
+README_NAME = "README.md"
 
 AGGREGATES = frozenset({"fit_quality"})
 """Questions obligatoires dont la projection ne garde que des agrégats (RMSE, biais) : elles sont publiées même si
 `raw_data` et `processed_data` sont privés, bien que le catalogue les déclare « rapport si public » (SPEC_RAPPORT_PUBLIC,
 section 4 : la RMSE est une information obligatoire, et un agrégat n'est pas une fuite)."""
 
-OPTIONAL = {"forward": ("soil_properties",), "inversion": ("soil_properties", "posterior_samples", "chain_data")}
-"""Entrées par défaut de chaque modèle, publiées quand la visibilité le permet."""
+OPTIONAL = {"forward": ("fields", "soil_properties"), "inversion": ("fields", "soil_properties", "posterior_samples", "chain_data")}
+"""Entrées par défaut de chaque modèle, publiées quand la visibilité le permet. Les champs (F1) viennent en premier : ce
+sont les états du meilleur ajustement, publics seulement si `states` l'est dans chaque twin du space."""
+FIELDS_VARIABLES = ["temperature", "water_flux"]
+"""Variables publiées de l'entrée `fields` (les flux de chaleur ne le sont pas, voir questions/public.py)."""
 
 
 @dataclass(frozen=True)
@@ -83,6 +90,7 @@ class Space:
     entries: tuple[ReportEntry, ...]
     declared: bool  # False : le twin n'a pas de clé `report`, c'est le rapport par défaut
     publication_thin: int = 10  # facteur de sous-échantillonnage pour les chaînes publiques (T2)
+    fields_time_step: int = 4  # une date de champ sur N dans l'entrée `fields` (F1) : 4 = une heure à 15 min
     local: bool = False  # rapport local d'un dev (`--forward`) : l'index le dit, ce n'est pas une publication (T7)
 
 
@@ -140,7 +148,8 @@ def resolve_space(twin: str | Path, forward: str | Path | None = None) -> Space:
     points = sorted({c.point for c in configs.values()})
     if len(points) > 1:  # un rapport public appartient à un seul sampling point
         raise UserError("E_REPORT_POINT_MISMATCH", points=", ".join(points))
-    return Space(folder.name, refs, configs, spec.entries, spec.declared, spec.publication_thin, local=forward is not None)
+    return Space(folder.name, refs, configs, spec.entries, spec.declared, spec.publication_thin, spec.fields_time_step,
+                 local=forward is not None)
 
 
 def effective_visibility(configs) -> Visibility:
@@ -168,7 +177,7 @@ def plan(space: Space) -> list[Item]:
             items.append(Item("public_convergence", role, {}, True))
     if len(space.refs) == len(ROLES):
         items.append(Item(COMPARE, BOTH, {}, True))
-    items += [Item(question, role, {}, False) for role in space.refs for question in OPTIONAL[role]]
+    items += [Item(question, role, _optional_parameters(question, space), False) for role in space.refs for question in OPTIONAL[role]]
     seen: set[tuple[str, str, str]] = set()
     unique = []
     for item in items:
@@ -177,6 +186,13 @@ def plan(space: Space) -> list[Item]:
             seen.add(key)
             unique.append(item)
     return unique
+
+
+def _optional_parameters(question: str, space: Space) -> dict:
+    """Paramètres d'une entrée par défaut : les champs publiés sont T et q, une date sur `fields_time_step`."""
+    if question == "fields":
+        return {"variables": list(FIELDS_VARIABLES), "time_step": space.fields_time_step}
+    return {}
 
 
 # Génération --------------------------------------------------------------------------------------------------------
@@ -246,7 +262,6 @@ def build_report(space: Space, api: TwinAPI, npz_threshold: int = NPZ_THRESHOLD)
     visibility = effective_visibility(space.configs.values())
 
     entries: list[dict] = []
-    figures: list[dict] = []
     skipped: list[dict] = []
     reasons: list[UserError] = []
     files: dict[str, bytes] = {}
@@ -279,10 +294,6 @@ def build_report(space: Space, api: TwinAPI, npz_threshold: int = NPZ_THRESHOLD)
             "uncertainty": "none" if item.role == BOTH else UNCERTAINTY[item.role],
             "parameters": answer.provenance["parameters"], "sha256": sha256(content),
         })
-        if question_id in FIGURES and item.role != BOTH:
-            figure = f"figures/{stem}.svg"
-            files[figure] = FIGURES[question_id](answer)
-            figures.append({"file": figure, "from_entry": name, "sha256": sha256(files[figure])})
     if not entries:
         raise UserError("E_REPORT_EMPTY")
 
@@ -309,6 +320,17 @@ def build_report(space: Space, api: TwinAPI, npz_threshold: int = NPZ_THRESHOLD)
                 "sha256": sha256(chains_bytes),
             }
 
+    # Figures, constats et page lisible : calculés des seules entrées écrites (octets relus par le codec), pour qu'aucune
+    # ne porte une valeur que le rapport ne publie pas (bornes a priori, σ, mesures).
+    answers, chains = decode_entries(files, entries)
+    figures = []
+    for path, content, sources in build_figures(answers, chains):
+        files[path] = content
+        sources = [*sources]
+        figure = {"file": path, "sha256": sha256(content)}
+        figures.append({**figure, "from_entry": sources[0]} if len(sources) == 1 else {**figure, "from_entries": sources})
+    found = interpret(answers, chains)
+
     space_index = {role: (_space_entry(space.refs[role], metadata[role]) if role in space.refs else None) for role in ROLES}
     if space.local:  # le dev cite son twin d'inversion par son twin_id (il n'est dans aucun registre public)
         space_index["inversion"]["twin_id"] = metadata["inversion"]["twin_id"]
@@ -324,14 +346,32 @@ def build_report(space: Space, api: TwinAPI, npz_threshold: int = NPZ_THRESHOLD)
         "entries": entries,
         "skipped": skipped,
         "figures": figures,
+        "findings": found,
         "chains": chains_info,
         "signature": None,
         "license": None,
     }
     if space.local:
         index["local"] = True  # absente d'un rapport de l'OPX : ses octets ne changent pas
+    page = readme(index, found, answers)
+    files[README_NAME] = page
+    index["readme"] = {"file": README_NAME, "sha256": sha256(page)}
     files[INDEX_NAME] = dump_json(index)
     return Report(index, files, reasons)
+
+
+def decode_entries(files: dict[str, bytes], entries: list[dict]) -> tuple[dict[str, Answer], dict | None]:
+    """Les entrées publiées relues de leurs octets ({nom de fichier: réponse}) et `chains.npz` (dictionnaire de tableaux,
+    ou None) : la seule matière des figures, des constats et de la page lisible."""
+    answers = {}
+    for entry in entries:
+        name = entry["file"]
+        answers[name] = answer_from_npz(files[name]) if name.endswith(".npz") else answer_from_json(files[name])
+    chains = None
+    if "chains.npz" in files:
+        with np.load(io.BytesIO(files["chains.npz"]), allow_pickle=False) as archive:
+            chains = {key: archive[key] for key in archive.files}
+    return answers, chains
 
 
 def _generator_version() -> str:
