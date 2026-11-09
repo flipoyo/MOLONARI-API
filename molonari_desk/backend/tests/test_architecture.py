@@ -22,7 +22,10 @@ MODULES = {"__init__", "__main__", "errors", "gitinfo", "i18n", "domain", "io", 
 FORBIDDEN = ["PySide6", "pyqtgraph", "matplotlib", "molonari_desk"]
 
 # Bords du backend autorisés à traduire avec translate() : fichier → raison.
-TRANSLATING_EDGES = {"twin/cli.py": "ligne de commande des twins (choix du propriétaire, A1)"}
+TRANSLATING_EDGES = {
+    "twin/cli.py": "ligne de commande des twins (choix du propriétaire, A1)",
+    "report/readme.py": "page lisible du rapport public, en français (F1)",
+}
 
 
 def files() -> list[Path]:
