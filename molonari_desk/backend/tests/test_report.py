@@ -868,6 +868,21 @@ def test_findings_values(with_states, computed_twins):
         assert share["depth"] == float(f"{fields.data['depth'].value[0]:.4g}")
 
 
+def test_a_finding_with_a_non_finite_number_is_left_out_and_the_page_is_still_written(with_states):
+    from molonari_twin.questions import Answer, Quantity
+
+    published, chains = decode_entries(with_states["both"].files, with_states["both"].index["entries"])
+    convergence = published["inversion-public_convergence.json"]
+    broken = {**convergence.data, "rhat_max": Quantity(float("inf"), "1")}  # chaînes trop courtes : R̂ infini
+    published["inversion-public_convergence.json"] = Answer(broken, convergence.provenance)
+    found = findings(published, chains)
+    assert "I_CONVERGENCE" not in [f["code"] for f in found] and "I_FIT_RMSE" in [f["code"] for f in found]
+    dump_json({"findings": found})  # JSON sans NaN ni infini
+    chains_svg = {path: content for path, content, _ in build_figures(published, chains)}["figures/chains.svg"]
+    assert "max = inf" in chains_svg.decode()  # la figure écrit la valeur
+    assert readme(with_states["both"].index, found, published)
+
+
 def test_daily_damping_recovers_a_synthetic_wave():
     seconds = np.arange(0, 10 * 86400, 3600.0)
     omega = 2 * np.pi / 86400

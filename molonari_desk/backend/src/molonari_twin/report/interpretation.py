@@ -102,7 +102,12 @@ def _field_findings(published: dict[str, Answer]) -> tuple[list[dict], list[dict
 
 def findings(published: dict[str, Answer], chains: dict | None = None) -> list[dict]:
     """Les constats, dans l'ordre des figures : flux (1), amortissement (3), part en infiltration (4), convergence (6),
-    ajustement (7), différence entre les modèles (8)."""
+    ajustement (7), différence entre les modèles (8). Un constat dont un nombre n'est pas fini (R̂ infini d'une chaîne trop
+    courte, par exemple) est omis : `report.json` n'écrit pas de NaN ni d'infini ; la figure, elle, écrit la valeur."""
+    return [f for f in _findings(published, chains) if all(math.isfinite(v) for v in f["params"].values() if isinstance(v, float))]
+
+
+def _findings(published: dict[str, Answer], chains: dict | None) -> list[dict]:
     found = _flux_findings(published)
     damped, shares = _field_findings(published)
     found += damped + shares
