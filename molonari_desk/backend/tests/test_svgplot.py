@@ -24,6 +24,7 @@ from molonari_twin.report.svgplot import (
     Plot,
     Scale,
     axis_factor,
+    axis_ticks,
     diverging_levels,
     nice_ticks,
     tick_label,
@@ -320,3 +321,20 @@ def test_axes_need_their_scales_and_marks_both():
     plot.x_scale(0, 1)
     with pytest.raises(RuntimeError):
         plot.polyline([0, 1], [0, 1], BLUE)
+
+
+def test_an_axis_always_has_at_least_three_ticks():
+    assert len(nice_ticks(-11790.0, -11742.0, 4)) == 2  # le pas 20 n'en donne que deux
+    assert axis_ticks(-11790.0, -11742.0, 4) == [-11790.0, -11780.0, -11770.0, -11760.0, -11750.0]
+    assert axis_ticks(0.0, 10.0) == nice_ticks(0.0, 10.0)  # assez de graduations : inchangées
+    assert axis_ticks(3.0, 3.0) == [3.0]  # intervalle vide
+    for low, high in ((-11790.0, -11742.0), (-11790.5, -11748.2), (0.1, 0.9), (14.9, 15.1), (-1.9e-8, 2.3e-8)):
+        for target in (3, 4, 6):
+            assert len(axis_ticks(low, high, target)) >= 3, (low, high, target)
+    for width in (240, 480, 760):
+        plot = Plot("axes", width=width, height=240)
+        x, y = plot.x_scale(-11790.0, -11742.0), plot.y_scale(-11790.0, -11742.0)
+        plot.x_axis(x, "x")
+        plot.y_axis(y, "y")
+        marks = [t for t in parse(plot.to_bytes()).iter(f"{SVG}text") if t.text and re.fullmatch(r"\u2212?\d+", t.text)]
+        assert len(marks) >= 6, width  # trois graduations au moins sur chaque axe

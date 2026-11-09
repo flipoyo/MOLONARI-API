@@ -106,6 +106,18 @@ def nice_ticks(low: float, high: float, target: int = 5) -> list[float]:
     return [round(k * step, 15) for k in range(first, last + 1)]
 
 
+def axis_ticks(low: float, high: float, target: int = 5, minimum: int = 3) -> list[float]:
+    """Les graduations d'un axe : `nice_ticks`, relancé avec un pas plus fin tant qu'il en rend moins de `minimum` (un axe
+    gradué d'une seule valeur ne se lit pas). Un intervalle vide garde sa seule graduation."""
+    ticks = nice_ticks(low, high, target)
+    for _ in range(8):
+        if len(ticks) >= minimum or not high > low:
+            break
+        target *= 2
+        ticks = nice_ticks(low, high, target)
+    return ticks
+
+
 def tick_label(value: float, ticks: list[float]) -> str:
     """Étiquette d'une graduation : notation scientifique hors de [1e-3, 1e5[, sinon décimales du pas."""
     if value == 0:
@@ -293,7 +305,7 @@ class Plot:
         """Axe horizontal en bas de la zone de tracé : graduations vers l'extérieur, grille discrète et libellé (`{factor}`
         y place le facteur commun `× 10^{n}`, sinon il est ajouté à la fin)."""
         self._guard()
-        ticks = nice_ticks(scale.low, scale.high, max(4, round((self.right - self.left) / 90)))
+        ticks = axis_ticks(scale.low, scale.high, max(4, round((self.right - self.left) / 90)))
         exponent, labels = axis_factor(ticks)
         self._x_ticks(scale, ticks, labels)
         self._x_label(with_factor(label, exponent))
@@ -301,7 +313,7 @@ class Plot:
     def y_axis(self, scale: Scale, label: str) -> None:
         """Axe vertical à gauche de la zone de tracé (échelle inversée admise : profondeur vers le bas)."""
         self._guard()
-        ticks = nice_ticks(scale.low, scale.high, max(3, round((self.bottom - self.top) / 45)))
+        ticks = axis_ticks(scale.low, scale.high, max(3, round((self.bottom - self.top) / 45)))
         exponent, labels = axis_factor(ticks)
         self._axes.append(f'<line x1="{self.left}" y1="{self.top}" x2="{self.left}" y2="{self.bottom}" stroke="{GREY}"/>')
         for tick, tick_text in zip(ticks, labels, strict=True):
@@ -471,7 +483,7 @@ class Plot:
             a, b = scale(bottom_value + i * (top_value - bottom_value) / n), scale(bottom_value + (i + 1) * (top_value - bottom_value) / n)
             self._body.append(f'<rect x="{x0}" y="{num(min(a, b))}" width="{width}" height="{num(abs(b - a) + 0.4)}" fill="{color}"/>')
         self._body.append(f'<rect x="{x0}" y="{self.top}" width="{width}" height="{num(self.bottom - self.top)}" fill="none" stroke="{GREY}" stroke-width="0.5"/>')
-        ticks = nice_ticks(low, high)
+        ticks = axis_ticks(low, high)
         exponent, labels = axis_factor(ticks)
         for tick, text in zip(ticks, labels, strict=True):
             py = scale(tick)
