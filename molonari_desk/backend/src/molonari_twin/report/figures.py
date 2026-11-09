@@ -22,7 +22,6 @@ from .svgplot import (
     DIVERGING,
     GREY,
     INK,
-    LIGHT,
     ORANGE,
     SERIES,
     VERMILLION,
@@ -98,50 +97,52 @@ def _published(published: dict[str, Answer], *names: str) -> list[Answer] | None
 
 
 def water_flux_figure(published: dict[str, Answer]) -> Built | None:
-    """Une ligne par modèle sur un axe q commun : moyenne (point), P5–P95 de q(t) (trait gris), intervalle a posteriori à
-    90 % (barre bleue, inversion seulement). q ≥ 0 : infiltration (la rivière alimente la nappe), q < 0 : exfiltration."""
+    """Un panneau par modèle, chacun avec son axe q (facteur `× 10^n`, `m·s⁻¹`) : moyenne (point), P5–P95 de q(t) (trait
+    gris), intervalle a posteriori à 90 % (barre bleue, inversion seulement), ligne q = 0 annotée. q ≥ 0 : infiltration (la
+    rivière alimente la nappe), q < 0 : exfiltration. Les deux modèles diffèrent souvent de deux ordres de grandeur : un
+    axe commun écraserait le plus petit."""
     names = [f"{role}-water_flux.json" for role in ROLES if f"{role}-water_flux.json" in published]
     if not names:
         return None
-    rows = []
+    panels = []
     for name in names:
         answer = published[name]
         mean = answer.data["mean"]
-        rows.append({
+        row = {
             "role": name.split("-")[0], "mean": float(mean.value), "interval": None if mean.interval is None else (float(mean.interval[0]), float(mean.interval[1])),
             "p5": _number(answer, "p5"), "p95": _number(answer, "p95"), "level": _number(answer, "level"),
-        })
-    marks = [0.0] + [v for row in rows for v in (row["mean"], row["p5"], row["p95"], *(row["interval"] or ()))]
-    low, high = _room_around_zero(min(marks), max(marks), FIELD_WIDTH - 56 - 20 - 100)
-    plot = Plot("Water flux through the riverbed", "positive q: infiltration, the river feeds the aquifer; negative q: exfiltration",
-                width=FIELD_WIDTH - 100, left=56, right=20,
-                desc="Mean water flux through the riverbed, its 5th to 95th percentile over time and, for the inversion, "
-                     f"its posterior interval, from {', '.join(names)}.")
+        }
+        panels.append(_flux_panel(row))
+    figure = Figure("Water flux through the riverbed",
+                    "Mean water flux through the riverbed, its 5th to 95th percentile over time and, for the inversion, its posterior "
+                    f"interval, one panel per model, from {', '.join(names)}.",
+                    panels, subtitle="positive q: infiltration, the river feeds the aquifer; negative q: exfiltration")
+    return "figures/water_flux.svg", figure.to_bytes(), names
+
+
+def _flux_panel(row: dict) -> Plot:
+    width = FIELD_WIDTH - 100
+    forward = row["role"] == "forward"
+    title = "forward model \u2014 no interval" if forward else f"inversion model \u2014 {row['level'] * 100:g} % posterior interval"
+    plot = Plot(title, _flux_numbers(row), width=width, left=56, right=20)
     plot.legend((INK, "mean", "dot"), (GREY, "q(t) 5th to 95th percentile", "line"),
-                *(((BLUE, f"{rows[-1]['level'] * 100:g} % posterior interval of the mean", "line"),) if any(r["interval"] for r in rows) else ()))
-    band = 24
-    row_height = 70
-    plot.plot_height(band + row_height * len(rows))
-    x = plot.x_scale(low, high)
+                *(() if forward else ((BLUE, f"{row['level'] * 100:g} % posterior interval of the mean", "line"),)))
+    band, height = 24, 44
+    plot.plot_height(band + height)
+    marks = [0.0, row["mean"], row["p5"], row["p95"], *(row["interval"] or ())]
+    x = plot.x_scale(*_room_around_zero(min(marks), max(marks), width - 56 - 20))
     plot.y_scale(0.0, 1.0)
-    for i, row in enumerate(rows):
-        top = plot.top + band + i * row_height
-        middle = top + 48
-        if i:
-            plot.add(f'<line x1="{plot.left}" y1="{num(top)}" x2="{plot.right}" y2="{num(top)}" stroke="{LIGHT}" stroke-width="0.5"/>')
-        label = "forward model — no interval" if row["role"] == "forward" else f"inversion model — {row['level'] * 100:g} % posterior interval"
-        plot.text(plot.left + 6, top + 16, label, "start", INK, halo=True)
-        plot.text(plot.left + 6, top + 32, _flux_numbers(row), "start", GREY, halo=True)  # les valeurs, quand une barre est trop courte pour se lire
-        plot.add(f'<line x1="{num(x(row["p5"]))}" y1="{num(middle)}" x2="{num(x(row["p95"]))}" y2="{num(middle)}" stroke="{GREY}" stroke-width="3"/>')
-        if row["interval"] is not None:
-            plot.add(f'<line x1="{num(x(row["interval"][0]))}" y1="{num(middle)}" x2="{num(x(row["interval"][1]))}" y2="{num(middle)}" stroke="{BLUE}" stroke-width="8"/>')
-        plot.add(f'<circle cx="{num(x(row["mean"]))}" cy="{num(middle)}" r="5" fill="{INK}" stroke="#ffffff" stroke-width="1.5"/>')
+    middle = plot.top + band + height / 2
+    plot.add(f'<line x1="{num(x(row["p5"]))}" y1="{num(middle)}" x2="{num(x(row["p95"]))}" y2="{num(middle)}" stroke="{GREY}" stroke-width="3"/>')
+    if row["interval"] is not None:
+        plot.add(f'<line x1="{num(x(row["interval"][0]))}" y1="{num(middle)}" x2="{num(x(row["interval"][1]))}" y2="{num(middle)}" stroke="{BLUE}" stroke-width="8"/>')
+    plot.add(f'<circle cx="{num(x(row["mean"]))}" cy="{num(middle)}" r="5" fill="{INK}" stroke="#ffffff" stroke-width="1.5"/>')
     plot.reference_line(0.0, "", "x")
     zero = x(0.0)
-    plot.text(zero + 6, plot.top + 14, "infiltration (q ≥ 0) →", "start", INK)
-    plot.text(zero - 6, plot.top + 14, "← exfiltration (q < 0)", "end", INK)
-    plot.x_axis(x, "water flux q ({factor} m·s^{-1})")
-    return "figures/water_flux.svg", plot.to_bytes(), names
+    plot.text(zero + 6, plot.top + 14, "infiltration (q \u2265 0) \u2192", "start", INK)
+    plot.text(zero - 6, plot.top + 14, "\u2190 exfiltration (q < 0)", "end", INK)
+    plot.x_axis(x, "water flux q ({factor} m\u00b7s^{-1})")
+    return plot
 
 
 def _flux_numbers(row: dict) -> str:
