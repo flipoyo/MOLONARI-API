@@ -192,7 +192,8 @@ def build_point(path: str | Path, point: str, data_folder: str | Path | None = N
         "offset": float(loaded.offset),
         "sigma_pressure": float(instruments.sigma_pressure),
         "sigma_temperature": float(instruments.sigma_temperature),
-        "utc_offset": format_offset(loaded.utc_offset) if loaded.utc_offset is not None else None,
+        "utc_offset": "+00:00" if loaded.utc_offset is not None else None,  # dates de measurements.csv en UTC
+        "source_utc_offset": format_offset(loaded.utc_offset) if loaded.utc_offset is not None else None,
         "processing": wanted.processing.to_dict(),
         "rows": len(cleaned),
         "start": cleaned["date"].iloc[0].isoformat(),

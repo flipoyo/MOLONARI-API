@@ -9,18 +9,13 @@ mis au format propre de Molonaviz. Le lecteur gère les deux :
 - lignes d'événements du logger (valeurs vides) écartées et comptées ;
 - séparateur « , », « ; » ou tabulation ; virgule décimale si le séparateur n'est pas « , ».
 
-Fuseau des dates (P2.1f). La convention est celle des données brutes : l'en-tête de la colonne des dates déclare un
-décalage fixe à UTC (« Date Heure, GMT+01:00 »), et une date peut porter le sien (« 2016-06-27T12:00:00+01:00 »).
-Les dates restent écrites telles quelles, sans fuseau (`ParsedMeasures.utc_offset` donne le décalage). Rien n'est
-supposé : sans déclaration, le décalage est None et un avertissement le dit.
-
-CONVENTION PROVISOIRE (TODO(fuseau), à régler les années suivantes) : un en-tête qui déclare « GMT+01:00 » (tous les
-exports actuels, en été comme en hiver) est lu comme UTC+2 toute l'année, `PROVISIONAL_UTC_OFFSET`, avec
-l'avertissement W_MEASURES_TIMEZONE_OVERRIDDEN. L'heure réelle des loggers reste à confirmer auprès des opérateurs
-terrain, puis la gestion CET/CEST à traiter proprement. Un en-tête « GMT+02:00 » est gardé tel quel, et tout autre
-décalage d'en-tête aussi. Des dates qui portent elles-mêmes leur décalage (exact) ne sont jamais remplacées. Une date dont le décalage contredit
-celui du fichier, ou des décalages mêlés sans déclaration, sont refusés (E_MEASURES_TIMEZONE_CONFLICT,
-E_MEASURES_TIMEZONE_MIXED, E_MEASURES_TIMEZONE_PARTIAL).
+Fuseau des dates (P2.1f). Convention de l'équipe : UTC+0. L'en-tête de la colonne des dates déclare un décalage fixe
+à UTC (« Date Heure, GMT+01:00 »), cru tel quel, et une date peut porter le sien (« 2016-06-27T12:00:00+01:00 »). Les
+dates lues sont ramenées en UTC (UTC = date écrite - décalage) et gardées sans fuseau ; `ParsedMeasures.utc_offset`
+garde le décalage déclaré par le fichier. Rien n'est supposé : sans déclaration, les dates restent telles qu'écrites,
+le décalage est None et un avertissement le dit. Une date dont le décalage contredit celui du fichier, ou des
+décalages mêlés sans déclaration, sont refusés (E_MEASURES_TIMEZONE_CONFLICT, E_MEASURES_TIMEZONE_MIXED,
+E_MEASURES_TIMEZONE_PARTIAL).
 
 Un fichier dont l'en-tête annonce une unité de pression (kPa, psi, bar…) à la place de la tension du capteur
 est refusé (E_MEASURES_UNIT_UNSUPPORTED) : le lire par position donnerait des charges fausses sans le dire.
@@ -40,8 +35,6 @@ import pandas as pd
 from ..domain.models import RAW_PRESSURE_COLUMNS, RAW_TEMPERATURE_COLUMNS
 from ..errors import Issue, UserError
 from .dates import (
-    HEADER_OFFSET_OVERRIDDEN,
-    PROVISIONAL_UTC_OFFSET,
     format_offset,
     parse_date,
     parse_dates,
@@ -105,7 +98,7 @@ class ParsedMeasures:
     dropped: list[tuple[int, Issue]]  # (numéro de ligne dans le fichier, raison)
     columns_used: list[str]
     converted_units: list[str] = field(default_factory=list)  # ex. « °F → °C »
-    utc_offset: timedelta | None = None  # décalage à UTC déclaré par le fichier (dates écrites à ce décalage), None si aucun
+    utc_offset: timedelta | None = None  # décalage à UTC déclaré par le fichier (les dates de `frame` sont en UTC), None si aucun
     warnings: list[Issue] = field(default_factory=list)
 
     @property
@@ -226,13 +219,15 @@ def _read_measures(path: Path, kind: str) -> ParsedMeasures:
     if len(dates) < 2:
         raise UserError("E_MEASURES_TOO_FEW", file=path.name)
     header_cell = header[date_col] if header and date_col < len(header) else None
-    dates, utc_offset, overridden = _declared_offset(path.name, header_cell, dates, lines)
+    dates, utc_offset = _declared_offset(path.name, header_cell, dates, lines)
     parsed_dates, date_format, chronological = parse_dates(dates)
     if not chronological:
         backwards = int(np.flatnonzero(np.diff(parsed_dates.to_numpy().astype("datetime64[s]").astype(np.int64)) < 0)[0]) + 1
         raise UserError(
             "E_MEASURES_NOT_CHRONOLOGICAL", file=path.name, line=lines[backwards], value=dates[backwards], previous_line=lines[backwards - 1], previous=dates[backwards - 1]
         )
+    if utc_offset is not None:
+        parsed_dates = parsed_dates - utc_offset  # en UTC : un décalage fixe ne change ni l'ordre ni les doublons
     array = np.asarray(values, np.float64)
     converted = []
     for j, unit in enumerate(units):
@@ -250,24 +245,15 @@ def _read_measures(path: Path, kind: str) -> ParsedMeasures:
     frame = frame.reset_index(drop=True)
     used = [header[c] if header and c < len(header) else f"#{c + 1}" for c in [date_col, *columns]]
     warnings = [] if utc_offset is not None else [Issue(None, "W_MEASURES_TIMEZONE_UNDECLARED", file=path.name)]
-    if overridden is not None:
-        warnings.append(
-            Issue(None, "W_MEASURES_TIMEZONE_OVERRIDDEN", file=path.name, declared=format_offset(overridden), applied=format_offset(utc_offset))
-        )
     return ParsedMeasures(frame, date_format, len(rows) - data_start, dropped, used, sorted(set(converted)), utc_offset, warnings)
 
 
-def _declared_offset(
-    file: str, header: str | None, dates: list[str], lines: list[int]
-) -> tuple[list[str], timedelta | None, timedelta | None]:
+def _declared_offset(file: str, header: str | None, dates: list[str], lines: list[int]) -> tuple[list[str], timedelta | None]:
     """Décalage à UTC déclaré par le fichier, et les dates débarrassées de leur décalage explicite.
 
     Source : l'en-tête de la colonne des dates, ou à défaut le décalage porté par les dates elles-mêmes. Un décalage
     explicite qui contredit l'en-tête est un conflit ; des décalages explicites différents, ou portés par une partie
-    seulement des dates, sans en-tête pour trancher, sont ambigus. Sans aucune déclaration : (dates, None, None).
-
-    Le troisième élément est le décalage d'en-tête remplacé par la convention provisoire (None si aucun) : un en-tête
-    +01:00 sans décalage explicite dans les dates vaut PROVISIONAL_UTC_OFFSET."""
+    seulement des dates, sans en-tête pour trancher, sont ambigus. Sans aucune déclaration : (dates, None)."""
     declared = parse_header_offset(header)
     texts, offsets = [], []
     for value in dates:
@@ -282,17 +268,15 @@ def _declared_offset(
                     "E_MEASURES_TIMEZONE_CONFLICT",
                     file=file, line=line, value=value, offset=format_offset(offset), declared=format_offset(declared),
                 )
-        if declared == HEADER_OFFSET_OVERRIDDEN and not carried:
-            return texts, PROVISIONAL_UTC_OFFSET, declared
-        return texts, declared, None
+        return texts, declared
     if not carried:
-        return texts, None, None
+        return texts, None
     if len(carried) > 1:
         shown = ", ".join(format_offset(o) for o in sorted(carried))
         raise UserError("E_MEASURES_TIMEZONE_MIXED", file=file, offsets=shown)
     if any(offset is None for offset in offsets):
         raise UserError("E_MEASURES_TIMEZONE_PARTIAL", file=file)
-    return texts, next(iter(carried)), None
+    return texts, next(iter(carried))
 
 
 def _is_number(cell: str, decimal_comma: bool) -> bool:

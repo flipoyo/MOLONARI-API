@@ -195,7 +195,7 @@ def test_build_writes_the_cleaned_measurements_and_the_manifest(lab, data_repo):
     assert not list((data_repo / "processed_data").glob("*.partial")) and not list((data_repo / "processed_data").glob("*.old"))
     manifest = json.loads((folder / MANIFEST_NAME).read_text(encoding="utf-8"))
     assert result.manifest == manifest
-    assert manifest["schema"] == "molonari-processed/1.0.0" and manifest["lab"] == "lab_point034" and manifest["point"] == "Point034"
+    assert manifest["schema"] == "molonari-processed/1.1.0" and manifest["lab"] == "lab_point034" and manifest["point"] == "Point034"
     assert manifest["code_version"] == current_version()
     assert set(manifest["raw_files"]) == {"Point034_info.csv", "point034_P_measures.csv", "point034_T_measures.csv"}
     assert set(manifest["lab_files"]) == {"pressure_sensors/P508.csv", "shafts/S007.csv", "temperature_sensors/T001.csv"}
@@ -206,14 +206,14 @@ def test_build_writes_the_cleaned_measurements_and_the_manifest(lab, data_repo):
     for name, digest in manifest["lab_files"].items():
         assert hashlib.sha256((data_repo / "Laboratory" / name).read_bytes()).hexdigest() == digest
     assert len(manifest["depths"]) == 4 and manifest["sigma_pressure"] > 0 and manifest["sigma_temperature"] > 0
-    assert manifest["utc_offset"] == "+02:00" and manifest["offset"] == 0.0
+    assert (manifest["utc_offset"], manifest["source_utc_offset"]) == ("+00:00", "+01:00") and manifest["offset"] == 0.0
     assert manifest["processing"]["methods"]["t1"] == "iqr" and manifest["processing"]["start"] == "2016-06-27T13:00:00"
     assert manifest["rows"] > 3 and manifest["start"] >= "2016-06-27T13:00:00" and manifest["end"] <= "2016-07-01T10:15:00"
     # l'empreinte est celle des mesures nettoyées, et aussi celle du fichier (même texte que frame_digest)
     frame = read_cleaned_csv(folder / MEASUREMENTS_NAME, exact=True)
     assert len(frame) == manifest["rows"] and frame_digest(frame) == manifest["cleaned_sha256"]
     assert hashlib.sha256((folder / MEASUREMENTS_NAME).read_bytes()).hexdigest() == manifest["cleaned_sha256"]
-    assert "created" not in json.dumps(manifest) and result.warnings  # fuseau provisoire des bruts : un avertissement
+    assert "created" not in json.dumps(manifest) and result.warnings == []  # en-tête GMT+01:00 cru : aucun avertissement
 
 
 def test_build_runs_the_pipeline_and_nothing_else(lab, data_repo):
@@ -281,16 +281,14 @@ def test_build_refuses_a_cleaning_that_leaves_nothing(lab, data_repo):
 
 
 def test_the_command_line_builds_in_the_user_language(lab, data_repo, capsys, monkeypatch):
-    from molonari_twin.i18n import load_catalog
     from molonari_twin.twin.cli import main
 
-    french = load_catalog("fr")
     monkeypatch.delenv("MOLONARI_LANG", raising=False)
     monkeypatch.delenv("MOLONAVIZ_LANG", raising=False)
     assert main(["lab", "build", str(lab), "--point", "Point034"]) == 0
     out = capsys.readouterr()
     assert out.out.startswith("Données traitées écrites : ") and str(data_repo.resolve() / "processed_data" / "Point034") in out.out
-    assert out.err.startswith(french["Warning:"])
+    assert out.err == ""  # en-tête GMT+01:00 cru, dates en UTC : aucun avertissement
     first = processed_bytes(data_repo)
     monkeypatch.setenv("MOLONARI_LANG", "en")
     assert main(["lab", "build", str(lab / "lab.yaml"), "--point", "Point034"]) == 0

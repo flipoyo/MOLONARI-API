@@ -31,6 +31,15 @@ Rapport public : figures présentables, champs en profondeur, constats et page l
 - Les anciennes figures `figures/<rôle>-water_flux.svg` et `figures/<rôle>-fit_quality.svg` ne sont plus produites : elles sont remplacées par les figures ci-dessus. Chaque figure de `report.json` porte `from_entry` (une source) ou `from_entries` (plusieurs ; `chains.npz` compte comme une source). Les figures sont recalculées des octets publiés, pas des réponses en mémoire : aucune ne porte une valeur que le rapport ne publie pas.
 - Tout rapport dont les états sont privés (le défaut) porte désormais deux `skipped` `fields` (`E_REPORT_PRIVATE`) : les octets de son `report.json` changent.
 - `questions/public.py` : BN-30 a une projection publique (`depth`, `time`, `temperature`, `water_flux`) ; `docs/API_V1.md` régénéré.
+- **Dates en UTC** (convention de l'équipe : UTC+0). Le décalage déclaré par un brut (en-tête `Date Heure, GMT+01:00` ou décalage porté par les dates) est cru tel quel, et les dates lues sont ramenées en UTC : UTC = date écrite − décalage (`06/27/16 12:00:00 PM` en `GMT+01:00` devient `2016-06-27 11:00`). Les mesures nettoyées, `processed_data/`, les résultats (`results/*.csv`) et les réponses aux questions sont donc en UTC. Sans déclaration, les dates restent telles qu'écrites (`W_MEASURES_TIMEZONE_UNDECLARED`, qui le dit).
+- La fenêtre de nettoyage (`processing.start`/`end`, `data.start`/`end`) et les dates écartées sont lues dans le même repère que les dates : en UTC dès que les bruts déclarent leur fuseau. Une fenêtre écrite en heure du logger est à réécrire (`2016-06-27 13:00` en `GMT+01:00` devient `2016-06-27 12:00`).
+- `utc_offset` (`ParsedMeasures`, `RawPoint`, `LoadedPoint`, `PipelineResult`) garde le décalage déclaré par les bruts ; le paramètre `timezone` le vérifie toujours (`+01:00` pour les bruts actuels, `+02:00` est maintenant un conflit).
+- Manifeste des données traitées : schéma `molonari-processed/1.1.0`. `utc_offset` vaut `+00:00` (décalage des dates de `measurements.csv`) et la nouvelle clé `source_utc_offset` garde celui des bruts (`+01:00`). Un dossier 1.0.0, aux dates en heure du logger, est refusé (`E_PROCESSED_SCHEMA`) : à reconstruire avec `molonari-twin lab build`.
+- Les dates changent, donc `cleaned_sha256` et le `twin_id` des twins construits sur des bruts qui déclarent leur fuseau. Les valeurs calculées ne changent pas tant que la fenêtre garde les mêmes mesures.
+
+### Retiré
+- La convention provisoire « `GMT+01:00` lu comme UTC+2 toute l'année » (`PROVISIONAL_UTC_OFFSET`, `HEADER_OFFSET_OVERRIDDEN`) et son avertissement `W_MEASURES_TIMEZONE_OVERRIDDEN`.
+- `W_PIPELINE_TIMEZONE_SHIFTED` : une pression et une température déclarées dans deux décalages différents sont chacune ramenées en UTC, il n'y a plus rien à décaler. `E_PIPELINE_TIMEZONE_AMBIGUOUS` (un seul des deux fichiers déclare son fuseau) reste.
 
 ## [0.9.0-alpha.2] - 2026-11-08
 
