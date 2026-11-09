@@ -122,7 +122,7 @@ def temperature_figure(sensors: Answer, describe: Answer, start=None, end=None) 
     if bands:
         bands_text = f"{bands[0][0].split(' ', 1)[0]} % credible and predictive bands"
     else:
-        bands_text = "no band: the fields were not stored (store_fields)" if inversion else "no band: forward model"
+        bands_text = "no band: the fields were not stored (store_fields)" if inversion else "no band: a forward model has no interval"
     period = f"{format_time(times[0])} to {format_time(times[-1])}"
     subtitle = f"{best}, T1–T3, {period}; {bands_text}"
     figure = Figure(f"Measured and simulated temperature — {name}",
