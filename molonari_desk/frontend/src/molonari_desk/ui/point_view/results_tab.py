@@ -27,6 +27,7 @@ from ..plots.maps import (
     depth_time_map,
     predictive_band,
     profiles,
+    robust_limit,
     sensor_comparison,
     time_series_with_band,
 )
@@ -152,6 +153,22 @@ class ResultsTab(QtWidgets.QWidget):
         row = QtWidgets.QHBoxLayout()
         row.addWidget(QtWidgets.QLabel(t("Map")))
         row.addWidget(self.heat_kind)
+        self.heat_scale_auto = QtWidgets.QCheckBox(t("Automatic scale"))
+        self.heat_scale_auto.setChecked(True)
+        self.heat_scale = QtWidgets.QDoubleSpinBox()
+        self.heat_scale.setPrefix("± ")
+        self.heat_scale.setSuffix(" W/m²")
+        self.heat_scale.setRange(0.01, 10000.0)
+        self.heat_scale.setDecimals(2)
+        self.heat_scale.setStepType(QtWidgets.QAbstractSpinBox.StepType.AdaptiveDecimalStepType)
+        self.heat_scale.setKeyboardTracking(False)  # la carte se redessine à la validation, pas à chaque frappe
+        self.heat_scale.setEnabled(False)
+        attach(self.heat_scale_auto, "results.heat_scale")
+        attach(self.heat_scale, "results.heat_scale")
+        self.heat_scale_auto.toggled.connect(self._heat_scale_mode_changed)
+        self.heat_scale.valueChanged.connect(self._draw_heat_map)
+        row.addWidget(self.heat_scale_auto)
+        row.addWidget(self.heat_scale)
         row.addStretch()
         flux_layout.addLayout(row)
         flux_layout.addWidget(self.heat_map, 1)
@@ -429,7 +446,12 @@ class ResultsTab(QtWidgets.QWidget):
         time_series_with_band(ax, result.times, result.water_flux[i], band, label=t("Specific discharge"), y_label=t("Water flux (m/s), positive downwards"))
         self.water_flux.draw()
 
+    def _heat_scale_mode_changed(self, automatic: bool) -> None:
+        self.heat_scale.setEnabled(not automatic)  # décocher garde la dernière limite calculée comme point de départ
+        self._draw_heat_map()
+
     def _draw_heat_map(self) -> None:
+        # Flux nul en mode auto : le champ garde la limite de la carte précédente (rien à échelonner).
         if self.forward is None:
             return
         result = self.forward
@@ -446,7 +468,15 @@ class ResultsTab(QtWidgets.QWidget):
             ax.axis("off")
             ax.text(0.5, 0.5, t("This flux is zero for this computation."), ha="center", va="center")
         else:
-            depth_time_map(ax, result.times, result.depths, values, t("Heat flux (W/m²), positive downwards"), signed=True, sensor_depths=result.sensor_depths)
+            if self.heat_scale_auto.isChecked():
+                limit = robust_limit(values)
+                blocker = QtCore.QSignalBlocker(self.heat_scale)  # pas de redessin en boucle
+                self.heat_scale.setValue(limit)
+                del blocker
+            else:
+                limit = self.heat_scale.value()
+            depth_time_map(ax, result.times, result.depths, values, t("Heat flux (W/m²), positive downwards"), signed=True,
+                           sensor_depths=result.sensor_depths, limit=limit)
             ax.set_title(self.heat_kind.currentText(), fontsize=10, loc="left")
         self.heat_map.draw()
 

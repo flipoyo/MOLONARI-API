@@ -665,3 +665,119 @@ def test_chains_view_selects_chains_thinning_and_iterations(qtbot, window):
     x, y = chain_lines(results)[0]
     np.testing.assert_array_equal(x, [6, 8, 10, 12])
     np.testing.assert_array_equal(y, results.inversion.samples[[5, 7, 9, 11], 0, 0, 0])
+
+
+# Échelle des cartes de flux de chaleur ----------------------------------------------------
+
+
+def test_robust_limit_ignores_an_isolated_peak():
+    from molonari_desk.ui.plots.maps import robust_limit
+
+    values = np.array([5.0, -5.0] * 500 + [1000.0])
+    assert robust_limit(values) == pytest.approx(5.0, abs=1e-12)
+    assert robust_limit(values) < 1000.0 / 100
+
+
+def test_robust_limit_fallbacks():
+    import warnings
+
+    from molonari_desk.ui.plots.maps import robust_limit
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # ni exception ni avertissement
+        assert robust_limit(np.zeros((3, 4))) == 1.0
+        assert robust_limit(np.full((3, 4), np.nan)) == 1.0
+        assert robust_limit(np.array([])) == 1.0
+        assert robust_limit(np.array([np.nan, np.inf, -np.inf])) == 1.0
+        assert robust_limit(np.array([0.0] * 100 + [3.0, -7.0])) == 7.0  # p95 = 0 : repli sur le maximum
+
+
+def _flux_map(values, **kwargs):
+    from matplotlib.figure import Figure
+    from molonari_desk.ui.plots.maps import depth_time_map
+
+    values = np.asarray(values, float)
+    times = np.array(["2016-07-08T00:00", "2016-07-08T01:00", "2016-07-08T02:00", "2016-07-08T03:00"], dtype="datetime64[ns]")
+    ax = Figure().add_subplot()
+    mesh = depth_time_map(ax, times, np.array([0.1, 0.2, 0.3]), values, "flux", signed=True, **kwargs)
+    return mesh
+
+
+def test_depth_time_map_marks_saturation():
+    both = np.linspace(-10, 10, 12).reshape(3, 4)
+    mesh = _flux_map(both, limit=20)
+    assert (mesh.norm.vmin, mesh.norm.vmax) == (-20, 20) and mesh.colorbar.extend == "neither"
+    mesh = _flux_map(both, limit=5)
+    assert (mesh.norm.vmin, mesh.norm.vmax) == (-5, 5) and mesh.colorbar.extend == "both"
+    assert _flux_map(np.linspace(0, 10, 12).reshape(3, 4), limit=5).colorbar.extend == "max"
+    assert _flux_map(np.linspace(-10, 0, 12).reshape(3, 4), limit=5).colorbar.extend == "min"
+    for bad in (0, -3.0, float("nan"), float("inf")):  # repli sur le maximum, sans exception
+        mesh = _flux_map(both, limit=bad)
+        assert (mesh.norm.vmin, mesh.norm.vmax) == (-10, 10) and mesh.colorbar.extend == "neither"
+
+
+def test_depth_time_map_without_limit_keeps_the_maximum():
+    from matplotlib.colors import TwoSlopeNorm
+    from matplotlib.figure import Figure
+    from molonari_desk.ui.plots.maps import depth_time_map
+
+    values = np.linspace(-4, 9, 12).reshape(3, 4)
+    mesh = _flux_map(values)
+    assert mesh.norm.vmax == 9 and mesh.norm.vmin == -9 and mesh.colorbar.extend == "neither"
+    times = np.array(["2016-07-08T00:00", "2016-07-08T01:00", "2016-07-08T02:00", "2016-07-08T03:00"], dtype="datetime64[ns]")
+    plain = depth_time_map(Figure().add_subplot(), times, np.array([0.1, 0.2, 0.3]), values, "T")
+    assert not isinstance(plain.norm, TwoSlopeNorm) and plain.colorbar.extend == "neither"
+
+
+def test_heat_map_scale_is_automatic_then_manual(qtbot, window):
+    from molonari_desk.ui.plots.maps import robust_limit
+
+    view = open_point(qtbot, window)
+    view.cleanup_tab.apply()
+    view.tabs.setCurrentIndex(view.FORWARD)
+    view.forward_tab.nb_cells.set_value(30)
+    view.run_current()
+    wait_task(qtbot, window)
+    results = view.results_tab
+    assert results.forward is not None
+    assert results.heat_scale_auto.isChecked() and not results.heat_scale.isEnabled()
+
+    def drawn_norm():
+        mesh = results.heat_map.figure.axes[0].collections[0]
+        return mesh.norm
+
+    limits = {}
+    for index in range(results.heat_kind.count()):
+        results.heat_kind.setCurrentIndex(index)
+        kind = results.heat_kind.currentData()
+        values = {"total": results.forward.total_heat_flux, "advective": results.forward.advective_flux,
+                  "conductive": results.forward.conductive_flux_down}[kind]
+        limit = robust_limit(values)
+        limits[kind] = (limit, float(np.nanmax(np.abs(values))))
+        assert results.heat_scale.value() == pytest.approx(round(limit, 2), abs=1e-9), kind
+        assert drawn_norm().vmax == pytest.approx(limit) and drawn_norm().vmin == pytest.approx(-limit)
+    print("limites automatiques (limite, maximum) :", limits)
+    assert limits["conductive"][0] < limits["conductive"][1]  # sinon le test ne distinguerait pas l'auto du maximum
+
+    results.heat_scale_auto.setChecked(False)
+    assert results.heat_scale.isEnabled()
+    results.heat_scale.setValue(5.0)
+    assert drawn_norm().vmax == 5.0 and drawn_norm().vmin == -5.0
+    results.heat_kind.setCurrentIndex(0)  # changer de carte : la valeur reste
+    assert drawn_norm().vmax == 5.0 and results.heat_scale.value() == 5.0
+    results.refresh()  # recharger le résultat : la valeur et la case restent
+    assert drawn_norm().vmax == 5.0 and not results.heat_scale_auto.isChecked()
+    results.show_computation(results.info.id)
+    assert drawn_norm().vmax == 5.0 and not results.heat_scale_auto.isChecked()
+
+    results.heat_scale_auto.setChecked(True)  # retour à la limite robuste
+    assert not results.heat_scale.isEnabled()
+    assert drawn_norm().vmax == pytest.approx(robust_limit(results.forward.total_heat_flux))
+
+
+def test_heat_scale_is_linked_to_the_parameter_guide(qtbot, window):
+    from molonari_desk.ui.dialogs.notice import key_for
+
+    results = open_point(qtbot, window).results_tab
+    assert key_for(results.heat_scale_auto) == "results.heat_scale"
+    assert key_for(results.heat_scale) == "results.heat_scale"
