@@ -498,7 +498,7 @@ Sorties : `samples`, `iteration`, `chain`, `layer`, `parameter`, `parameter_unit
 Temperature (°C), water flux (m/s) and advective and conductive heat fluxes (W/m², positive downwards) as arrays (depth, time) of the best fit, with their axes. Choose the variables, period, depth range and time step. They are large: prefer Accept: application/x-npz.
 
 - Modes : direct, mcmc ; depuis l'API 1.0.0 ; exige ses résultats (twin calculé).
-- Accès : rapport public si ces éléments sont publics : `states`. Pas encore de projection publique : refusée dans un rapport (`E_REPORT_NO_PROJECTION`).
+- Accès : rapport public si ces éléments sont publics : `states`. Projection publique, champs publiés : `depth`, `time`, `temperature`, `water_flux`.
 - Niveau : `dev` et `opx` seulement (le niveau `user` la refuse : 403 `E_ACCESS_USER_ONLY`).
 - Requête : `POST /v1/twins/{ref}/questions/fields`
 

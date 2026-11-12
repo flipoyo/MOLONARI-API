@@ -2,7 +2,7 @@
 
 Une entrée est la réponse `Answer` du contrat : en JSON (codec existant, clés triées, saut de ligne final : mêmes octets
 d'une génération à l'autre), ou en npz, relisible sans pickle, au-delà de `NPZ_THRESHOLD` octets de JSON ou pour les
-questions de la PDF publique (échantillons, données par chaîne : toujours en npz, P2c.3e).
+questions de la PDF publique (échantillons, données par chaîne : toujours en npz, P2c.3e) et les champs (F1).
 
 Le dossier est écrit en entier dans `Public Report.partial/`, puis il remplace l'ancien : un échec avant le remplacement
 laisse l'ancien rapport intact et ne laisse aucun dossier partiel.
@@ -21,8 +21,9 @@ from ..questions.answer import Answer
 NPZ_THRESHOLD = 1 << 20
 """Taille de JSON (octets) au-delà de laquelle une entrée passe en npz. Valeur provisoire : décision P0.5f (1 Mo proposé)."""
 
-ALWAYS_NPZ = frozenset({"posterior_samples", "chain_data"})
-"""Questions de la PDF publique dont l'entrée est toujours en npz (échantillons et données par chaîne, P2c.3e)."""
+ALWAYS_NPZ = frozenset({"posterior_samples", "chain_data", "fields"})
+"""Questions dont l'entrée est toujours en npz : la PDF publique (échantillons et données par chaîne, P2c.3e) et les
+champs T et q de F1 (des tableaux profondeur × temps)."""
 
 FOLDER_NAME = "Public Report"
 INDEX_NAME = "report.json"

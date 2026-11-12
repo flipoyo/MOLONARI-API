@@ -3,16 +3,20 @@ fichiers, déterminisme, commande et, en `slow`, un space de deux instances 2.0.
 
 import dataclasses
 import json
+import re
 import shutil
 import time
 from pathlib import Path
+from xml.etree import ElementTree
 
 import numpy as np
 import pytest
 from conftest import FIXTURES
+from leaks import seed_occurrences, value_occurrences
 from molonari_twin.api import TwinAPI
 from molonari_twin.contract.codec import answer_from_json, answer_from_npz
-from molonari_twin.errors import UserError
+from molonari_twin.errors import MESSAGES, UserError
+from molonari_twin.i18n import load_catalog
 from molonari_twin.questions import Visibility
 from molonari_twin.report import (
     FOLDER_NAME,
@@ -22,10 +26,18 @@ from molonari_twin.report import (
     generate_report,
     resolve_space,
 )
-from molonari_twin.report.generator import effective_visibility, plan
+from molonari_twin.report.figures import build_figures
+from molonari_twin.report.generator import decode_entries, effective_visibility, plan
+from molonari_twin.report.interpretation import damping, findings
+from molonari_twin.report.readme import readme
 from molonari_twin.report.writer import dump_json, encode_entry, sha256, write_folder
 from molonari_twin.twin.cli import main as cli_main
-from molonari_twin.twin.config import ReportEntry, default_report, load_twin
+from molonari_twin.twin.config import (
+    ReportEntry,
+    TwinConfigError,
+    default_report,
+    load_twin,
+)
 from molonari_twin.twin.run import run_twin
 
 
@@ -139,17 +151,42 @@ def test_no_nan_in_a_json_entry(reports):
 # P2c.3f : figures -------------------------------------------------------------------------------------------
 
 
-def test_figures_are_derived_from_entries_with_their_fingerprint(reports):
-    report = reports["both"]
+FIGURES_BOTH = {
+    "figures/water_flux.svg": ["forward-water_flux.json", "inversion-water_flux.json"],
+    "figures/temperature_field-forward.svg": ["forward-fields.npz", "forward-describe.json"],
+    "figures/temperature_field-inversion.svg": ["inversion-fields.npz", "inversion-describe.json"],
+    "figures/temperature_depths-forward.svg": ["forward-fields.npz"],
+    "figures/temperature_depths-inversion.svg": ["inversion-fields.npz"],
+    "figures/water_flux_field-forward.svg": ["forward-fields.npz"],
+    "figures/water_flux_field-inversion.svg": ["inversion-fields.npz"],
+    "figures/posterior.svg": ["inversion-posterior_samples.npz", "inversion-soil_properties.json"],
+    "figures/chains.svg": ["chains.npz", "inversion-public_convergence.json"],
+    "figures/fit_quality.svg": ["forward-fit_quality.json", "inversion-fit_quality.json"],
+    "figures/compare.svg": ["compare.json"],
+}
+"""Les onze figures d'un rapport à deux modèles dont les états sont publics, et leurs sources (F1)."""
+
+
+@pytest.fixture(scope="module")
+def with_states(computed_twins):
+    """Les mêmes rapports, états publics : les champs T et q sont publiés (F1)."""
+    api = TwinAPI(computed_twins)
+    return {name: build_report(space_of(computed_twins, refs, states=True), api) for name, refs in
+            (("both", BOTH), ("forward", FORWARD), ("inversion", INVERSION))}
+
+
+def test_figures_are_derived_from_entries_with_their_fingerprint(with_states):
+    report = with_states["both"]
     figures = report.index["figures"]
-    assert {f["file"] for f in figures} == {"figures/forward-water_flux.svg", "figures/inversion-water_flux.svg",
-                                              "figures/forward-fit_quality.svg", "figures/inversion-fit_quality.svg"}
-    files = {e["file"] for e in report.index["entries"]}
+    assert [f["file"] for f in figures] == list(FIGURES_BOTH)
     for figure in figures:
-        assert figure["from_entry"] in files and figure["sha256"] == sha256(report.files[figure["file"]])
+        sources = [figure["from_entry"]] if "from_entry" in figure else figure["from_entries"]
+        assert ("from_entry" in figure) != ("from_entries" in figure)
+        assert sources == FIGURES_BOTH[figure["file"]] and all(source in report.files for source in sources)
+        assert figure["sha256"] == sha256(report.files[figure["file"]])
         assert report.files[figure["file"]].startswith(b"<svg")
-    assert b"no confidence interval" in report.files["figures/forward-water_flux.svg"]
-    assert b"90 % posterior interval" in report.files["figures/inversion-water_flux.svg"]
+    assert b"forward model \xe2\x80\x94 no interval" in report.files["figures/water_flux.svg"]
+    assert b"90 % posterior interval" in report.files["figures/water_flux.svg"]
 
 
 # P2c.3b : index ---------------------------------------------------------------------------------------------
@@ -158,7 +195,7 @@ def test_figures_are_derived_from_entries_with_their_fingerprint(reports):
 def test_index_fields(reports, computed_twins):
     report = reports["both"]
     index = report.index
-    assert index["report_format"] == REPORT_FORMAT == "1.0.0"
+    assert index["report_format"] == REPORT_FORMAT == "1.1.0"
     assert {"space", "twin_semver", "generated_at", "generator_version", "platform", "visibility", "entries", "figures", "skipped",
             "signature", "license"} <= set(index)
     assert index["generator_version"].startswith("molonari-twin ") and index["twin_semver"] is None
@@ -190,7 +227,7 @@ def test_posterior_entries_are_skipped_when_the_pdf_is_private(computed_twins):
     report = build_report(space_of(computed_twins, BOTH, posterior=False), TwinAPI(computed_twins))
     skipped = {(s["question"], s["model"]): s for s in report.index["skipped"]}
     assert set(skipped) == {("soil_properties", "forward"), ("soil_properties", "inversion"), ("posterior_samples", "inversion"),
-                            ("chain_data", "inversion")}
+                            ("chain_data", "inversion"), ("fields", "forward"), ("fields", "inversion")}  # les états sont privés par défaut
     assert all(s["code"] == "E_REPORT_PRIVATE" for s in skipped.values())
     assert "posterior" in skipped[("posterior_samples", "inversion")]["params"]["elements"]
     assert not [name for name in report.files if "posterior" in name or "chain_data" in name or "soil" in name]
@@ -255,8 +292,10 @@ def test_plan_order_is_fixed(computed_twins):
         ("forward", "describe"), ("forward", "provenance"), ("forward", "water_flux"), ("forward", "fit_quality"),
         ("inversion", "describe"), ("inversion", "provenance"), ("inversion", "water_flux"), ("inversion", "fit_quality"),
         ("inversion", "public_convergence"), ("both", "compare"),
-        ("forward", "soil_properties"), ("inversion", "soil_properties"), ("inversion", "posterior_samples"), ("inversion", "chain_data")]
-    assert [i.required for i in items] == [True] * 10 + [False] * 4
+        ("forward", "fields"), ("forward", "soil_properties"), ("inversion", "fields"), ("inversion", "soil_properties"),
+        ("inversion", "posterior_samples"), ("inversion", "chain_data")]
+    assert [i.required for i in items] == [True] * 10 + [False] * 6
+    assert [i.parameters for i in items if i.question == "fields"] == [{"variables": ["temperature", "water_flux"], "time_step": 4}] * 2
 
 
 def test_effective_visibility_is_the_strictest_of_the_twins_it_applies_to(computed_twins):
@@ -273,17 +312,17 @@ def test_effective_visibility_is_the_strictest_of_the_twins_it_applies_to(comput
 # Aucune fuite --------------------------------------------------------------------------------------------------
 
 
-def test_nothing_private_or_seed_related_is_written(computed_twins, reports):
+def test_nothing_private_or_seed_related_is_written(computed_twins, reports, with_states):
     config = load_twin(computed_twins / "twin_03")
     private = build_report(space_of(computed_twins, BOTH, posterior=False), TwinAPI(computed_twins))
-    for report in (*reports.values(), private):
+    for report in (*reports.values(), private, *with_states.values()):
         everything = b"\n".join(report.files.values())
         for forbidden in (config.description, "data_sha256", "data_file", "reproduce", "sigma_temperature",
                           "store_fields", "burn_in_max", "orx", '"seed"'):
             assert forbidden.encode() not in everything, forbidden
         for name, content in report.files.items():
-            if name.endswith(".json"):
-                assert str(computed_twins).encode() not in content, name  # aucun chemin
+            if not name.endswith(".npz"):  # JSON, SVG, README : aucun chemin
+                assert str(computed_twins).encode() not in content, name
     assert not any(name.endswith(".npz") for name in private.files)
 
 
@@ -291,7 +330,7 @@ def test_nothing_private_or_seed_related_is_written(computed_twins, reports):
 
 
 def listed(index):
-    files = {"report.json", *(e["file"] for e in index["entries"]), *(f["file"] for f in index["figures"])}
+    files = {"report.json", index["readme"]["file"], *(e["file"] for e in index["entries"]), *(f["file"] for f in index["figures"])}
     if index.get("chains") is not None:
         files.add(index["chains"]["file"])
     return files
@@ -353,7 +392,7 @@ def test_a_failure_during_writing_keeps_the_old_report_and_leaves_no_partial_fol
 def test_generate_report_writes_the_folder_of_the_twin(computed_twins, tmp_path):
     result = generate_report(computed_twins / "twin_03", tmp_path / "out")
     assert result.folder == tmp_path / "out" and result.entries == len(json.loads((result.folder / "report.json").read_text())["entries"])
-    assert result.figures == 2 and result.skipped == []
+    assert result.figures == 4 and [s["question"] for s in result.skipped] == ["fields"]  # twin_03 seul : flux, RMSE, PDF (posterior, chaînes) ; états privés
     assert on_disk(result.folder) == listed(json.loads((result.folder / "report.json").read_text()))
     index = json.loads((result.folder / "report.json").read_text())
     assert index["space"]["forward"] is None and index["space"]["inversion"]["twin"] == "twin_03"  # un twin 1.x : son seul mode
@@ -402,6 +441,12 @@ REPORT = """report:
     - {{question: fit_quality}}
 """
 
+SEED = 731942  # graine distinctive (déjà celle de T10b)
+SIGMA = 0.073129  # σ distinctif du twin mcmc
+PRIORS = {"neg_log10_k": [10.8713, 14.6329], "porosity": [0.013727, 0.296381], "lambda_s": [1.17329, 4.87113], "rhos_cs": [1137291, 9871137]}
+"""Bornes a priori distinctives (au moins quatre chiffres significatifs hors des deux décimales des coordonnées SVG)."""
+DISTINCTIVE = [SEED, SIGMA, *(bound for bounds in PRIORS.values() for bound in bounds)]
+
 
 @pytest.fixture(scope="module")
 def data_repo(tmp_path_factory):
@@ -413,15 +458,25 @@ def data_repo(tmp_path_factory):
         yield data
 
 
-def write_space(root: Path, forward_mode="direct", seed=4242, report=True):
-    """twin_01 (direct) et twin_02 (mcmc, avec sa couche orx) ; la clé `report` est dans le twin mcmc."""
+def write_space(root: Path, forward_mode="direct", seed=4242, report=True, distinctive=False, states=False, fields_time_step=None):
+    """twin_01 (direct) et twin_02 (mcmc, avec sa couche orx) ; la clé `report` est dans le twin mcmc.
+    `distinctive` : graine, σ et bornes a priori distinctifs (test de fuite) ; `states` : `visibility: {states: true}` dans les
+    deux twins ; `fields_time_step` : réglage des champs publics."""
     twins = root / "twins"
+    seed = SEED if distinctive else seed
     for name, mode in (("twin_01", forward_mode), ("twin_02", "mcmc")):
         folder = twins / name
         folder.mkdir(parents=True)
         extra = MCMC if mode == "mcmc" else "numerics: {nb_cells: 40}\n"
+        if mode == "mcmc" and distinctive:
+            extra += "  priors:\n  - " + "\n    ".join(f"{key}: {value}" for key, value in PRIORS.items()) + "\n"
+            extra += f"sensors: {{sigma_temperature: {SIGMA}}}\n"
+        if states:
+            extra += "visibility: {states: true}\n"
         if name == "twin_02":
             extra += "description: secret description\nsite_label: Site A\n" + (REPORT.format(forward="twin_01", inversion="twin_02") if report else "")
+            if report and fields_time_step is not None:
+                extra += f"  fields_time_step: {fields_time_step}\n"
         (folder / "twin.yaml").write_text(RAW.format(name=name, mode=mode, soil=SOIL if mode == "direct" else "", extra=extra), encoding="utf-8")
     (twins / "twin_02" / "orx.yaml").write_text(f"mcmc:\n  seed: {seed}\n", encoding="utf-8")
     return twins
@@ -474,9 +529,45 @@ def test_an_unknown_model_is_refused(tmp_path, data_repo):
 # De bout en bout, twins 2.0.0 calculés (slow) --------------------------------------------------------------------
 
 
+def folder_texts(folder: Path):
+    """(nom, texte) de chaque fichier du rapport : les textes tels quels, et pour un npz son `meta` et ses tableaux de chaînes."""
+    for path in sorted(folder.rglob("*")):
+        if not path.is_file():
+            continue
+        name = path.relative_to(folder).as_posix()
+        if path.suffix != ".npz":
+            yield name, path.read_text(encoding="utf-8")
+            continue
+        with np.load(path, allow_pickle=False) as archive:
+            for key in archive.files:
+                yield f"{name}[{key}]", key
+                if archive[key].dtype.kind in "US":
+                    yield f"{name}[{key}]", "\n".join(str(item) for item in archive[key].ravel())
+
+
+def assert_no_measured_series(folder: Path, measurements, step: int):
+    """Aucun tableau numérique d'un npz publié n'est une série mesurée (ni sous-échantillonnée au pas des champs)."""
+    series = {name: measurements[name].to_numpy(float) for name in ("temp_bed", "t1", "t2", "t3", "t4", "pressure")}
+    checked = 0
+    for path in sorted(folder.rglob("*.npz")):
+        with np.load(path, allow_pickle=False) as archive:
+            for key in archive.files:
+                array = archive[key]
+                if array.dtype.kind not in "fiu" or array.ndim == 0:
+                    continue
+                for axis, size in enumerate(array.shape):
+                    rows = np.moveaxis(array, axis, -1).reshape(-1, size)
+                    for name, values in series.items():
+                        for candidate in (values, values[::step]):
+                            if len(candidate) == size:
+                                checked += 1
+                                assert not any(np.array_equal(row, candidate) for row in rows), f"{path.name}[{key}] contient la série {name}"
+    assert checked  # les tailles comparables existent bien (les champs sont publiés)
+
+
 @pytest.mark.slow
 def test_end_to_end_two_instances_without_the_seed(tmp_path, data_repo):
-    twins = write_space(tmp_path, seed=4242)
+    twins = write_space(tmp_path, distinctive=True, states=True)
     run_twin(twins / "twin_01")
     run_twin(twins / "twin_02")
     (twins / "twin_02" / "orx.yaml").unlink()  # le dev n'a pas la couche orx
@@ -493,9 +584,21 @@ def test_end_to_end_two_instances_without_the_seed(tmp_path, data_repo):
     site = answer_from_json((folder / "inversion-describe.json").read_bytes())
     assert site.data["site_label"].value == "Site A"
     assert site.data["point"].value == "Point034" and index["point"] == "Point034"  # le rapport appartient à un point réel
-    everything = b"\n".join(p.read_bytes() for p in folder.rglob("*.json")) + b"\n".join(p.read_bytes() for p in folder.rglob("*.svg"))
-    for forbidden in (b"4242", b"secret description", b"seed", b"orx", str(tmp_path).encode()):
-        assert forbidden not in everything, forbidden
+    # les états sont publics : les champs, les figures qui en dérivent et la page lisible sont là (un mcmc sans `store_fields:
+    # full` donne les champs du meilleur ajustement, relus de temperature.csv et water_flux_field.csv)
+    for role in ("forward", "inversion"):
+        fields = answer_from_npz((folder / f"{role}-fields.npz").read_bytes())
+        assert set(fields.data) == {"depth", "time", "temperature", "water_flux"}
+    assert (folder / "README.md").is_file() and (folder / "figures" / "temperature_field-inversion.svg").is_file()
+    # aucune valeur distinctive (graine, σ, huit bornes a priori) ni interdit dans aucun fichier : JSON, SVG, README, npz et leurs meta
+    for value in DISTINCTIVE:
+        assert value_occurrences(folder, value) == [], value
+    assert seed_occurrences(folder, SEED) == []
+    for name, text in folder_texts(folder):
+        for forbidden in ("secret description", "orx", "seed", str(tmp_path)):
+            assert forbidden not in text, (name, forbidden)
+    config = load_twin(twins / "twin_02")
+    assert_no_measured_series(folder, config.load_measurements(), config.report.fields_time_step)
     again = folder.parent / "again"
     generate_report(twins / "twin_02", again)
     assert {p.relative_to(again).as_posix(): p.read_bytes() for p in again.rglob("*") if p.is_file()} == \
@@ -610,3 +713,351 @@ def test_publication_thin_does_not_change_twin_id(computed_twins):
     config2 = dataclasses.replace(config, report=dataclasses.replace(config.report, publication_thin=99))
     id_b = config2.twin_id("test-version")
     assert id_a == id_b
+
+
+# F1 : champs publics, figures, constats, page lisible ------------------------------------------------------------
+
+
+def test_fields_are_published_only_when_states_are_public(reports, with_states):
+    public = with_states["both"]
+    assert {"forward-fields.npz", "inversion-fields.npz"} <= set(public.files)
+    assert [e["parameters"] for e in entries_of(public, question="fields")] == [{"variables": ["temperature", "water_flux"], "time_step": 4}] * 2
+    private = reports["both"]
+    assert [(s["question"], s["model"], s["code"]) for s in private.index["skipped"] if s["question"] == "fields"] == \
+        [("fields", "forward", "E_REPORT_PRIVATE"), ("fields", "inversion", "E_REPORT_PRIVATE")]
+    assert "states" in next(s for s in private.index["skipped"] if s["question"] == "fields")["params"]["elements"]
+    assert not any("fields" in name for name in private.files)
+
+
+def test_fields_time_step_subsamples_and_is_npz(computed_twins):
+    api = TwinAPI(computed_twins)
+    space = space_of(computed_twins, INVERSION, states=True)
+    every_date = build_report(dataclasses.replace(space, fields_time_step=1), api, npz_threshold=1 << 40)
+    fourth = build_report(space, api, npz_threshold=1 << 40)  # seuil énorme : l'entrée reste en npz
+    entry = entries_of(fourth, question="fields")[0]
+    assert entry["format"] == "npz" and entry["file"] == "inversion-fields.npz"
+    full, thin = answer(every_date, "inversion-fields.npz"), answer(fourth, "inversion-fields.npz")
+    count = len(full.data["time"].value)
+    assert len(thin.data["time"].value) == -(-count // 4) and thin.data["temperature"].value.shape == (len(thin.data["depth"].value), -(-count // 4))
+    np.testing.assert_array_equal(thin.data["temperature"].value, full.data["temperature"].value[:, ::4])
+    assert thin.provenance["parameters"]["time_step"] == 4 and full.provenance["parameters"]["time_step"] == 1
+
+
+def test_public_fields_have_only_depth_time_temperature_and_water_flux(with_states):
+    for role in ("forward", "inversion"):
+        fields = answer(with_states["both"], f"{role}-fields.npz")
+        assert set(fields.data) == {"depth", "time", "temperature", "water_flux"}
+        assert not any(name.startswith("heat_flux") for name in fields.data)
+        assert set(fields.provenance) <= {"question", "ref", "parameters", "instance"} and "sigma" not in fields.provenance["parameters"]
+        assert set(fields.provenance["parameters"]) == {"variables", "time_step"}  # ni période, ni plage de profondeurs, ni chemin
+
+
+def test_no_field_anywhere_when_states_are_private(reports):
+    report = reports["both"]
+    assert not [name for name in report.files if name.endswith("-fields.npz") or re.search(r"temperature_field|temperature_depths|water_flux_field", name)]
+    assert not [f for f in report.index["findings"] if f["code"] in ("I_FLUX_INFILTRATION_SHARE", "I_DAILY_DAMPING")]
+    assert not [f for f in report.index["figures"] if "fields" in json.dumps(f)]
+    text = report.files["README.md"].decode()
+    assert "Limites" in text and "ne sont pas publiés : le développeur garde les états privés" in text
+    assert "temperature_field" not in text and "amortissement" not in text
+
+
+def test_expected_figures_and_their_sources(with_states):
+    both = with_states["both"]
+    assert len(both.index["figures"]) == 11  # 1, 2 × 2, 3 × 2, 4 × 2, 5, 6, 7, 8
+    assert {f["file"]: f.get("from_entries") or [f["from_entry"]] for f in both.index["figures"]} == FIGURES_BOTH
+    assert b"best-fit" in both.files["figures/temperature_field-inversion.svg"]  # le champ de l'inversion est celui du meilleur ajustement
+    assert b"best-fit" in both.files["figures/water_flux_field-inversion.svg"]
+    forward = with_states["forward"]
+    assert [f["file"] for f in forward.index["figures"]] == ["figures/water_flux.svg", "figures/temperature_field-forward.svg",
+                                                             "figures/temperature_depths-forward.svg", "figures/water_flux_field-forward.svg",
+                                                             "figures/fit_quality.svg"]
+    assert forward.index["figures"][0]["from_entry"] == "forward-water_flux.json"
+    inversion = with_states["inversion"]
+    assert "figures/compare.svg" not in inversion.files and "figures/posterior.svg" in inversion.files
+    assert "figures/chains.svg" in inversion.files
+
+
+def read_folder(folder: Path) -> dict[str, bytes]:
+    return {p.relative_to(folder).as_posix(): p.read_bytes() for p in folder.rglob("*") if p.is_file()}
+
+
+def test_figures_are_rebuilt_from_the_published_files_alone(with_states, tmp_path):
+    for name in ("both", "forward", "inversion"):
+        target = tmp_path / name
+        write_folder(target, with_states[name].files)
+        files = read_folder(target)
+        index = json.loads(files["report.json"])
+        published, chains = decode_entries(files, index["entries"])  # relus par le codec, comme le fait un lecteur
+        rebuilt = build_figures(published, chains)
+        assert [path for path, _, _ in rebuilt] == [f["file"] for f in index["figures"]]
+        for path, content, sources in rebuilt:
+            assert files[path] == content and all(source in files for source in sources), path
+        found = findings(published, chains)
+        assert found == index["findings"]
+        assert readme(index, found, published) == files["README.md"]
+
+
+def svg_texts(report):
+    for name, content in report.files.items():
+        if name.endswith(".svg"):
+            root = ElementTree.fromstring(content)
+            yield name, root, ["".join(t.itertext()) for t in root.iter("{http://www.w3.org/2000/svg}text")]
+
+
+def test_svg_root_has_viewbox_title_and_desc(with_states):
+    for name, root, _ in svg_texts(with_states["both"]):
+        assert re.fullmatch(r"0 0 \d+\.\d\d \d+\.\d\d", root.get("viewBox")), name
+        assert root.get("width") and root.get("height") is None, name
+        assert root[0].tag.endswith("title") and root[0].text and root[1].tag.endswith("desc") and len(root[1].text) > 40, name
+
+
+def text_extents(root):
+    """(texte, gauche, droite) estimés de chaque `<text>` d'un SVG, dans le repère de la racine : largeur = nombre de
+    caractères × CHAR_WIDTH (×13/12 pour un titre), ancrage start / middle / end, `translate` des panneaux cumulés."""
+    from molonari_twin.report.svgplot import CHAR_WIDTH
+
+    svg = "{http://www.w3.org/2000/svg}"
+
+    def walk(node, dx):
+        if node.tag == f"{svg}g" and node.get("transform", "").startswith("translate("):
+            dx += float(node.get("transform")[len("translate("):-1].split()[0])
+        if node.tag == f"{svg}text":
+            text = "".join(node.itertext())
+            small = sum(len(t.text or "") for t in node.iter(f"{svg}tspan"))  # exposants : 9 px au lieu de 12
+            width = (len(text) - small * 0.25) * CHAR_WIDTH * (13 / 12 if node.get("font-weight") == "bold" else 1)
+            x = float(node.get("x")) + dx
+            anchor = node.get("text-anchor", "start")
+            left = {"start": x, "middle": x - width / 2, "end": x - width}[anchor]
+            yield text, left, left + width
+        for child in node:
+            yield from walk(child, dx)
+
+    return list(walk(root, 0.0))
+
+
+def test_no_text_overflows_the_viewbox_of_any_figure(with_states):
+    for name, root, _ in svg_texts(with_states["both"]):
+        width = float(root.get("viewBox").split()[2])
+        for text, left, right in text_extents(root):
+            assert left >= -1 and right <= width + 1, f"{name}: « {text} » déborde ({left:.0f} à {right:.0f} sur {width:.0f})"
+    compare = with_states["both"].files["figures/compare.svg"].decode()
+    assert "total RMSE" in compare and f"{float(answer(with_states['both'], 'compare.json').data['rmse_total'].value):.3f}" in compare
+
+
+def test_no_scientific_tick_label_in_any_figure(with_states):
+    for name, _, texts in svg_texts(with_states["both"]):
+        assert not [t for t in texts if re.fullmatch(r"-?\d\.\d+e[-+]\d+", t)], name
+        assert not [t for t in texts if re.search(r"\d[eE][-+]\d", t)], name
+    flux = with_states["both"].files["figures/water_flux.svg"].decode()
+    assert "\u00d7 10<tspan" in flux and "m\u00b7s<tspan" in flux  # le facteur commun et l'unité, en tspan
+
+
+def test_findings_codes_are_declared_and_translated(with_states):
+    import string
+
+    catalog = load_catalog("fr")
+    codes = set()
+    for finding in with_states["both"].index["findings"]:
+        template = MESSAGES[finding["code"]]
+        assert re.fullmatch(r"I_[A-Z0-9_]+", finding["code"]) and template in catalog, finding["code"]
+        wanted = {name for _, name, _, _ in string.Formatter().parse(template) if name}
+        assert wanted <= set(finding["params"]), finding["code"]
+        assert finding["figure"] in with_states["both"].files
+        codes.add(finding["code"])
+    assert codes >= {"I_FLUX_MEAN_EXFILTRATION", "I_FLUX_INTERVAL_EXCLUDES_ZERO", "I_FLUX_INFILTRATION_SHARE", "I_DAILY_DAMPING",
+                     "I_MODEL_DIFFERENCE", "I_FIT_RMSE", "I_CONVERGENCE"}
+
+
+def test_findings_values(with_states, computed_twins):
+    report = with_states["both"]
+    by_code: dict[str, list[dict]] = {}
+    for finding in report.index["findings"]:
+        by_code.setdefault(finding["code"], []).append(finding)
+    for finding in (*by_code.get("I_FLUX_MEAN_INFILTRATION", []), *by_code.get("I_FLUX_MEAN_EXFILTRATION", [])):
+        model = finding["params"]["model"]
+        mean = float(answer(report, f"{model}-water_flux.json").data["mean"].value)
+        assert (finding["code"] == "I_FLUX_MEAN_INFILTRATION") == (mean >= 0)
+        assert finding["params"]["mean"] == float(f"{mean:.4g}") and finding["params"]["exponent"] == int(np.floor(np.log10(abs(mean))))
+    (interval,) = [*by_code.get("I_FLUX_INTERVAL_EXCLUDES_ZERO", []), *by_code.get("I_FLUX_INTERVAL_CONTAINS_ZERO", [])]
+    low, high = answer(report, "inversion-water_flux.json").data["mean"].interval
+    assert (interval["code"] == "I_FLUX_INTERVAL_CONTAINS_ZERO") == (low <= 0 <= high) and interval["params"]["level"] == 90.0
+    for finding in by_code["I_FIT_RMSE"]:
+        total = float(answer(report, f"{finding['params']['model']}-fit_quality.json").data["rmse_total"].value)
+        assert finding["params"]["rmse"] == float(f"{total:.4g}")
+    (compare,) = by_code["I_MODEL_DIFFERENCE"]
+    assert compare["params"]["rmse"] == float(f"{float(answer(report, 'compare.json').data['rmse_total'].value):.4g}")
+    (convergence,) = by_code["I_CONVERGENCE"]
+    assert convergence["params"]["chains"] == 8 and convergence["params"]["burn_in"] == 20
+    shares = {f["params"]["model"]: f["params"] for f in by_code["I_FLUX_INFILTRATION_SHARE"]}
+    assert set(shares) == {"forward", "inversion"} and all(0 <= p["share"] <= 100 and p["step"] == 1.0 for p in shares.values())
+    for role, share in shares.items():  # part du temps où q >= 0 au fond, pondérée par les intervalles de temps
+        fields = answer(report, f"{role}-fields.npz")
+        times = fields.data["time"].value.astype("datetime64[s]").astype(np.int64).astype(float)
+        weights = np.diff(times, prepend=times[0], append=times[-1])  # demi-intervalles de chaque côté (trapèzes), comme flux.py
+        weights = (weights[:-1] + weights[1:]) / 2
+        first = fields.data["water_flux"].value[0]
+        assert share["share"] == pytest.approx(100 * weights[first >= 0].sum() / weights.sum(), abs=0.01)
+        assert share["depth"] == float(f"{fields.data['depth'].value[0]:.4g}")
+
+
+def test_a_finding_with_a_non_finite_number_is_left_out_and_the_page_is_still_written(with_states):
+    from molonari_twin.questions import Answer, Quantity
+
+    published, chains = decode_entries(with_states["both"].files, with_states["both"].index["entries"])
+    convergence = published["inversion-public_convergence.json"]
+    broken = {**convergence.data, "rhat_max": Quantity(float("inf"), "1")}  # chaînes trop courtes : R̂ infini
+    published["inversion-public_convergence.json"] = Answer(broken, convergence.provenance)
+    found = findings(published, chains)
+    assert "I_CONVERGENCE" not in [f["code"] for f in found] and "I_FIT_RMSE" in [f["code"] for f in found]
+    dump_json({"findings": found})  # JSON sans NaN ni infini
+    chains_svg = {path: content for path, content, _ in build_figures(published, chains)}["figures/chains.svg"]
+    assert "max = inf" in chains_svg.decode()  # la figure écrit la valeur
+    assert readme(with_states["both"].index, found, published)
+
+
+def test_daily_damping_recovers_a_synthetic_wave():
+    seconds = np.arange(0, 10 * 86400, 3600.0)
+    omega = 2 * np.pi / 86400
+    depth = np.array([0.1, 0.25, 0.4])
+    top = 15 + 2.0 * np.cos(omega * (seconds - 14 * 3600)) + 0.3 * seconds / 86400
+    bottom = 14 + 0.5 * np.cos(omega * (seconds - 20 * 3600)) + 0.1 * seconds / 86400  # 6 h plus tard, quatre fois plus faible
+    middle = (top + bottom) / 2
+    result = damping(seconds, depth, np.stack([top, middle, bottom]))
+    assert result["amplitude_top"] == pytest.approx(2.0, abs=1e-6) and result["amplitude_bottom"] == pytest.approx(0.5, abs=1e-6)
+    assert result["ratio"] == pytest.approx(0.25, abs=1e-6) and result["lag"] == pytest.approx(6.0, abs=1e-6)
+    assert result["depth_bottom"] == 0.4
+    later = damping(seconds, depth, np.stack([top, middle, 14 + 0.5 * np.cos(omega * (seconds - 10 * 3600))]))
+    assert later["lag"] == pytest.approx(20.0, abs=1e-6)  # ramené dans [0, 24[
+
+
+def test_daily_damping_is_left_out_when_fields_are_too_far_apart(computed_twins):
+    report = build_report(dataclasses.replace(space_of(computed_twins, BOTH, states=True), fields_time_step=24), TwinAPI(computed_twins))
+    assert not [f for f in report.index["findings"] if f["code"] == "I_DAILY_DAMPING"]
+    assert [f["code"] for f in report.index["findings"]].count("I_FLUX_INFILTRATION_SHARE") == 2
+    assert "n'est pas calculé" in report.files["README.md"].decode()  # le README le dit
+
+
+def test_report_never_reads_or_shows_thresholds(with_states):
+    source = Path(__file__).resolve().parents[1] / "src" / "molonari_twin" / "report"
+    for name in ("figures.py", "interpretation.py", "readme.py"):
+        text = (source / name).read_text(encoding="utf-8")
+        for forbidden in ("rhat_green", "rhat_orange", "ess_green", "ess_orange", "thresholds_validated", "_identifiability"):
+            assert forbidden not in text, (name, forbidden)
+    for report in with_states.values():
+        page = report.files["README.md"].decode().lower()
+        for forbidden in ("seuil", "bien contraint", "mal contraint", "accord", "identifiab"):
+            assert forbidden not in page, forbidden
+        for name, _, texts in svg_texts(report):
+            assert not [t for t in texts if re.search(r"threshold|identifiab|well.constrained|agree", t, re.IGNORECASE)], name
+
+
+def test_readme_is_french_lists_figures_and_limits(with_states, tmp_path):
+    report = with_states["both"]
+    page = report.files["README.md"].decode()
+    assert report.index["readme"] == {"file": "README.md", "sha256": sha256(report.files["README.md"])}
+    assert page.startswith("# Rapport public \u2014 Point034")
+    write_folder(tmp_path / "out", report.files)
+    for figure in report.index["figures"]:
+        assert f"]({figure['file']})" in page and (tmp_path / "out" / figure["file"]).is_file()
+    assert "## Limites" in page and "Le modèle direct n'a pas d'incertitude" in page and "Les mesures ne sont pas publiées" in page
+    assert "Les champs sont ceux du meilleur ajustement" in page
+    french = load_catalog("fr")[MESSAGES["I_FIT_RMSE"]]
+    assert french.split("{model}")[0] in page and "RMSE totale" in page
+    assert str(tmp_path) not in page and "/Users" not in page
+
+
+def test_report_keys_and_visibility_do_not_change_twin_id(tmp_path, data_repo):
+    def twin_id(root, **options):
+        twins = write_space(root, **options)
+        return load_twin(twins / "twin_02").twin_id("test-version"), load_twin(twins / "twin_01").twin_id("test-version")
+
+    base = twin_id(tmp_path / "base")
+    assert twin_id(tmp_path / "states", states=True) == base
+    assert twin_id(tmp_path / "step", fields_time_step=8) == base
+    assert twin_id(tmp_path / "both", states=True, fields_time_step=8) == base
+    assert load_twin(tmp_path / "both" / "twins" / "twin_02").report.fields_time_step == 8
+    assert load_twin(tmp_path / "base" / "twins" / "twin_02").report.fields_time_step == 4
+    assert load_twin(tmp_path / "states" / "twins" / "twin_02").visibility["states"] is True
+
+
+@pytest.mark.parametrize(("value", "code"), [("0", "E_VALUE_OUT_OF_RANGE"), ("97", "E_VALUE_OUT_OF_RANGE"), ('"x"', "E_TWIN_EXPECTED_INTEGER"),
+                                             ("2.5", "E_TWIN_EXPECTED_INTEGER")])
+def test_fields_time_step_is_validated(tmp_path, value, code):
+    text = f"""schema: molonari-twin/2.0.0
+name: twin_x
+mode: direct
+data: {{lab: Laboratory, point: SamplingPoints/Point034}}
+layers:
+  - {{name: couche, z_low: 0.4, neg_log10_k: 12, porosity: 0.15, lambda_s: 3.4, rhos_cs: 5000000}}
+report:
+  entries:
+    - {{question: water_flux, parameters: {{level: 0.9}}}}
+    - {{question: fit_quality}}
+  fields_time_step: {value}
+"""
+    (tmp_path / "twin.yaml").write_text(text, encoding="utf-8")
+    with pytest.raises(TwinConfigError) as error:
+        load_twin(tmp_path, check_data=False)
+    assert [i.code for i in error.value.issues if i.field == "report.fields_time_step"] == [code]
+
+
+# Détecteur de fuite : il trouve ce qu'on y met ---------------------------------------------------------------------
+
+
+def test_leak_detector_finds_injected_values(tmp_path):
+    def folder(name):
+        target = tmp_path / name
+        (target / "figures").mkdir(parents=True)
+        (target / "figures" / "a.svg").write_text('<svg><text x="12.34" y="56.78">142.42 and 7319420</text></svg>', encoding="utf-8")
+        (target / "README.md").write_text("# Rapport\n\nvaleur 0,5 et 10,87 m\n", encoding="utf-8")
+        (target / "report.json").write_text('{"a": 1.5}\n', encoding="utf-8")
+        np.savez(target / "x.npz", depth=np.linspace(0, 1, 5), meta=np.array('{"a": 1}'))
+        return target
+
+    values = [SEED, SIGMA, 10.8713]
+    clean = folder("clean")
+    assert all(value_occurrences(clean, value) == [] for value in values) and seed_occurrences(clean, SEED) == []
+    cases = {
+        "graine dans un <text>": (lambda f: _inject(f / "figures" / "a.svg", '<text>seed value 731942</text>'), SEED),
+        "graine en flottant dans le README": (lambda f: _inject(f / "README.md", "731942.0\n"), SEED),
+        "graine en notation scientifique": (lambda f: _inject(f / "README.md", "7.31942E+05\n"), SEED),
+        "σ dans le README": (lambda f: _inject(f / "README.md", "sigma 0.073129\n"), SIGMA),
+        "σ dans un <text>": (lambda f: _inject(f / "figures" / "a.svg", "<text>0.073129</text>"), SIGMA),
+        "borne dans un <text>": (lambda f: _inject(f / "figures" / "a.svg", "<text>10.8713</text>"), 10.8713),
+        "borne dans le JSON": (lambda f: _inject(f / "report.json", '{"prior": 10.8713}\n'), 10.8713),
+        "σ dans un tableau npz": (lambda f: np.savez(f / "y.npz", values=np.array([0.1, SIGMA, 0.3])), SIGMA),
+        "borne dans un tableau npz": (lambda f: np.savez(f / "y.npz", values=np.array([[1.0, 10.8713]])), 10.8713),
+        "graine dans un tableau entier": (lambda f: np.savez(f / "y.npz", values=np.array([SEED])), SEED),
+    }
+    for i, (case, (inject, value)) in enumerate(cases.items()):
+        target = folder(f"case{i}")
+        inject(target)
+        assert value_occurrences(target, value), f"valeur non vue : {case}"
+    for i, neighbour in enumerate(("0,073129", "0.0731290001", "x0.073129", "a0.073129b", "0.0731")):  # pas la valeur : pas de fuite
+        target = folder(f"neg{i}")
+        _inject(target / "README.md", f"{neighbour}\n")
+        assert value_occurrences(target, SIGMA) == [], neighbour
+    measured = np.sin(np.arange(40.0))
+    target = folder("measured")
+    np.savez(target / "z.npz", temperature=np.stack([measured, measured + 1]))
+    with pytest.raises(AssertionError):
+        assert_no_measured_series(target, {"temp_bed": _Series(measured), "t1": _Series(measured), "t2": _Series(measured),
+                                           "t3": _Series(measured), "t4": _Series(measured), "pressure": _Series(measured)}, 1)
+    clean_target = folder("unmeasured")
+    np.savez(clean_target / "z.npz", temperature=np.stack([measured + 0.5, measured + 1]))
+    assert_no_measured_series(clean_target, {name: _Series(measured) for name in ("temp_bed", "t1", "t2", "t3", "t4", "pressure")}, 1)
+
+
+def _inject(path: Path, text: str) -> None:
+    path.write_text(path.read_text(encoding="utf-8") + text, encoding="utf-8")
+
+
+class _Series:
+    """Une colonne de mesures réduite à `to_numpy` (la forme que `assert_no_measured_series` lit d'un DataFrame)."""
+
+    def __init__(self, values):
+        self.values = values
+
+    def to_numpy(self, dtype=float):
+        return np.asarray(self.values, dtype)

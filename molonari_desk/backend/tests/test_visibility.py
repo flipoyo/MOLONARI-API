@@ -212,7 +212,7 @@ IF_PUBLIC = {
     "chain_data": {"D": set(), "M": {"posterior", "inversion_settings_public"}},  # BN-34 (mode M seulement)
 }
 MODE_NAMES = {"D": "direct", "M": "mcmc"}
-WITH_PROJECTION = {"fit_quality", "soil_properties", "posterior_samples", "chain_data"}  # P2c.3
+WITH_PROJECTION = {"fit_quality", "soil_properties", "posterior_samples", "chain_data", "fields"}  # P2c.3, F1 (fields)
 
 
 def test_if_public_table_is_the_catalog_column():
@@ -257,7 +257,7 @@ def test_if_public_question_passes_when_its_elements_are_public(question_id):
 @pytest.mark.parametrize("question_id", sorted(IF_PUBLIC))
 def test_if_public_question_needs_its_whitelist_to_enter_a_report(question_id, twins):
     # Les états et les mesures (HN-20, HN-30, HN-33, BN-30) n'ont pas de projection tant que la grille de requêtes n'est pas
-    # décidée (T3) : même avec tout public, la réponse n'entre pas telle quelle. Les agrégats et la PDF en ont une (P2c.3).
+    # décidée (T3) : même avec tout public, la réponse n'entre pas telle quelle. Les agrégats, la PDF (P2c.3) et les champs (F1) en ont une.
     if question_id in WITH_PROJECTION:
         pytest.skip("projection livrée avec le générateur (P2c.3)")
     question = by_id(question_id)

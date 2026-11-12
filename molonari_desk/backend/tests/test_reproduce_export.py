@@ -4,13 +4,12 @@ Les tests de comparaison travaillent sur des dossiers fabriqués ; ceux de l'exp
 """
 
 import json
-import re
 import shutil
-from pathlib import Path
 
 import numpy as np
 import pytest
 from conftest import EXAMPLE_TWINS
+from leaks import seed_occurrences
 from molonari_twin.twin import cli
 from molonari_twin.twin.reproduce import compare_exports, export_twin
 from molonari_twin.twin.run import run_twin, twin_status
@@ -29,40 +28,6 @@ def fake_export(folder, values=None, fingerprint=None):
     data.update(fingerprint or {})
     (folder / "fingerprint.json").write_text(json.dumps(data), encoding="utf-8")
     return folder
-
-
-NUMBER = re.compile(r"(?<![\w.])[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?(?![\w.])")
-SEED_KEY = re.compile(r'"seed"|\bseed\s*[:=]')
-
-
-def _text_forms(content, seed):
-    """Les formes de la graine dans un texte : un nombre isolé de même valeur (731942, 731942.0, 7.31942e5...), ou la clé « seed »."""
-    forms = [f"nombre {token}" for token in NUMBER.findall(content) if float(token) == float(seed)]
-    if SEED_KEY.search(content):
-        forms.append("clé seed")
-    return forms
-
-
-def seed_occurrences(folder: Path, seed: int) -> list[str]:
-    """Une description « chemin relatif: forme » par occurrence de la graine (ou de la clé « seed ») dans un export ; vide s'il n'y en a pas."""
-    found = []
-    for path in sorted(folder.rglob("*")):
-        if not path.is_file():
-            continue
-        name = path.relative_to(folder).as_posix()
-        if path.suffix != ".npz":
-            found += [f"{name}: {form}" for form in _text_forms(path.read_text(encoding="utf-8"), seed)]
-            continue
-        with np.load(path, allow_pickle=False) as archive:
-            for key in archive.files:
-                if "seed" in key or str(seed) in key:
-                    found.append(f"{name}: tableau nommé {key}")
-                array = archive[key]
-                if array.dtype.kind in "iuf" and np.any(array == seed):
-                    found.append(f"{name}[{key}]: valeur numérique")
-                elif array.dtype.kind in "US":
-                    found += [f"{name}[{key}]: {form}" for item in array.ravel() for form in _text_forms(str(item), seed)]
-    return found
 
 
 def test_compare_same_export_is_identical(tmp_path):
