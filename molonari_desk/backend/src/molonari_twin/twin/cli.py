@@ -16,6 +16,10 @@
     molonari-twin generate <point>       génère un état par le modèle direct, depuis l'échantillon publié de plus basse énergie
                                          (--sample <chaîne>:<itération> | --params <fichier> ; --output <dossier>) ; niveaux user, dev, opx
     molonari-twin reports list|show|chains   lit les rapports publics d'un point (public_reports/) ; --json comme `ask` ; tous niveaux
+    molonari-twin plot temperature <twin_xx>   trace les températures mesurées et simulées aux trois thermomètres, leurs résidus et, pour une inversion
+                                         aux champs stockés, les bandes à 90 % (niveaux dev, opx ; --level dev) ; SVG hors de public_reports/ et results/
+    molonari-twin plot fields <twin_xx>      trace la frise de température T(z, t) et celle du flux d'eau q(z, t) d'un twin calculé, même aux états privés
+                                         (--output <dossier>, par défaut ./<twin>_plots ; --start, --end ; --json)
     molonari-twin lab build <lab> --point <point>   construit processed_data/<point>/ (mesures nettoyées et manifeste) d'après lab.yaml
     molonari-twin serve --local          API HTTP sur 127.0.0.1 (extra `server`), calculs dans des workers
 
@@ -115,6 +119,7 @@ def main(argv: list[str]) -> int:
                         help="your own parameters (YAML or JSON, one entry per layer), within the bounds of generation.yaml: a 'free parameters' state")
     generate_parser.add_argument("--output", default=None, help="folder of the state to write (default: ./<point>_state; never in public_reports/ or results/)")
     add_reports_commands(sub)
+    add_plot_commands(sub)
     lab_parser = sub.add_parser("lab", help="virtual lab (lab.yaml)")
     lab_build = lab_parser.add_subparsers(dest="lab_command", required=True).add_parser(
         "build", help="clean a point of the lab and write processed_data/<point>/ (measurements.csv and manifest.json)")
@@ -161,6 +166,8 @@ def main(argv: list[str]) -> int:
             return generate(args)
         if args.command == "reports":
             return reports_command(args)
+        if args.command == "plot":
+            return plot_command(args)
         if args.command == "validate":
             config = load_twin(args.twin)
             print(tr("{name}: valid configuration ({mode} mode).").format(name=config.name, mode=config.mode))
@@ -375,6 +382,54 @@ def show_chains(document: dict) -> None:
     matches = document["sha256_matches"]
     print(tr("SHA-256 of chains.npz: {sha} ({state})").format(
         sha=document["sha256"], state=tr("matches the report") if matches else tr("differs from the report") if matches is False else tr("not cited")))
+
+
+# Figures de l'admin -------------------------------------------------------------------------------
+
+
+def add_plot_commands(sub) -> None:
+    """La commande `plot` (temperature, fields) de l'analyseur : niveaux dev et opx, `--level user` (défaut) la refuse."""
+    plot_parser = sub.add_parser("plot", help="figures of a computed twin, measurements included (dev, opx): never published")
+    actions = plot_parser.add_subparsers(dest="plot_command", required=True)
+    helps = {"temperature": "measured and simulated temperature at the three thermometers, residuals and, for an inversion, the 90 % bands",
+             "fields": "temperature T(z, t) and water flux q(z, t) fields of the best fit"}
+    for name, text in helps.items():
+        parser = actions.add_parser(name, help=text)
+        parser.add_argument("twin", help="twin_xx folder or twin.yaml (computed)")
+        parser.add_argument("--level", choices=LEVELS_WITH_ALIAS, default="user", help="access level: dev or opx are needed; default: user, which is refused")
+        parser.add_argument("--output", default=None, help="folder to write (default: ./<twin>_plots; never in public_reports/ or results/)")
+        parser.add_argument("--start", default=None, help="first date of the period, included (ISO 8601, no time zone)")
+        parser.add_argument("--end", default=None, help="last date of the period, included (ISO 8601, no time zone)")
+        parser.add_argument("--json", action="store_true", help="write the files as JSON (errors too, in the format of /v1, on the standard output)")
+
+
+def plot_command(args) -> int:
+    """`plot temperature|fields`. Avec --json, le résultat, ou l'erreur attendue comme celle de /v1, va sur la sortie standard."""
+    from .plot import run_plot
+
+    action = args.plot_command
+    try:
+        api, ref = leveled_api(args, args.twin)
+        if isinstance(ref, Path):  # un état généré n'a pas de mesures à tracer
+            raise UserError("E_TWIN_NOT_FOUND", ref=str(args.twin), folder=str(ref.parent))
+        result = run_plot(api, ref, action, Path(args.output) if args.output else None, args.start, args.end)
+    except UserError as error:
+        if not args.json:
+            raise
+        from ..tasks.model import error_dict
+
+        print(json.dumps(error_dict(error), ensure_ascii=False))
+        return 1
+    if args.json:
+        print(json.dumps({"command": f"plot {action}", "twin": ref, "level": api.level,
+                          "files": [{"file": str(f.path), "sha256": f.sha256, "bytes": f.bytes} for f in result.files],
+                          "warnings": [w.code for w in result.warnings]}, ensure_ascii=False))
+        return 0
+    for warning in result.warnings:
+        print(tr("Warning:"), render(warning, tr), file=sys.stderr)
+    for written in result.files:
+        print(tr("Plot written: {file}").format(file=written.path))
+    return 0
 
 
 def serve(args) -> int:

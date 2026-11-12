@@ -178,10 +178,11 @@ def sample_colors(palette: tuple[str, ...], count: int) -> list[str]:
     return [palette[i] for i in sample_indices(len(palette), count)] if count <= len(palette) else list(palette)
 
 
-def decimate(xs, ys) -> tuple[np.ndarray, np.ndarray]:
-    """La série (xs, ys) réduite à `MAX_POINTS` points au plus (pas régulier sur l'indice, premier et dernier gardés)."""
+def decimate(xs, ys, max_points: int = MAX_POINTS) -> tuple[np.ndarray, np.ndarray]:
+    """La série (xs, ys) réduite à `max_points` points au plus (`MAX_POINTS` par défaut : pas régulier sur l'indice, premier
+    et dernier gardés)."""
     xs, ys = np.asarray(xs, float), np.asarray(ys, float)
-    keep = sample_indices(len(xs), MAX_POINTS)
+    keep = sample_indices(len(xs), max_points)
     return xs[keep], ys[keep]
 
 
@@ -375,11 +376,11 @@ class Plot:
             raise RuntimeError("a mark needs both scales: call x_scale() and y_scale() first")
         return self.x, self.y
 
-    def polyline(self, xs, ys, color: str, width: float = 1.5, dash: str | None = None) -> None:
-        """Courbe en données : décimée à `MAX_POINTS` points ; un point non fini coupe la ligne (un `<polyline>` par
-        tronçon, un point isolé devient un petit disque)."""
+    def polyline(self, xs, ys, color: str, width: float = 1.5, dash: str | None = None, max_points: int = MAX_POINTS) -> None:
+        """Courbe en données : décimée à `max_points` points (`MAX_POINTS` par défaut) ; un point non fini coupe la ligne
+        (un `<polyline>` par tronçon, un point isolé devient un petit disque)."""
         sx, sy = self._scales()
-        xs, ys = decimate(xs, ys)
+        xs, ys = decimate(xs, ys, max_points)
         extra = f' stroke-dasharray="{dash}"' if dash else ""
         for seg_x, seg_y in _segments(xs, ys):
             px, py = sx(seg_x), sy(seg_y)
@@ -389,11 +390,12 @@ class Plot:
             points = " ".join(f"{num(a)},{num(b)}" for a, b in zip(px, py, strict=True))
             self.add(f'<polyline points="{points}" fill="none" stroke="{color}" stroke-width="{width:g}" stroke-linejoin="round"{extra}/>')
 
-    def band(self, xs, lows, highs, color: str, opacity: float = 0.25) -> None:
-        """Aire entre deux courbes (un `<path>` fermé), décimée comme `polyline` ; les points non finis sont ignorés."""
+    def band(self, xs, lows, highs, color: str, opacity: float = 0.25, max_points: int = MAX_POINTS) -> None:
+        """Aire entre deux courbes (un `<path>` fermé), décimée comme `polyline` (`max_points`) ; les points non finis sont
+        ignorés."""
         sx, sy = self._scales()
         xs, lows, highs = np.asarray(xs, float), np.asarray(lows, float), np.asarray(highs, float)
-        keep = sample_indices(len(xs), MAX_POINTS)
+        keep = sample_indices(len(xs), max_points)
         xs, lows, highs = xs[keep], lows[keep], highs[keep]
         finite = np.isfinite(xs) & np.isfinite(lows) & np.isfinite(highs)
         if finite.sum() < 2:

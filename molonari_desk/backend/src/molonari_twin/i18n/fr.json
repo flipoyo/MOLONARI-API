@@ -83,6 +83,8 @@
  "--space and --seed need --sigma-temperature.": "--space et --seed demandent --sigma-temperature.",
  "The twin \"{ref}\" cannot be its own direct twin: --forward names another twin.": "Le twin « {ref} » ne peut pas être son propre twin direct : --forward en désigne un autre.",
  "{path} is in {folder}/: a local report (--forward) is not a publication, only the OPX publishes.": "{path} est dans {folder}/ : un rapport local (--forward) n'est pas une publication, seul l'OPX publie.",
+ "{path} is inside {folder}/: an admin plot shows measurements and is never published.": "{path} est dans {folder}/ : une figure d'admin montre des mesures et n'est jamais publiée.",
+ "Plot written: {file}": "Figure écrite : {file}",
  "{folder} already exists with a temperature σ of {sigma:g} °C: rename it, or remove it if it was not run.": "{folder} existe déjà avec un σ de température de {sigma:g} °C : renommez-le, ou supprimez-le s'il n'a pas été calculé.",
  "needs a twin of schema 2.0.0.": "demande un twin de schéma 2.0.0.",
  "Note: mcmc mode is experimental.": "Remarque : le mode mcmc est expérimental.",
