@@ -1,5 +1,6 @@
 from PyQt5.QtSql import QSqlQueryModel, QSqlQuery, QSqlDatabase #QSqlDatabase in used only for type hints
 import pandas as pd
+import math
 
 from ..interactions.InnerMessages import ComputationsState
 from .GraphsModels import PressureDataModel, TemperatureDataModel, SolvedTemperatureModel, HeatFluxesModel, WaterFluxModel, ParamsDistributionModel
@@ -837,28 +838,38 @@ class SPointCoordinator:
     @staticmethod
     def calibrate_temperature(raw_volt: float, beta: float, V_ref: float, T0_K: float = 298.15) -> float:
         """
+        READ CAREFULLY TO UNDERSTAND THE MODIFICATIONS DONE IN 2026
+
         Calibrate and return the temperature in Kelvin given the raw voltage measured by the thermometer.
         The formula used is the following:
         T = 1 / [ 1/T0_K -  (1 / beta) * ln(V_ref / raw_volt - 1) ]
 
+        =================================================================================================================================
+        EDIT2026: The above formula was used in previous years but it didn't seem to output correct values in 2026 so we defined the below formula derived from our calibration experiments. We could be wrong and calculated a wrong beta value.
+        T_new_2026_celsius = 146.133 * exp(-1.1428*raw_volt)
+        T_new_2026_kelvin = T_new_2026_celsius + 273.15
+        =================================================================================================================================
+        
         :param raw_volt: voltage measured by the sensor.
         :param beta: calibration parameter of the thermometer model.
         :param V_ref: The reference voltage of the thermometer model.
         :param T0_K: Temperature of reference in Kelvin. Default is 298.15K (25°C).
         :return: Measured temperature in Kelvin.
         """
-        import math 
-        log_input = (V_ref / raw_volt) - 1
+
+        # log_input = (V_ref / raw_volt) - 1
         
-        if log_input <= 0 or V_ref == 0:
-            return float('nan') 
+        # if log_input <= 0 or V_ref == 0:
+        #     return float('nan') 
         
-        denominator = (1 / T0_K) - (1 / beta) * math.log(log_input)
+        # denominator = (1 / T0_K) - (1 / beta) * math.log(log_input)
         
-        if denominator == 0:
-            return float('nan')
+        # if denominator == 0:
+        #     return float('nan')
         
-        return 1 / denominator
+        # return 1 / denominator
+        
+        return 146.133 * math.exp(-1.1428 * raw_volt) + 273.15;
 
     def build_thermo_calibration_info(self):
         """
