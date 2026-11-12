@@ -12,6 +12,11 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions : [S
 - Tags : `molonari-desk-vX.Y.Z` (`molonaviz2-vX.Y.Z` jusqu'à 0.6.0), posés sur `CGS-MOLO` après la fusion. La CI (`molonari-desk-version`) vérifie que le tag correspond à `pyproject.toml`.
 - Jusqu'à 0.6.0-alpha.1, la version entrait dans `engine_version()`, donc dans chaque `twin_id`. Depuis 0.6.0-alpha.2, c'est la version du backend (`molonari-twin`) qui y entre : une version de la seule application ne change aucun identifiant.
 
+## [Non publié]
+
+### Ajouté
+- Cartes de flux de chaleur (onglet Flux) : échelle de couleur automatique, ± le 95ᵉ percentile des valeurs absolues, au lieu du maximum. Un pic isolé (le plateau de l'après-midi près du lit) n'écrase plus le reste de la carte ; les valeurs au-delà saturent, ce que montrent les flèches de la barre de couleur. Une case « Échelle auto » et un champ ± W/m² permettent de fixer la même échelle aux trois cartes. Ni le calcul, ni les CSV, ni les `twin_id` ne changent.
+
 ## [0.7.0] - 2026-11-06
 
 L'application change de nom : molonaviz2 devient **MOLONARI Desk**, l'application de bureau scientifique de MOLONARI. Le backend `molonari-twin` ne change pas, ni les calculs, ni les `twin_id` (seule la version du backend y entre).

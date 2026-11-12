@@ -1,8 +1,10 @@
 """Reproduire une chaîne calculée et vérifier le déterminisme.
 
-`reproduce <twin>` relance `lab build` puis `run --strict` sans cache, calcule les SHA-256 de tous
-les fichiers produits, les compare à la référence et écrit un compte rendu sans la graine : machine,
-versions, empreintes, résultat, écart maximal par fichier.
+`reproduce <twin>` relance `run --strict` sans cache (les données traitées ne sont pas reconstruites : `lab build`
+reste à lancer avant), calcule les SHA-256 de tous les fichiers produits, les compare à la référence et écrit un
+compte rendu sans la graine : machine, versions, empreintes, résultat, écart maximal par fichier. Le mode strict
+refuse une pré-version, un code local ou un dépôt modifié ou sans tag : sur un code non publié, utiliser `--export`
+et `--compare`.
 
 `reproduce <twin> --export DOSSIER` n'exécute rien : il copie les résultats existants dans DOSSIER/results/ et écrit
 `fingerprint.json` (empreintes, versions, machine) et `resultats.txt` (valeurs clés en repr et en hex), sans la graine.

@@ -22,7 +22,7 @@ uv run molonari-twin run      examples/twins/twin_01   # --strict : code publié
 uv run molonari-twin run      twin_mcmc --sigma-temperature 0.08   # σ de température en °C (mcmc, 2.0.0), dans le twin frère twin_mcmc_sigmaT0.08
 uv run molonari-twin list     examples/twins
 uv run molonari-twin report   examples/twins/twin_03   # écrit « Public Report/ » (rapport public du twin et de son space)
-uv run molonari-twin questions examples/twins/twin_03  # le catalogue (--json : celui de /v1) ; --level {user,admin}, user par défaut
+uv run molonari-twin questions examples/twins/twin_03  # le catalogue (--json : celui de /v1) ; --level {user,dev,opx}, user par défaut
 uv run molonari-twin ask      examples/twins/twin_03 water_flux --params '{"level": 0.8}'   # pose une question à un twin calculé
 python -m molonari_twin …                              # équivalent
 ```
@@ -35,7 +35,7 @@ Messages en français par défaut ; `MOLONARI_LANG=en` les affiche en anglais (l
 
 ```bash
 uv sync --package molonari-twin --extra server   # FastAPI et uvicorn (extra optionnel)
-uv run molonari-twin serve --local --level admin --twins-folder examples/twins   # http://127.0.0.1:8765
+uv run molonari-twin serve --local --level opx --twins-folder examples/twins   # http://127.0.0.1:8765
 curl -X POST http://127.0.0.1:8765/v1/twins/twin_03/run         # 202 + task_id
 curl -N http://127.0.0.1:8765/v1/tasks/<task_id>/events         # progression (SSE)
 curl -X DELETE http://127.0.0.1:8765/v1/tasks/<task_id>         # annulation
@@ -45,7 +45,7 @@ L'API ne calcule jamais dans son processus. Elle confie chaque calcul à un `Tas
 
 L'annulation est d'abord coopérative : le DREAM la lit à chaque bloc. Si elle n'est pas honorée, le worker est terminé après un délai de grâce. Un timeout dur s'applique de la même façon.
 
-Niveaux d'accès (`--level`, `user` par défaut) : le **user** n'interroge que les échanges d'eau, la chaleur et la température (5 questions, réponses par liste blanche) et ne lance ni ne suit de tâche (403) ; l'**admin** a tout. Sans authentification, ce niveau oriente l'usage, ce n'est pas une sécurité. Voir [docs/API_V1.md](docs/API_V1.md).
+Niveaux d'accès (`--level`, `user` par défaut) : le **user** n'interroge que les échanges d'eau, la chaleur et la température (5 questions, réponses par liste blanche) et ne lance ni ne suit de tâche (403) ; **dev** et **opx** ont tout (`admin` reste un alias d'`opx`). Sans authentification, ce niveau oriente l'usage, ce n'est pas une sécurité. Voir [docs/API_V1.md](docs/API_V1.md).
 
 Le flux SSE reprend après `Last-Event-ID`. Seule l'adresse `127.0.0.1` est acceptée tant que l'authentification n'existe pas (phase 5, avec Celery). Schéma OpenAPI : `/openapi.json`.
 
@@ -69,7 +69,7 @@ answer = TwinAPI("examples/twins").ask("twin_03", "exchanged_volume", {"start": 
 answer.data["net"]   # Quantity(value, unit="m³/m²", interval=None)
 ```
 
-Vingt questions, dont des diagnostics (`fit_quality`, `convergence`, `energy_breakdown`), un verdict de fiabilité (`reliability`) et des accès bruts (`fields`, `posterior_samples`). Deux sortes de questions n'ont pas besoin d'un twin calculé : `check` lit le dossier d'un twin, même invalide (la réponse dit `valid: false`), et `parameters_catalog` ne porte sur aucun twin (`POST /v1/questions/parameters_catalog`).
+Vingt-trois questions, dont des diagnostics (`fit_quality`, `convergence`, `energy_breakdown`), un verdict de fiabilité (`reliability`) et des accès bruts (`fields`, `posterior_samples`). Deux sortes de questions n'ont pas besoin d'un twin calculé : `check` lit le dossier d'un twin, même invalide (la réponse dit `valid: false`), et `parameters_catalog`, `raw_series` et `processing_preview` ne portent sur aucun twin (`POST /v1/questions/{id}`, ou `TwinAPI.ask_global` ; `molonari-twin ask` exige un twin).
 
 **Les seuils de `reliability` sont provisoires et n'ont pas été validés par un hydrogéologue** : la réponse donne `thresholds_validated: false` et les seuils utilisés. Ils se surchargent par le paramètre `thresholds` ou par un fichier YAML dont le chemin est dans `MOLONARI_THRESHOLDS`. Le flux de chaleur latéral n'est pas modélisé : `heat_budget` le dit par un avertissement. Les champs complets sont volumineux : demander `Accept: application/x-npz`.
 
