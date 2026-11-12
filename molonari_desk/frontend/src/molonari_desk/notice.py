@@ -262,6 +262,12 @@ ENTRIES: tuple[Entry, ...] = (
           N_("1σ (68 %): z = 1; 90 %: z = 1.645; 95 %: z = 1.960. σT is that of the inversion, or the thermometer uncertainty for a "
              "direct model. The residual lines of a twin and the predictive band use the same level."),
           default=lambda: "90 %"),
+    Entry("results.heat_scale", RESULTS, N_("Heat flux scale"),
+          N_("Colour scale ± W/m² of the heat flux maps, centred on 0."),
+          N_("Automatic: the 95th percentile of the absolute values, so that the afternoon peak near the riverbed does "
+             "not wash out the rest of the map; larger values are saturated, shown by the arrows of the colour bar. "
+             "Untick it to set the same scale for the total, advective and conductive maps, and compare them."),
+          default=lambda: t("automatic (95th percentile)")),
     Entry("results.predictive_band", RESULTS, N_("Predictive band"),
           N_("Band where a new measurement should fall: the temperatures of the stored fields, plus a measurement noise N(0, σT²)."),
           N_("The credible band only reflects the uncertainty of the parameters; the predictive band adds the measurement noise, so "

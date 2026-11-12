@@ -1,8 +1,8 @@
 """Figures d'analyse (Matplotlib) : cartes profondeur × temps, profils, comparaison aux mesures.
 
 Conventions : profondeur croissante vers le bas, axes avec unités, palettes
-perceptuellement uniformes ; flux signés centrés sur 0. Chaque figure s'exporte en
-PNG, SVG ou PDF.
+perceptuellement uniformes ; flux signés centrés sur 0, à échelle robuste (un pic isolé ne fixe
+pas l'échelle ; les valeurs au-delà saturent). Chaque figure s'exporte en PNG, SVG ou PDF.
 """
 
 from __future__ import annotations
@@ -82,14 +82,41 @@ def _date_axis(ax) -> None:
     ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator, formats=DATE_FORMATS, offset_formats=DATE_OFFSET_FORMATS))
 
 
-def depth_time_map(ax, times, depths, values, label: str, signed: bool = False, sensor_depths=None):
-    """Carte profondeur × temps. `values` : (profondeurs, temps)."""
+ROBUST_PERCENTILE = 95.0  # échelle des cartes de flux : un pic diurne isolé ne fixe plus l'échelle
+
+
+def robust_limit(values, percentile: float = ROBUST_PERCENTILE) -> float:
+    """± limite symétrique d'une carte signée : percentile de |valeurs| finies ; le maximum si ce percentile
+    vaut 0 ; 1.0 si tout est nul ou non fini."""
+    values = np.asarray(values, float)
+    x = np.abs(values[np.isfinite(values)])
+    if x.size == 0:
+        return 1.0
+    p = float(np.percentile(x, percentile))
+    if p > 0:
+        return p
+    maximum = float(x.max())
+    return maximum if maximum > 0 else 1.0
+
+
+def depth_time_map(ax, times, depths, values, label: str, signed: bool = False, sensor_depths=None, limit: float | None = None):
+    """Carte profondeur × temps. `values` : (profondeurs, temps).
+
+    Avec `signed`, l'échelle est ± `limit` (maximum des |valeurs| si `limit` est absente, nulle ou non finie) ; la barre de
+    couleur porte des flèches (`extend`) du côté où des valeurs saturent."""
     times = pd.to_datetime(times).to_numpy()
     values = np.asarray(values, float)
+    extend = "neither"
     if signed:
-        limit = float(np.nanmax(np.abs(values))) or 1.0
+        if limit is None or not np.isfinite(limit) or limit <= 0:
+            limit = float(np.nanmax(np.abs(values))) or 1.0
+        limit = float(limit)
         norm = TwoSlopeNorm(vmin=-limit, vcenter=0.0, vmax=limit)
         mesh = ax.pcolormesh(times, depths, values, cmap=FLUX_CMAP, norm=norm, shading="nearest", rasterized=True)
+        finite = values[np.isfinite(values)]
+        over = finite.size > 0 and float(finite.max()) > limit
+        under = finite.size > 0 and float(finite.min()) < -limit
+        extend = "both" if over and under else "max" if over else "min" if under else "neither"
     else:
         mesh = ax.pcolormesh(times, depths, values, cmap=TEMPERATURE_CMAP, shading="nearest", rasterized=True)
     ax.set_ylim(float(np.max(depths)), float(np.min(depths)) if np.min(depths) > 0 else 0.0)
@@ -98,7 +125,7 @@ def depth_time_map(ax, times, depths, values, label: str, signed: bool = False, 
         for depth in sensor_depths:
             ax.axhline(depth, color="white", lw=0.6, ls="--", alpha=0.7)
     _date_axis(ax)
-    colorbar = ax.figure.colorbar(mesh, ax=ax, pad=0.01)
+    colorbar = ax.figure.colorbar(mesh, ax=ax, pad=0.01, extend=extend)
     colorbar.set_label(label)
     return mesh
 

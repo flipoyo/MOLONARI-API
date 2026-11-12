@@ -237,7 +237,7 @@ La liste en haut de l'onglet choisit le calcul à afficher : modèle direct ou i
 |---|---|
 | **Températures** | En haut, la carte profondeur × temps de la température simulée. En bas, les capteurs 1 à 3 : mesures et températures simulées. Après une inversion, s'y ajoutent l'intervalle de crédibilité et la **bande prédictive**, avec la part des mesures qu'elle contient. **Intervalle de mesure** règle la bande ± z·σT autour des mesures. |
 | **Profils** | Profil de température en profondeur à la date choisie avec le curseur (points : mesures). |
-| **Flux** | En haut, le flux d'eau à la profondeur choisie avec le curseur (m/s, **positif vers le bas** : infiltration). En bas, la carte du flux de chaleur total, advectif ou conductif (W/m², positif vers le bas). |
+| **Flux** | En haut, le flux d'eau à la profondeur choisie avec le curseur (m/s, **positif vers le bas** : infiltration). En bas, la carte du flux de chaleur total, advectif ou conductif (W/m², positif vers le bas). L'échelle de couleur est automatique : ± le 95ᵉ percentile des valeurs absolues, pour que le pic de l'après-midi près du lit n'écrase pas le reste ; les valeurs au-delà saturent, ce que montrent les flèches de la barre de couleur. Décochez **Échelle auto** pour régler une échelle ± W/m² commune aux trois cartes. |
 | **Paramètres** (inversion) | Tableau par couche : meilleur, moyenne, écart-type, HDI 90 %, ESS et R-hat. **Histogrammes** des distributions a posteriori et **Chaînes** : trace de chaque chaîne, avec choix des chaînes, éclaircissement d'affichage et plage d'itérations. |
 
 **Lire le signe du flux.** q > 0 : la rivière alimente la nappe (infiltration). q < 0 : la nappe alimente la rivière
