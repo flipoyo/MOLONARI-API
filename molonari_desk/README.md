@@ -26,7 +26,7 @@ MOLONARI Desk s'installe avec l'ensemble des dépôts MOLONARI, que cgs monte c�
 ```bash
 cgitsync bootstrap molonari.cgs            # MOLONARI1D, MOLONARI-API, MOLONARI-data, MOLONARI-computo…
 export CGSHOME=<dossier indiqué à la fin du bootstrap>
-cd "$CGSHOME/Molonaviz/molonari_desk"
+cd "$CGSHOME/VPS/Molonaviz/molonari_desk"
 uv sync          # installe les deux paquets et les outils de développement
 uv run molonari-desk
 ```
