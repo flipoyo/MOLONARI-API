@@ -15,6 +15,8 @@ Tout fonctionne en local, dans un seul processus : l'application appelle le back
 
 Notices : [utilisation](docs/NOTICE_UTILISATEUR.md) (prise en main de l'application) et [scientifique](docs/NOTICE_SCIENTIFIQUE.md) (modèle physique, inversion, fiabilité des résultats, pour l'hydrogéologue).
 
+Twin et suite du projet : [prise en main du twin](docs/README_TWIN.md) (installation, commandes, architecture, moteur JAX, limites), [guide des futurs étudiants](docs/README_ETUDIANTS.md) (démarrage, conventions, idées de développement) et [audit de séparation du twin](docs/AUDIT_SEPARATION_TWIN.md) (code à sortir de l'application vers MOLONARI-computo, plan de migration).
+
 ## Installation
 
 Prérequis : [uv](https://docs.astral.sh/uv/), Python 3.12 ou 3.13, et [ComplexGitSync](https://github.com/flipoyo/ComplexGitSync) (`cgitsync`).
